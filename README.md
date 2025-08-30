@@ -1,17 +1,18 @@
-# Dotivra
+# Dotivra - AI Documentation Platform
 
-A modern React application built with TypeScript, Vite, and Tailwind CSS, featuring rich text editing capabilities with TipTap and Mermaid diagram rendering.
+A modern React application that combines AI-powered documentation generation with rich text editing capabilities. Built with TypeScript, Vite, and Tailwind CSS, featuring TipTap editor and Mermaid diagram rendering.
 
 ## 🚀 Features
 
+- **AI-Powered Generation**: Leverage advanced AI to automatically generate comprehensive documentation
 - **Rich Text Editor**: Powered by TipTap with floating and bubble menus
 - **Diagram Rendering**: Mermaid diagram support with multiple themes
+- **Document Management**: Dashboard to organize and manage all your documents
+- **Template System**: Pre-built templates for different documentation types
+- **Real-time Collaboration**: Work together with your team in real-time
 - **Modern UI**: Built with Tailwind CSS and Radix UI components
 - **Type Safety**: Full TypeScript support
 - **Fast Development**: Vite for lightning-fast HMR and builds
-- **AI Integration**: Google Generative AI support
-- **Firebase Integration**: Ready for backend services
-- **Responsive Design**: Mobile-first approach
 
 ## 🛠️ Tech Stack
 
@@ -20,6 +21,7 @@ A modern React application built with TypeScript, Vite, and Tailwind CSS, featur
 - **TypeScript** - Type-safe development
 - **Vite** - Fast build tool and dev server
 - **Tailwind CSS v4** - Utility-first CSS framework
+- **React Router** - Client-side routing
 
 ### Rich Text & Diagrams
 - **TipTap** - Headless rich text editor
@@ -72,30 +74,49 @@ A modern React application built with TypeScript, Vite, and Tailwind CSS, featur
 
 ```
 src/
+├── pages/                    # Application pages
+│   ├── Home.tsx             # Landing page with features overview
+│   ├── Dashboard.tsx        # Document management dashboard
+│   ├── DocumentEditor.tsx   # Rich text editor with AI tools
+│   ├── AIGenerator.tsx      # AI-powered documentation generator
+│   └── index.ts             # Page exports
 ├── components/
-│   ├── ui/           # Reusable UI components
-│   ├── Tiptap.tsx    # Rich text editor component
-│   └── MermaidDiagram.tsx  # Diagram rendering component
+│   ├── Layout.tsx           # Main layout with navigation
+│   ├── ui/                  # Reusable UI components
+│   ├── Tiptap.tsx           # Rich text editor component
+│   └── MermaidDiagram.tsx   # Diagram rendering component
 ├── lib/
-│   └── utils.ts      # Utility functions
-├── assets/           # Static assets
-├── App.tsx           # Main application component
-└── main.tsx          # Application entry point
+│   └── utils.ts             # Utility functions
+├── App.tsx                  # Main application with routing
+└── main.tsx                 # Application entry point
 ```
 
-## 🎨 Components
+## 🎨 Pages & Features
 
-### TipTap Editor
-A rich text editor with floating and bubble menus, supporting:
-- Basic text formatting
-- Extensible with TipTap extensions
-- Customizable menus
+### Home Page
+- Hero section with platform overview
+- Feature highlights with icons
+- Call-to-action sections
 
-### Mermaid Diagram
-A component for rendering Mermaid diagrams with:
-- Multiple theme support (default, forest, dark, neutral)
-- Error handling
-- Responsive design
+### Dashboard
+- Document overview with statistics
+- Recent documents list
+- Search and filtering capabilities
+- Quick action buttons
+
+### Document Editor
+- Full-featured rich text editor
+- AI-powered content generation
+- Template selection
+- Diagram insertion
+- Real-time collaboration tools
+
+### AI Generator
+- Template-based documentation generation
+- Custom prompt input
+- Sample prompts for guidance
+- Generated content preview
+- Export and copy functionality
 
 ## 🔧 Configuration
 
