@@ -4,36 +4,21 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { 
   Save, 
   Share2, 
-  Settings, 
   Sparkles, 
   Wand2, 
   Bot, 
-  Users, 
-  Clock, 
-  Eye,
-  Edit3,
   Type,
-  Image,
   Code,
   List,
-  Quote,
-  Bold,
-  Italic,
-  Underline,
-  AlignLeft,
-  AlignCenter,
-  AlignRight,
-  MoreHorizontal,
   Download,
   History,
-  Star,
-  MessageSquare,
   Zap
 } from "lucide-react";
+import Tiptap from "@/components/tiptap/TipTap";
+import DocumentMenu from "@/components/tiptap/DocumentMenu";
 
 interface Comment {
   id: string;
@@ -65,70 +50,109 @@ const mockComments: Comment[] = [
 
 export default function DocumentEditor() {
   const [activeTab, setActiveTab] = useState("editor");
-  const [documentContent, setDocumentContent] = useState(`# Product Strategy 2024
+  const [documentContent, setDocumentContent] = useState(`<h1>Product Strategy 2024</h1>
 
-## Executive Summary
+<h2>Executive Summary</h2>
 
-Our product strategy for 2024 focuses on three key pillars: innovation, user experience, and market expansion. This document outlines our approach to achieving sustainable growth while maintaining our commitment to quality and customer satisfaction.
+<p>Our product strategy for 2024 focuses on three key pillars: innovation, user experience, and market expansion. This document outlines our approach to achieving sustainable growth while maintaining our commitment to quality and customer satisfaction.</p>
 
-## Market Analysis
+<h2>Market Analysis</h2>
 
-The current market landscape presents both opportunities and challenges. We've identified several key trends:
+<p>The current market landscape presents both opportunities and challenges. We've identified several key trends:</p>
 
-- **AI Integration**: Increasing demand for AI-powered solutions
-- **Mobile-First**: Continued shift towards mobile platforms
-- **Sustainability**: Growing emphasis on eco-friendly products
+<ul>
+<li><strong>AI Integration</strong>: Increasing demand for AI-powered solutions</li>
+<li><strong>Mobile-First</strong>: Continued shift towards mobile platforms</li>
+<li><strong>Sustainability</strong>: Growing emphasis on eco-friendly products</li>
+</ul>
 
-## Strategic Objectives
+<h2>Strategic Objectives</h2>
 
-### 1. Product Innovation
-- Launch 3 new AI-powered features
-- Improve existing functionality by 40%
-- Reduce development cycle time by 25%
+<h3>1. Product Innovation</h3>
+<ul>
+<li>Launch 3 new AI-powered features</li>
+<li>Improve existing functionality by 40%</li>
+<li>Reduce development cycle time by 25%</li>
+</ul>
 
-### 2. User Experience Enhancement
-- Achieve 95% user satisfaction score
-- Reduce customer support tickets by 30%
-- Implement personalized user journeys
+<h3>2. User Experience Enhancement</h3>
+<ul>
+<li>Achieve 95% user satisfaction score</li>
+<li>Reduce customer support tickets by 30%</li>
+<li>Implement personalized user journeys</li>
+</ul>
 
-### 3. Market Expansion
-- Enter 2 new geographic markets
-- Partner with 5 strategic alliances
-- Increase market share by 15%
+<h3>3. Market Expansion</h3>
+<ul>
+<li>Enter 2 new geographic markets</li>
+<li>Partner with 5 strategic alliances</li>
+<li>Increase market share by 15%</li>
+</ul>
 
-## Implementation Timeline
+<h2>Implementation Timeline</h2>
 
-| Quarter | Focus Area | Key Milestones |
-|---------|------------|----------------|
-| Q1 2024 | Foundation | Core platform updates |
-| Q2 2024 | Innovation | AI features launch |
-| Q3 2024 | Expansion | New market entry |
-| Q4 2024 | Optimization | Performance improvements |
+<table>
+<thead>
+<tr>
+<th>Quarter</th>
+<th>Focus Area</th>
+<th>Key Milestones</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q1 2024</td>
+<td>Foundation</td>
+<td>Core platform updates</td>
+</tr>
+<tr>
+<td>Q2 2024</td>
+<td>Innovation</td>
+<td>AI features launch</td>
+</tr>
+<tr>
+<td>Q3 2024</td>
+<td>Expansion</td>
+<td>New market entry</td>
+</tr>
+<tr>
+<td>Q4 2024</td>
+<td>Optimization</td>
+<td>Performance improvements</td>
+</tr>
+</tbody>
+</table>
 
-## Success Metrics
+<h2>Success Metrics</h2>
 
-We will measure success through the following KPIs:
+<p>We will measure success through the following KPIs:</p>
 
-- **Revenue Growth**: 25% year-over-year increase
-- **User Engagement**: 40% improvement in daily active users
-- **Customer Retention**: 90% annual retention rate
-- **Market Position**: Top 3 in our category
+<ul>
+<li><strong>Revenue Growth</strong>: 25% year-over-year increase</li>
+<li><strong>User Engagement</strong>: 40% improvement in daily active users</li>
+<li><strong>Customer Retention</strong>: 90% annual retention rate</li>
+<li><strong>Market Position</strong>: Top 3 in our category</li>
+</ul>
 
-## Risk Assessment
+<h2>Risk Assessment</h2>
 
-### High Priority Risks
-1. **Competition**: New entrants with similar offerings
-2. **Technology**: Rapid pace of AI advancement
-3. **Regulation**: Changing data privacy laws
+<h3>High Priority Risks</h3>
+<ol>
+<li><strong>Competition</strong>: New entrants with similar offerings</li>
+<li><strong>Technology</strong>: Rapid pace of AI advancement</li>
+<li><strong>Regulation</strong>: Changing data privacy laws</li>
+</ol>
 
-### Mitigation Strategies
-- Continuous market monitoring
-- Agile development methodology
-- Compliance-first approach
+<h3>Mitigation Strategies</h3>
+<ul>
+<li>Continuous market monitoring</li>
+<li>Agile development methodology</li>
+<li>Compliance-first approach</li>
+</ul>
 
-## Conclusion
+<h2>Conclusion</h2>
 
-This strategy provides a clear roadmap for achieving our 2024 objectives. Success depends on execution excellence, team collaboration, and customer-centric decision making.`);
+<p>This strategy provides a clear roadmap for achieving our 2024 objectives. Success depends on execution excellence, team collaboration, and customer-centric decision making.</p>`);
 
   const [isAIGenerating, setIsAIGenerating] = useState(false);
 
@@ -140,18 +164,19 @@ This strategy provides a clear roadmap for achieving our 2024 objectives. Succes
     }, 2000);
   };
 
-  const formatButtons = [
-    { icon: Bold, label: "Bold" },
-    { icon: Italic, label: "Italic" },
-    { icon: Underline, label: "Underline" },
-    { icon: AlignLeft, label: "Align Left" },
-    { icon: AlignCenter, label: "Align Center" },
-    { icon: AlignRight, label: "Align Right" },
-    { icon: List, label: "List" },
-    { icon: Quote, label: "Quote" },
-    { icon: Code, label: "Code" },
-    { icon: Image, label: "Image" }
-  ];
+  const handleDocumentUpdate = (content: string) => {
+    setDocumentContent(content);
+  };
+
+  const handleSave = () => {
+    console.log("Saving document...");
+    // Implement actual save functionality
+  };
+
+  const handleSaveAsTemplate = () => {
+    console.log("Saving document as template...");
+    // Implement template saving functionality
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -169,15 +194,15 @@ This strategy provides a clear roadmap for achieving our 2024 objectives. Succes
             </Badge>
           </div>
           <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="text-white">
               <History className="w-4 h-4 mr-2" />
               Version History
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="text-white">
               <Share2 className="w-4 h-4 mr-2" />
               Share
             </Button>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="text-white">
               <Download className="w-4 h-4 mr-2" />
               Export
             </Button>
@@ -192,44 +217,14 @@ This strategy provides a clear roadmap for achieving our 2024 objectives. Succes
       <div className="flex h-[calc(100vh-80px)]">
         {/* Main Editor */}
         <div className="flex-1 flex flex-col">
-          {/* Toolbar */}
-          <div className="bg-white border-b border-gray-200 px-6 py-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                {formatButtons.map((button, index) => (
-                  <Button key={index} variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <button.icon className="w-4 h-4" />
-                  </Button>
-                ))}
-                <div className="w-px h-6 bg-gray-300 mx-2"></div>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={handleAIGenerate}
-                  disabled={isAIGenerating}
-                  className="bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100"
-                >
-                  {isAIGenerating ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-700 mr-2"></div>
-                      Generating...
-                    </div>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 mr-2" />
-                      AI Enhance
-                    </>
-                  )}
-                </Button>
-              </div>
-              <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <Users className="w-4 h-4" />
-                <span>3 collaborators</span>
-                <Clock className="w-4 h-4 ml-2" />
-                <span>Editing now</span>
-              </div>
-            </div>
-          </div>
+          {/* Document Menu */}
+          <DocumentMenu 
+            onUpdate={handleDocumentUpdate}
+            isAIGenerating={isAIGenerating}
+            onAIGenerate={handleAIGenerate}
+            onSaveAsTemplate={handleSaveAsTemplate}
+            documentTitle="Product Strategy 2024"
+          />
 
           {/* Editor Content */}
           <div className="flex-1 p-6">
@@ -241,24 +236,22 @@ This strategy provides a clear roadmap for achieving our 2024 objectives. Succes
               </TabsList>
               
               <TabsContent value="editor" className="h-full mt-4">
-                <Card className="h-full">
-                  <CardContent className="p-0 h-full">
-                    <textarea
-                      value={documentContent}
-                      onChange={(e) => setDocumentContent(e.target.value)}
-                      className="w-full h-full p-6 resize-none border-0 focus:outline-none focus:ring-0 text-gray-900 font-mono text-sm leading-relaxed"
-                      placeholder="Start writing your document..."
-                    />
-                  </CardContent>
-                </Card>
+                <div className="h-full">
+                  <Tiptap
+                    initialContent={documentContent}
+                    onUpdate={handleDocumentUpdate}
+                    className="h-full"
+                  />
+                </div>
               </TabsContent>
 
               <TabsContent value="preview" className="h-full mt-4">
                 <Card className="h-full">
                   <CardContent className="p-6 h-full overflow-auto">
-                    <div className="prose prose-sm max-w-none">
-                      <pre className="whitespace-pre-wrap font-mono text-sm">{documentContent}</pre>
-                    </div>
+                    <div 
+                      className="prose prose-lg max-w-none"
+                      dangerouslySetInnerHTML={{ __html: documentContent }}
+                    />
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -292,7 +285,7 @@ This strategy provides a clear roadmap for achieving our 2024 objectives. Succes
                         placeholder="Add a comment..."
                         className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                       />
-                      <Button size="sm">Comment</Button>
+                      <Button className="text-white" size="sm">Comment</Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -313,19 +306,19 @@ This strategy provides a clear roadmap for achieving our 2024 objectives. Succes
               <CardDescription>Get help with your document</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button className="w-full justify-start" variant="outline" size="sm">
+              <Button className="w-full justify-start text-white" variant="outline" size="sm">
                 <Wand2 className="w-4 h-4 mr-2" />
                 Improve Writing
               </Button>
-              <Button className="w-full justify-start" variant="outline" size="sm">
+              <Button className="w-full justify-start text-white" variant="outline" size="sm">
                 <Type className="w-4 h-4 mr-2" />
                 Generate Summary
               </Button>
-              <Button className="w-full justify-start" variant="outline" size="sm">
+              <Button className="w-full justify-start text-white" variant="outline" size="sm">
                 <Code className="w-4 h-4 mr-2" />
                 Add Code Examples
               </Button>
-              <Button className="w-full justify-start" variant="outline" size="sm">
+              <Button className="w-full justify-start text-white" variant="outline" size="sm">
                 <List className="w-4 h-4 mr-2" />
                 Create Outline
               </Button>
