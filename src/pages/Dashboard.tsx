@@ -5,18 +5,16 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { 
-  FileText, 
-  Plus, 
-  Search, 
-  Sparkles, 
-  Users, 
-  Clock, 
-  Star,
+import {
+  FileText,
+  Plus,
+  Search,
+  Sparkles,
+  Users,
+  Clock,
   Edit3,
   Share2,
   MoreHorizontal,
-  TrendingUp,
   Activity
 } from "lucide-react";
 

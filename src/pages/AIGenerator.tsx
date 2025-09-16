@@ -2,44 +2,29 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { 
-  Sparkles, 
-  Wand2, 
-  Bot, 
-  FileText, 
-  Plus, 
-  Settings, 
+import {
+  Sparkles,
+  Wand2,
+  Bot,
+  FileText,
+  Plus,
+  Settings,
   Download,
-  Copy,
   Star,
   Clock,
   Users,
   TrendingUp,
   Lightbulb,
   Target,
-  MessageSquare,
   Zap,
   ArrowRight,
-  CheckCircle,
-  Play,
-  Pause,
-  RotateCcw,
-  Save,
-  Share2,
   Eye,
   Edit3,
-  Type,
-  Image,
   Code,
-  List,
-  Quote,
   Calendar,
   BarChart3,
-  PieChart,
-  LineChart
 } from "lucide-react";
 
 interface Template {
@@ -62,7 +47,6 @@ interface GeneratedDocument {
   status: "generating" | "completed" | "failed";
   aiScore: number;
 }
-
 const templates: Template[] = [
   {
     id: "1",
@@ -165,10 +149,10 @@ export default function AIGenerator() {
 
   const handleGenerate = () => {
     if (!selectedTemplate) return;
-    
+
     setIsGenerating(true);
     setGenerationProgress(0);
-    
+
     const interval = setInterval(() => {
       setGenerationProgress(prev => {
         if (prev >= 100) {
@@ -286,12 +270,11 @@ export default function AIGenerator() {
                   {templates.map((template) => (
                     <HoverCard key={template.id}>
                       <HoverCardTrigger asChild>
-                        <Card 
-                          className={`cursor-pointer transition-all hover:shadow-lg ${
-                            selectedTemplate?.id === template.id 
-                              ? 'ring-2 ring-purple-500 bg-purple-50' 
+                        <Card
+                          className={`cursor-pointer transition-all hover:shadow-lg ${selectedTemplate?.id === template.id
+                              ? 'ring-2 ring-purple-500 bg-purple-50'
                               : ''
-                          }`}
+                            }`}
                           onClick={() => setSelectedTemplate(template)}
                         >
                           <CardHeader>
@@ -308,7 +291,7 @@ export default function AIGenerator() {
                             <div className="flex items-center justify-between text-sm text-gray-500">
                               <span>Est. time: {template.estimatedTime}</span>
                               <div className="flex space-x-1">
-                                {template.tags.slice(0, 2).map((tag, index) => (
+                                {template.tags.slice(0, 2).map((tag: string, index: number) => (
                                   <Badge key={index} variant="outline" className="text-xs">
                                     {tag}
                                   </Badge>
@@ -329,7 +312,7 @@ export default function AIGenerator() {
                             <span>{template.popularity}% popular</span>
                           </div>
                           <div className="flex flex-wrap gap-1">
-                            {template.tags.map((tag, index) => (
+                            {template.tags.map((tag: string, index: number) => (
                               <Badge key={index} variant="secondary" className="text-xs">
                                 {tag}
                               </Badge>
@@ -390,7 +373,7 @@ export default function AIGenerator() {
                             Estimated time: {selectedTemplate.estimatedTime}
                           </span>
                         </div>
-                        <Button 
+                        <Button
                           onClick={handleGenerate}
                           disabled={isGenerating}
                           className="bg-purple-600 hover:bg-purple-700"
@@ -415,7 +398,7 @@ export default function AIGenerator() {
                             <span>{generationProgress}%</span>
                           </div>
                           <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
+                            <div
                               className="bg-purple-600 h-2 rounded-full transition-all duration-300"
                               style={{ width: `${generationProgress}%` }}
                             ></div>
@@ -455,7 +438,7 @@ export default function AIGenerator() {
                       />
                     </div>
                     <div className="flex justify-end">
-                      <Button 
+                      <Button
                         disabled={!customPrompt.trim()}
                         className="bg-purple-600 hover:bg-purple-700"
                       >

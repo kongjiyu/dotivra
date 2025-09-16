@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/react";
 import { type Tool, useTool } from "../../lib/Tools/Tool";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
     Select,
@@ -57,11 +57,26 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
     // Helper for active state
     const isActive = (name: string, attrs?: any) => editor.isActive(name, attrs);
 
+    const containerRef = useRef<HTMLDivElement | null>(null);
+
+    // Close the dropdown when clicking outside without blocking scroll via overlays
+    useEffect(() => {
+        const onDocMouseDown = (e: MouseEvent) => {
+            if (!showMoreOptions) return;
+            const el = containerRef.current;
+            if (el && !el.contains(e.target as Node)) {
+                setShowMoreOptions(false);
+            }
+        };
+        document.addEventListener('mousedown', onDocMouseDown);
+        return () => document.removeEventListener('mousedown', onDocMouseDown);
+    }, [showMoreOptions]);
+
     return (
-        <div className="toolbar flex items-center gap-1 p-3 border-b border-gray-200 bg-white shadow-sm">
+        <div ref={containerRef} className="toolbar flex flex-wrap items-center gap-1 p-3 m-2 rounded-sm border border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm overflow-visible w-full">
 
             {/* ESSENTIAL FORMATTING - Always visible */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 flex-shrink-0">
                 {/* Basic Text Formatting */}
                 <Button variant="outline" size="sm"
                     onClick={() => tool.font?.bold()}
@@ -116,37 +131,73 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                         isActive('heading', { level: 1 }) ? 'h1' :
                             isActive('heading', { level: 2 }) ? 'h2' :
                                 isActive('heading', { level: 3 }) ? 'h3' :
-                                    isActive('blockquote') ? 'blockquote' :
-                                        isActive('codeBlock') ? 'codeBlock' : 'paragraph'
+                                    isActive('heading', { level: 4 }) ? 'h4' :
+                                        isActive('heading', { level: 5 }) ? 'h5' :
+                                            isActive('blockquote') ? 'blockquote' :
+                                                isActive('codeBlock') ? 'codeBlock' : 'paragraph'
                     }
                     onValueChange={(value) => {
-                        switch (value) {
-                            case 'paragraph':
-                                editor.chain().focus().setParagraph().run();
-                                break;
-                            case 'h1':
-                                tool.font?.heading(1);
-                                break;
-                            case 'h2':
-                                tool.font?.heading(2);
-                                break;
-                            case 'h3':
-                                tool.font?.heading(3);
-                                break;
-                            case 'blockquote':
-                                editor.chain().focus().toggleBlockquote().run();
-                                break;
-                            case 'codeBlock':
-                                editor.chain().focus().toggleCodeBlock().run();
-                                break;
+                        // Determine current selection or cursor position
+
+                        // Helper to apply an exclusive block type
+                        const applyExclusive = (target: 'paragraph' | 'blockquote' | 'codeBlock' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5') => {
+                            const c = editor.chain().focus();
+                            // Clear conflicting wrappers first
+                            if (target !== 'codeBlock' && editor.isActive('codeBlock')) c.toggleCodeBlock();
+                            if (target !== 'blockquote' && editor.isActive('blockquote')) c.toggleBlockquote();
+
+                            // Normalize to paragraph before applying target to avoid mixed states
+                            c.setParagraph();
+
+                            switch (target) {
+                                case 'paragraph':
+                                    // already set above
+                                    break;
+                                case 'blockquote':
+                                    c.toggleBlockquote();
+                                    break;
+                                case 'codeBlock':
+                                    c.toggleCodeBlock();
+                                    break;
+                                case 'h1':
+                                    c.toggleHeading({ level: 1 });
+                                    break;
+                                case 'h2':
+                                    c.toggleHeading({ level: 2 });
+                                    break;
+                                case 'h3':
+                                    c.toggleHeading({ level: 3 });
+                                    break;
+                                case 'h4':
+                                    c.toggleHeading({ level: 4 });
+                                    break;
+                                case 'h5':
+                                    c.toggleHeading({ level: 5 });
+                                    break;
+                            }
+                            c.run();
+                        };
+
+                        // Headings & Paragraph: if no selection, act on current block to improve UX
+                        if (value === 'paragraph' || value === 'h1' || value === 'h2' || value === 'h3' || value === 'h4' || value === 'h5') {
+                            applyExclusive(value as any);
+                            return;
+                        }
+
+                        // Quote & Code Block may apply to the current block even without selection
+                        if (value === 'blockquote' || value === 'codeBlock') {
+                            applyExclusive(value as any);
+                            return;
                         }
                     }}
                 >
-                    <SelectTrigger className="w-[100px] h-8 text-sm">
+                    <SelectTrigger className="w-[150px] h-8 text-sm">
                         <SelectValue>
                             {isActive('heading', { level: 1 }) && "Heading 1"}
                             {isActive('heading', { level: 2 }) && "Heading 2"}
                             {isActive('heading', { level: 3 }) && "Heading 3"}
+                            {isActive('heading', { level: 4 }) && "Heading 4"}
+                            {isActive('heading', { level: 5 }) && "Heading 5"}
                             {isActive('blockquote') && "Quote"}
                             {isActive('codeBlock') && "Code Block"}
                             {(!isActive('heading') && !isActive('blockquote') && !isActive('codeBlock')) && "Paragraph"}
@@ -175,6 +226,18 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                             <div className="flex items-center gap-2">
                                 <span className="text-sm font-bold">H3</span>
                                 <span>Heading 3</span>
+                            </div>
+                        </SelectItem>
+                        <SelectItem value="h4">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold">H4</span>
+                                <span>Heading 4</span>
+                            </div>
+                        </SelectItem>
+                        <SelectItem value="h5">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold">H5</span>
+                                <span>Heading 5</span>
                             </div>
                         </SelectItem>
                         <SelectItem value="blockquote">
@@ -468,7 +531,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                 </Button>
                 <Button variant="outline"
                     onClick={() => tool.list?.task()}
-                    className={`h-8 w-8 p-0 ${isActive('orderedList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                    className={`h-8 w-8 p-0 ${isActive('taskList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                         }`}
                     title="Task List"
                 >
@@ -479,19 +542,19 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
 
 
                 <Button variant="outline"
-                    onClick={() => tool.list?.sink("listItem")}
+                    onClick={() => tool.list?.indent()}
                     className=" rounded-md bg-white hover:bg-gray-50 transition-colors  text-sm"
                     title="Indent"
                 >
-                    <IndentDecrease />
+                    <IndentIncrease />
                 </Button>
 
                 <Button variant="outline"
-                    onClick={() => tool.list?.lift("listItem")}
+                    onClick={() => tool.list?.outdent()}
                     className=" rounded-md bg-white hover:bg-gray-50 transition-colors  text-sm"
                     title="Outdent"
                 >
-                    <IndentIncrease />
+                    <IndentDecrease />
                 </Button>
                 <Button variant="outline" size="sm"
                     onClick={() => tool.font?.clearMarks()}
@@ -506,19 +569,17 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
             </div>
 
             {/* MORE OPTIONS DROPDOWN */}
-            <div className="relative ml-2">
+            <div className="relative ml-2 flex-shrink-0">
                 <Button variant="outline" size="sm"
                     onClick={() => setShowMoreOptions(!showMoreOptions)}
-                    className="flex items-center gap-1 px-3 h-8 bg-white hover:bg-gray-50"
+                    className="flex items-center px-2 h-8 bg-white hover:bg-gray-50"
                     title="More Options"
                 >
                     <MoreHorizontal className="w-4 h-4" />
-                    <span className="text-sm">More</span>
-                    <ChevronDown className={`w-4 h-4 transition-transform ${showMoreOptions ? 'rotate-180' : ''}`} />
                 </Button>
 
                 {showMoreOptions && (
-                    <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 min-w-[600px] p-4">
+                    <div className="absolute top-full right-2 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-[700px] max-w-[85vw] max-h-[70vh] overflow-auto p-4">
                         <div className="grid grid-cols-1 gap-4">
 
 
@@ -546,9 +607,13 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
 
                                     <Button variant="outline"
                                         onClick={() => {
-                                            const rows = Number(window.prompt('Number of rows:', '3'));
-                                            const cols = Number(window.prompt('Number of columns:', '3'));
-                                            if (rows && cols) tool.table?.create(rows, cols);
+                                            const rowsInput = window.prompt('Number of rows:', '3');
+                                            const colsInput = window.prompt('Number of columns:', '3');
+                                            const rows = rowsInput ? Number(rowsInput) : NaN;
+                                            const cols = colsInput ? Number(colsInput) : NaN;
+                                            if (Number.isFinite(rows) && Number.isFinite(cols) && rows > 0 && cols > 0) {
+                                                tool.table?.create(rows, cols);
+                                            }
                                         }}
                                         className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors  text-sm"
                                         title="Insert Table"
@@ -635,26 +700,11 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                 </div>
                             </div>
                         </div>
-
-                        <div className="mt-3 pt-3 border-t">
-                            <Button variant="outline"
-                                onClick={() => setShowMoreOptions(false)}
-                                className="w-full px-3 py-2 text-sm text-gray-500 hover: transition-colors"
-                            >
-                                Close
-                            </Button>
-                        </div>
                     </div>
                 )}
             </div>
 
-            {/* Close dropdown when clicking outside */}
-            {showMoreOptions && (
-                <div
-                    className="fixed inset-0 z-40"
-                    onClick={() => setShowMoreOptions(false)}
-                />
-            )}
+            {/* Outside click handled via document listener to avoid blocking scroll */}
         </div>
     );
 }

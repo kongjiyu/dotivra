@@ -1,58 +1,26 @@
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { 
-  Save, 
-  Share2, 
-  Sparkles, 
-  Wand2, 
-  Bot, 
-  Type,
-  Code,
-  List,
-  Download,
+import { Tabs, TabsContent } from "@/components/ui/tabs";
+import {
+  Share2,
+  Sparkles,
   History,
-  Zap
+  Home,
+  RefreshCw
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import Tiptap from "@/components/tiptap/TipTap";
 import DocumentMenu from "@/components/tiptap/DocumentMenu";
+import ChatSidebar from "@/components/ChatSidebar";
 
-interface Comment {
-  id: string;
-  user: string;
-  avatar: string;
-  content: string;
-  timestamp: string;
-  line: number;
-}
-
-const mockComments: Comment[] = [
-  {
-    id: "1",
-    user: "Sarah Chen",
-    avatar: "SC",
-    content: "Great analysis! Consider adding more data points here.",
-    timestamp: "2 hours ago",
-    line: 15
-  },
-  {
-    id: "2",
-    user: "Mike Johnson",
-    avatar: "MJ",
-    content: "This section needs technical clarification.",
-    timestamp: "1 hour ago",
-    line: 23
-  }
-];
+// Comments UI removed; using project view instead
 
 export default function DocumentEditor() {
   const [activeTab, setActiveTab] = useState("editor");
   const [documentContent, setDocumentContent] = useState(`<h1>Product Strategy 2024</h1>
 
-<h2>Executive Summary</h2>
+<h3>Executive Summary</h3>
 
 <p>Our product strategy for 2024 focuses on three key pillars: innovation, user experience, and market expansion. This document outlines our approach to achieving sustainable growth while maintaining our commitment to quality and customer satisfaction.</p>
 
@@ -155,22 +123,17 @@ export default function DocumentEditor() {
 <p>This strategy provides a clear roadmap for achieving our 2024 objectives. Success depends on execution excellence, team collaboration, and customer-centric decision making.</p>`);
 
   const [isAIGenerating, setIsAIGenerating] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const handleAIGenerate = () => {
+    // Toggle the chat sidebar and simulate a brief loading state for button feedback
+    setChatOpen(true);
     setIsAIGenerating(true);
-    // Simulate AI generation
-    setTimeout(() => {
-      setIsAIGenerating(false);
-    }, 2000);
+    setTimeout(() => setIsAIGenerating(false), 600);
   };
 
   const handleDocumentUpdate = (content: string) => {
     setDocumentContent(content);
-  };
-
-  const handleSave = () => {
-    console.log("Saving document...");
-    // Implement actual save functionality
   };
 
   const handleSaveAsTemplate = () => {
@@ -180,75 +143,95 @@ export default function DocumentEditor() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
-        <div className="flex items-center justify-between">
+      {/* Header (fixed) */}
+      <div className="fixed top-0 left-0 right-0 z-40 h-20 bg-white border-b border-gray-200 px-6 flex items-center">
+        <div className="flex items-center w-full">
           <div className="flex items-center space-x-4">
-            <div>
+            <div className="flex items-center gap-3">
+              {/* Home button to go back (larger, no border) */}
+              <Button asChild variant="ghost" size="icon" className="h-12 w-12">
+                <Link to="/">
+                  <Home className="w-6 h-6" />
+                </Link>
+              </Button>
               <h1 className="text-xl font-semibold text-gray-900">Product Strategy 2024</h1>
-              <p className="text-sm text-gray-500">Last saved 2 minutes ago</p>
+              <div className="flex items-center gap-1 text-sm text-gray-500">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Autosave</span>
+              </div>
             </div>
-            <Badge variant="secondary" className="bg-green-100 text-green-800">
-              <Sparkles className="w-3 h-3 mr-1" />
-              AI Enhanced
-            </Badge>
+
           </div>
-          <div className="flex items-center space-x-2">
-            <Button variant="outline" size="sm" className="text-white">
+          <div className="flex items-center space-x-2 ml-auto">
+            <Button variant="outline" size="sm" className="text-gray-900">
               <History className="w-4 h-4 mr-2" />
-              Version History
+              History
             </Button>
-            <Button variant="outline" size="sm" className="text-white">
+            <Button variant="outline" size="sm" className="text-gray-900">
               <Share2 className="w-4 h-4 mr-2" />
               Share
             </Button>
-            <Button variant="outline" size="sm" className="text-white">
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-            <Button className="bg-blue-600 hover:bg-blue-700">
-              <Save className="w-4 h-4 mr-2" />
-              Save
+
+            {/* AI Assistant opens chat sidebar */}
+            <Button
+              variant="default"
+              size="sm"
+              onClick={handleAIGenerate}
+              disabled={isAIGenerating}
+              className="bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 h-8"
+              title="AI Assistant"
+            >
+              {isAIGenerating ? (
+                <div className="flex items-center">
+                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-700 mr-2"></div>
+                  <span className="text-xs">Generating...</span>
+                </div>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  <span className="text-xs font-medium">AI Assistant</span>
+                </>
+              )}
             </Button>
           </div>
         </div>
       </div>
 
-      <div className="flex h-[calc(100vh-80px)]">
-        {/* Main Editor */}
-        <div className="flex-1 flex flex-col">
-          {/* Document Menu */}
-          <DocumentMenu 
-            onUpdate={handleDocumentUpdate}
-            isAIGenerating={isAIGenerating}
-            onAIGenerate={handleAIGenerate}
-            onSaveAsTemplate={handleSaveAsTemplate}
-            documentTitle="Product Strategy 2024"
-          />
+      {/* Main content under fixed header */}
+      <div className="pt-20">
+        {/* Main Editor (window scroll for header/menu), fixed content area owns scrollbar */}
+        <div className="flex flex-col">
+          {/* Document Menu (fixed under header) */}
+          <div className="fixed top-20 left-0 right-0 z-30 bg-white border-b border-gray-200">
+            <DocumentMenu
+              onUpdate={handleDocumentUpdate}
+              onSaveAsTemplate={handleSaveAsTemplate}
+              documentTitle="Product Strategy 2024"
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+            />
+          </div>
+          {/* Spacer for fixed menu */}
+          <div className="h-[56px]"></div>
 
-          {/* Editor Content */}
-          <div className="flex-1 p-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
-              <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="editor">Editor</TabsTrigger>
-                <TabsTrigger value="preview">Preview</TabsTrigger>
-                <TabsTrigger value="comments">Comments ({mockComments.length})</TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="editor" className="h-full mt-4">
-                <div className="h-full">
+          {/* Editor Content (fixed container + scroll) */}
+          <div className="fixed left-0 right-0 top-[192px] bottom-0 overflow-auto p-4 custom-scrollbar">
+            <Tabs value={activeTab} onValueChange={setActiveTab}>
+
+              <TabsContent value="editor" className="mt-2">
+                <div>
                   <Tiptap
                     initialContent={documentContent}
                     onUpdate={handleDocumentUpdate}
-                    className="h-full"
+                    className=""
                   />
                 </div>
               </TabsContent>
 
-              <TabsContent value="preview" className="h-full mt-4">
+              <TabsContent value="summary" className="h-full mt-4">
                 <Card className="h-full">
                   <CardContent className="p-6 h-full overflow-auto">
-                    <div 
+                    <div
                       className="prose prose-lg max-w-none"
                       dangerouslySetInnerHTML={{ __html: documentContent }}
                     />
@@ -256,37 +239,16 @@ export default function DocumentEditor() {
                 </Card>
               </TabsContent>
 
-              <TabsContent value="comments" className="h-full mt-4">
+              <TabsContent value="project" className="h-full mt-4">
                 <Card className="h-full">
                   <CardHeader>
-                    <CardTitle>Comments & Feedback</CardTitle>
-                    <CardDescription>Collaborative feedback on this document</CardDescription>
+                    <CardTitle>Project: Aurora Analytics</CardTitle>
+                    <CardDescription>Documents organized under the "Aurora Analytics" initiative</CardDescription>
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    {mockComments.map((comment) => (
-                      <div key={comment.id} className="flex space-x-3 p-4 border border-gray-200 rounded-lg">
-                        <Avatar className="w-8 h-8">
-                          <AvatarImage src="" />
-                          <AvatarFallback className="text-xs">{comment.avatar}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2">
-                            <span className="font-medium text-sm">{comment.user}</span>
-                            <span className="text-xs text-gray-500">{comment.timestamp}</span>
-                            <Badge variant="outline" className="text-xs">Line {comment.line}</Badge>
-                          </div>
-                          <p className="text-sm text-gray-700 mt-1">{comment.content}</p>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="flex space-x-2">
-                      <input
-                        type="text"
-                        placeholder="Add a comment..."
-                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      />
-                      <Button className="text-white" size="sm">Comment</Button>
-                    </div>
+                  <CardContent className="space-y-3">
+                    <div className="p-3 border rounded-lg">Roadmap Q4</div>
+                    <div className="p-3 border rounded-lg">Market Research Notes</div>
+                    <div className="p-3 border rounded-lg">Release Plan v1.2</div>
                   </CardContent>
                 </Card>
               </TabsContent>
@@ -294,117 +256,19 @@ export default function DocumentEditor() {
           </div>
         </div>
 
-        {/* Sidebar */}
-        <div className="w-80 bg-white border-l border-gray-200 p-6 space-y-6">
-          {/* AI Assistant */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Bot className="w-5 h-5 mr-2 text-blue-600" />
-                AI Assistant
-              </CardTitle>
-              <CardDescription>Get help with your document</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <Button className="w-full justify-start text-white" variant="outline" size="sm">
-                <Wand2 className="w-4 h-4 mr-2" />
-                Improve Writing
-              </Button>
-              <Button className="w-full justify-start text-white" variant="outline" size="sm">
-                <Type className="w-4 h-4 mr-2" />
-                Generate Summary
-              </Button>
-              <Button className="w-full justify-start text-white" variant="outline" size="sm">
-                <Code className="w-4 h-4 mr-2" />
-                Add Code Examples
-              </Button>
-              <Button className="w-full justify-start text-white" variant="outline" size="sm">
-                <List className="w-4 h-4 mr-2" />
-                Create Outline
-              </Button>
-            </CardContent>
-          </Card>
-
-          {/* Document Info */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Document Info</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Words</span>
-                <span className="font-medium">1,247</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Characters</span>
-                <span className="font-medium">7,892</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Reading Time</span>
-                <span className="font-medium">5 min</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-500">AI Score</span>
-                <span className="font-medium text-green-600">92/100</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Recent Activity */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {[
-                { user: "Sarah Chen", action: "commented", time: "2 hours ago" },
-                { user: "Mike Johnson", action: "edited", time: "3 hours ago" },
-                { user: "You", action: "saved", time: "5 hours ago" },
-                { user: "AI Assistant", action: "enhanced", time: "1 day ago" }
-              ].map((activity, index) => (
-                <div key={index} className="flex items-center space-x-3">
-                  <Avatar className="w-6 h-6">
-                    <AvatarImage src="" />
-                    <AvatarFallback className="text-xs">
-                      {activity.user === "You" ? "U" : activity.user.split(" ").map(n => n[0]).join("")}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 text-sm">
-                    <span className="font-medium">{activity.user}</span>
-                    <span className="text-gray-500"> {activity.action}</span>
-                  </div>
-                  <span className="text-xs text-gray-400">{activity.time}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* AI Suggestions */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center">
-                <Zap className="w-5 h-5 mr-2 text-yellow-600" />
-                AI Suggestions
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  Consider adding more specific metrics to the "Success Metrics" section
-                </p>
-              </div>
-              <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-800">
-                  The executive summary is well-structured and clear
-                </p>
-              </div>
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <p className="text-sm text-yellow-800">
-                  Add more details about competitor analysis
-                </p>
-              </div>
-            </CardContent>
-          </Card>
+        {/* Fixed Chat Sidebar overlay (does not affect layout) */}
+        <div className={`fixed top-[136px] right-0 h-[calc(100vh-136px)] w-[28rem] border-l border-gray-200 bg-white shadow-xl transition-transform duration-200 z-20 ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className="h-full p-4">
+            <ChatSidebar
+              open={chatOpen}
+              onClose={() => setChatOpen(false)}
+              initialSuggestions={[
+                "Consider adding more specific metrics to the 'Success Metrics' section.",
+                "The executive summary is well-structured and clear.",
+                "Add more details about competitor analysis.",
+              ]}
+            />
+          </div>
         </div>
       </div>
     </div>

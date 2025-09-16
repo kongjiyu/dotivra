@@ -181,3 +181,101 @@ button:focus-visible {
     @apply bg-background text-foreground;
   }
 }
+
+/* --- TipTap Editor Content styling inside Document Editor --- */
+
+/* Tables: add subtle borders and spacing */
+.document-context .ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+.document-context .ProseMirror th,
+.document-context .ProseMirror td {
+  border: 1px solid #e5e7eb; /* gray-200 */
+  padding: 0.5rem 0.75rem;
+  vertical-align: top;
+  position: relative; /* allow absolute-positioned resize handle */
+}
+.document-context .ProseMirror th {
+  background-color: #f9fafb; /* gray-50 */
+  font-weight: 600;
+}
+
+/* Table column resize handle (from tiptap/resizable tables) */
+.document-context .ProseMirror .column-resize-handle {
+  position: absolute;
+  right: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px; /* slightly wider to be easier to grab */
+  background-color: transparent;
+  pointer-events: auto;
+}
+.document-context .ProseMirror td:hover .column-resize-handle,
+.document-context .ProseMirror th:hover .column-resize-handle {
+  background-color: rgba(59, 130, 246, 0.4); /* blue-500 @ 40% */
+  cursor: col-resize;
+}
+.document-context .ProseMirror.resize-cursor { cursor: col-resize; }
+
+/* Lists: ensure bullets/numbers and default indentation */
+.document-context .ProseMirror ul {
+  list-style-type: disc;
+  padding-left: 1.25rem; /* ~20px indent */
+  margin: 0.5rem 0;
+}
+.document-context .ProseMirror ol {
+  list-style-type: decimal;
+  padding-left: 1.5rem; /* a bit more for numbers */
+  margin: 0.5rem 0;
+}
+/* Nested list markers */
+.document-context .ProseMirror ul ul { list-style-type: circle; }
+.document-context .ProseMirror ul ul ul { list-style-type: square; }
+.document-context .ProseMirror ol ol { list-style-type: lower-alpha; }
+.document-context .ProseMirror ol ol ol { list-style-type: lower-roman; }
+
+/* List items spacing and subtle left guide to highlight items */
+.document-context .ProseMirror li {
+  margin: 0.15rem 0; /* compact spacing */
+  padding-left: 0.25rem; /* space between marker and text */
+  position: relative;
+}
+.document-context .ProseMirror li::before {
+  content: "";
+  position: absolute;
+  left: -0.5rem;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 2px;
+  background: #f3f4f6; /* gray-100 subtle highlight bar */
+}
+
+/* Task list checkboxes alignment (for tiptap task list) */
+.document-context .ProseMirror .task-list-item {
+  display: flex;
+  align-items: flex-start;
+}
+.document-context .ProseMirror .task-list-item input[type="checkbox"] {
+  margin-right: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+/* Custom scrollbar (shadcn-like) */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(0,0,0,0.18);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0,0,0,0.28);
+}

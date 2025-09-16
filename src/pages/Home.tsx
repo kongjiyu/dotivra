@@ -1,35 +1,28 @@
-import React from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
-import { 
-  FileText, 
-  Brain, 
-  Zap, 
-  Users, 
-  Sparkles, 
-  Bot, 
-  Target, 
-  TrendingUp, 
-  Clock, 
+// HoverCard components not used on Home page after cleanup
+import {
+  FileText,
+  Brain,
+
+  Users,
+  Sparkles,
+
+  Target,
+  TrendingUp,
+  Clock,
   Star,
   ArrowRight,
-  CheckCircle,
   Play,
   MessageSquare,
   Shield,
-  Globe,
   BarChart3,
-  Lightbulb,
-  Code,
-  Calendar,
-  Settings,
-  Download,
-  Share2,
+
+
   Edit3,
-  Eye
+
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
@@ -129,7 +122,7 @@ const Home = () => {
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600"> AI Intelligence</span>
           </h1>
           <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto leading-relaxed">
-            Transform how you create, edit, and collaborate on documents. Our AI-powered platform 
+            Transform how you create, edit, and collaborate on documents. Our AI-powered platform
             generates professional content, provides smart suggestions, and enables seamless team collaboration.
           </p>
           <div className="flex gap-4 justify-center mb-8">
@@ -146,7 +139,7 @@ const Home = () => {
               </Button>
             </Link>
           </div>
-          
+
           {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 max-w-4xl mx-auto">
             {stats.map((stat, index) => (
@@ -186,7 +179,7 @@ const Home = () => {
               Explore our demo pages to experience the full power of AI-driven document creation
             </p>
           </div>
-          
+
           <div className="grid md:grid-cols-3 gap-8">
             <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer group">
               <CardHeader>
@@ -258,7 +251,7 @@ const Home = () => {
               See what our users have to say about their experience
             </p>
           </div>
-          
+
           <div className="grid md:grid-cols-3 gap-8">
             {testimonials.map((testimonial, index) => (
               <Card key={index} className="hover:shadow-lg transition-all duration-300">

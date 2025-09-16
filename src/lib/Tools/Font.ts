@@ -1,5 +1,6 @@
 import type { Editor } from "@tiptap/react";
-import Level from "@tiptap/extension-heading";
+
+type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
 interface Font {
     editor: Editor | null;
@@ -23,7 +24,7 @@ interface Font {
     
     clearMarks: () => boolean;
     
-    heading: (level: Level) => boolean;
+    heading: (level: HeadingLevel) => boolean;
     
     size: (size: number) => boolean;
     
@@ -93,7 +94,7 @@ const font: Font = {
         }
         return false;
     },
-    heading: function (level: Level): boolean {
+    heading: function (level: HeadingLevel): boolean {
         if (this.editor) {
             return this.editor.chain().focus().toggleHeading({ level : level}).run();
         }
@@ -117,7 +118,6 @@ function useFont(editor: Editor): Font {
     font.editor = editor;
     return font;
 }
-type Level = 1 | 2 | 3 | 4 | 5 | 6;
     
-export { type Font, type Level, useFont };
+export { type Font, type HeadingLevel, useFont };
 

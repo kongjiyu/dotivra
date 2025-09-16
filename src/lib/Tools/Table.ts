@@ -44,7 +44,8 @@ const column: Column = {
     },
     delete: function (): boolean {
         if (this.editor) {
-            return this.editor.chain().focus().deleteRow().run();
+            // Correct command: delete the current column, not the row
+            return this.editor.chain().focus().deleteColumn().run();
         }
         return false;
     },

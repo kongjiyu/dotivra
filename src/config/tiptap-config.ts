@@ -1,5 +1,6 @@
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
+import Heading from "@tiptap/extension-heading";
 import Highlight from "@tiptap/extension-highlight";
 import Color from "@tiptap/extension-color";
 import { Table } from "@tiptap/extension-table";
@@ -17,7 +18,12 @@ import CharacterCount from "@tiptap/extension-character-count";
 
 // TipTap Editor Configuration
 export const getTipTapExtensions = () => [
-    StarterKit,
+    StarterKit.configure({
+        heading: false, // we'll add Heading explicitly below
+    }),
+    Heading.configure({
+        levels: [1, 2, 3, 4, 5],
+    }),
     // Text formatting extensions
     Highlight.configure({
         multicolor: true,

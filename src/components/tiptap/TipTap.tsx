@@ -11,8 +11,8 @@ interface TiptapProps {
     className?: string;
 }
 
-const Tiptap = ({ 
-    initialContent = "<p>Start writing your document...</p>", 
+const Tiptap = ({
+    initialContent = "<p>Start writing your document...</p>",
     editable = true,
     onUpdate,
     className = ""
@@ -20,7 +20,7 @@ const Tiptap = ({
     const [isReady, setIsReady] = useState(false);
 
     // Create editor configuration using the config file
-    const editorConfig = useMemo(() => 
+    const editorConfig = useMemo(() =>
         createTipTapConfig({
             content: initialContent,
             editable,
@@ -32,7 +32,7 @@ const Tiptap = ({
                     onUpdate(editor.getHTML());
                 }
             },
-        }), 
+        }),
         [initialContent, editable, onUpdate]
     );
 
@@ -68,15 +68,22 @@ const Tiptap = ({
 
     return (
         <EditorContext.Provider value={contextValue}>
-            <div className={`tiptap-container ${className}`}>
-                
-                {/* Toolbar */}
-                <ToolBar editor={editor} />
-                
-                {/* Document Content */}
-                <DocumentContext editor={editor}>
-                    {/* Any additional overlay content can be passed as children */}
-                </DocumentContext>
+            <div className={`tiptap-container h-full min-h-0 ${className}`}>
+                <div className="mx-auto w-[75vw] max-w-[1200px] min-w-[320px] space-y-0 h-full min-h-0">
+                    {/* Toolbar (fixed under the fixed menu), slightly wider than content */}
+                    <div className="fixed left-1/2 -translate-x-1/2 top-[144px] z-20 w-[96vw] max-w-[1680px] min-w-[360px] px-3">
+                        <ToolBar editor={editor} />
+                    </div>
+                    {/* Spacer to offset fixed toolbar height */}
+                    <div className="h-[56px]"></div>
+
+                    {/* Document Content */}
+                    <div className="min-h-0">
+                        <DocumentContext editor={editor}>
+                            {/* Any additional overlay content can be passed as children */}
+                        </DocumentContext>
+                    </div>
+                </div>
             </div>
         </EditorContext.Provider>
     );

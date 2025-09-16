@@ -45,7 +45,7 @@ const Tool: Tool = {
         }
         return false;
     },
-    search: function (query: string): boolean {
+    search: function (_query: string): boolean {
         if (this.editor) {
             return true;
             //return this.editor.chain().focus().search(query).run();
