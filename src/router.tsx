@@ -4,13 +4,13 @@ import Dashboard from "./pages/Dashboard";
 import ProjectView from "./pages/ProjectOverview";
 import DocumentEditor from "./pages/DocumentEditor";
 import AIGenerator from "./pages/AIGenerator";
-import AuthPage from "@/components/auth/AuthPage";  
+import Login from "./pages/Login";  
 
 
 const router = createBrowserRouter([
   {
     path: "/",
-    element: <AuthPage />,
+    element: <Login />,
   },
   {
     path: "/dashboard", 
