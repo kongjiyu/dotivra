@@ -8,6 +8,7 @@ interface TiptapProps {
     initialContent?: string;
     editable?: boolean;
     onUpdate?: (content: string) => void;
+    onEditorReady?: (editor: any) => void;
     className?: string;
 }
 
@@ -15,6 +16,7 @@ const Tiptap = ({
     initialContent = "<p>Start writing your document...</p>",
     editable = true,
     onUpdate,
+    onEditorReady,
     className = ""
 }: TiptapProps) => {
     const [isReady, setIsReady] = useState(false);
@@ -51,6 +53,20 @@ const Tiptap = ({
     useEffect(() => {
         return handleDestroy;
     }, [handleDestroy]);
+
+    // Update editor content when initialContent changes
+    useEffect(() => {
+        if (editor && initialContent && editor.getHTML() !== initialContent) {
+            editor.commands.setContent(initialContent);
+        }
+    }, [editor, initialContent]);
+
+    // Call onEditorReady when editor is ready
+    useEffect(() => {
+        if (editor && isReady && onEditorReady) {
+            onEditorReady(editor);
+        }
+    }, [editor, isReady, onEditorReady]);
 
     // Loading state
     if (!editor || !isReady) {

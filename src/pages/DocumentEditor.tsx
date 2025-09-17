@@ -3,21 +3,35 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import {
-  Share2,
-  Sparkles,
   History,
   Home,
-  RefreshCw
+  Cloud,
+  Download,
+  RefreshCw,
+  FileText,
+  Plus,
+  FolderOpen,
+  Edit,
+  ArrowLeft,
+  MessageCircle
 } from "lucide-react";
+import { useRef } from "react";
 import { Link } from "react-router-dom";
 import Tiptap from "@/components/tiptap/TipTap";
 import DocumentMenu from "@/components/tiptap/DocumentMenu";
 import ChatSidebar from "@/components/ChatSidebar";
+import VersionHistory from "@/components/VersionHistory";
+import ShareSettings from "@/components/ShareSettings";
+import SimpleShare from "@/components/SimpleShare";
 
 // Comments UI removed; using project view instead
 
 export default function DocumentEditor() {
   const [activeTab, setActiveTab] = useState("editor");
+  const [currentEditor, setCurrentEditor] = useState<any>(null);
+  const documentContentRef = useRef<HTMLDivElement>(null);
+  const [summaryContent, setSummaryContent] = useState("");
+  const [isEditingSummary, setIsEditingSummary] = useState(false);
   const [documentContent, setDocumentContent] = useState(`<h1>Product Strategy 2024</h1>
 
 <h3>Executive Summary</h3>
@@ -127,7 +141,7 @@ export default function DocumentEditor() {
 
   const handleAIGenerate = () => {
     // Toggle the chat sidebar and simulate a brief loading state for button feedback
-    setChatOpen(true);
+    setChatOpen(!chatOpen);
     setIsAIGenerating(true);
     setTimeout(() => setIsAIGenerating(false), 600);
   };
@@ -136,9 +150,71 @@ export default function DocumentEditor() {
     setDocumentContent(content);
   };
 
+  const generateDocumentSummary = (content: string): string => {
+    // Simple mock summarization based on content
+    const hasStrategy = content.toLowerCase().includes('strategy');
+    const hasMetrics = content.toLowerCase().includes('metrics') || content.toLowerCase().includes('kpi');
+    const hasTimeline = content.toLowerCase().includes('timeline') || content.toLowerCase().includes('quarter');
+    const hasRisk = content.toLowerCase().includes('risk');
+
+    let summary = '<h2>Document Summary</h2>\n\n';
+
+    if (hasStrategy) {
+      summary += '<p><strong>Strategic Focus:</strong> This document outlines a comprehensive business strategy focusing on innovation, user experience, and market expansion.</p>\n\n';
+    }
+
+    if (hasMetrics) {
+      summary += '<p><strong>Key Metrics:</strong> The strategy includes specific performance indicators such as revenue growth targets, user engagement improvements, and customer retention goals.</p>\n\n';
+    }
+
+    if (hasTimeline) {
+      summary += '<p><strong>Implementation Timeline:</strong> The plan is structured across quarterly milestones with clearly defined focus areas and deliverables.</p>\n\n';
+    }
+
+    if (hasRisk) {
+      summary += '<p><strong>Risk Management:</strong> The document addresses potential challenges including competitive threats, technological changes, and regulatory considerations.</p>\n\n';
+    }
+
+    summary += '<p><strong>Overall Assessment:</strong> This is a well-structured strategic document that provides clear direction, measurable objectives, and actionable implementation steps.</p>';
+
+    return summary;
+  };
+
   const handleSaveAsTemplate = () => {
     console.log("Saving document as template...");
     // Implement template saving functionality
+  };
+
+  const regenerateSummary = () => {
+    // Enhanced summary generation
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = documentContent;
+    const textContent = tempDiv.textContent || tempDiv.innerText || '';
+
+    // Generate a more sophisticated summary
+    const summary = `
+      <h2>Executive Summary</h2>
+      <p>This document contains ${textContent.length} characters and covers the key aspects of our strategic planning initiative.</p>
+      
+      <h3>Key Topics</h3>
+      <ul>
+        <li>Strategic objectives and market positioning</li>
+        <li>Implementation timeline and milestones</li>
+        <li>Success metrics and performance indicators</li>
+        <li>Resource allocation and budget considerations</li>
+      </ul>
+      
+      <h3>Next Steps</h3>
+      <p>The document outlines a comprehensive roadmap for achieving our strategic goals through focused execution and continuous monitoring of key performance indicators.</p>
+    `;
+
+    setSummaryContent(summary);
+  };
+
+  // Initialize summary content
+  const getSummaryContent = () => {
+    if (summaryContent) return summaryContent;
+    return generateDocumentSummary(documentContent);
   };
 
   return (
@@ -156,43 +232,26 @@ export default function DocumentEditor() {
               </Button>
               <h1 className="text-xl font-semibold text-gray-900">Product Strategy 2024</h1>
               <div className="flex items-center gap-1 text-sm text-gray-500">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Autosave</span>
+                <Cloud className="w-4 h-4 text-green-600" />
+                <span>Synced</span>
               </div>
             </div>
 
           </div>
           <div className="flex items-center space-x-2 ml-auto">
-            <Button variant="outline" size="sm" className="text-gray-900">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-gray-900"
+              onClick={() => setActiveTab("history")}
+            >
               <History className="w-4 h-4 mr-2" />
               History
             </Button>
-            <Button variant="outline" size="sm" className="text-gray-900">
-              <Share2 className="w-4 h-4 mr-2" />
-              Share
-            </Button>
-
-            {/* AI Assistant opens chat sidebar */}
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleAIGenerate}
-              disabled={isAIGenerating}
-              className="bg-purple-50 border border-purple-200 text-purple-700 hover:bg-purple-100 h-8"
-              title="AI Assistant"
-            >
-              {isAIGenerating ? (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-purple-700 mr-2"></div>
-                  <span className="text-xs">Generating...</span>
-                </div>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  <span className="text-xs font-medium">AI Assistant</span>
-                </>
-              )}
-            </Button>
+            <SimpleShare
+              documentTitle="Product Strategy 2024"
+              documentId="main-doc-123"
+            />
           </div>
         </div>
       </div>
@@ -201,16 +260,38 @@ export default function DocumentEditor() {
       <div className="pt-20">
         {/* Main Editor (window scroll for header/menu), fixed content area owns scrollbar */}
         <div className="flex flex-col">
-          {/* Document Menu (fixed under header) */}
-          <div className="fixed top-20 left-0 right-0 z-30 bg-white border-b border-gray-200">
-            <DocumentMenu
-              onUpdate={handleDocumentUpdate}
-              onSaveAsTemplate={handleSaveAsTemplate}
-              documentTitle="Product Strategy 2024"
-              activeTab={activeTab}
-              onTabChange={setActiveTab}
-            />
-          </div>
+          {/* Document Menu (fixed under header) - Hidden for history tab */}
+          {activeTab !== "history" && (
+            <div className="fixed top-20 left-0 right-0 z-30 bg-white border-b border-gray-200">
+              <DocumentMenu
+                onUpdate={handleDocumentUpdate}
+                onSaveAsTemplate={handleSaveAsTemplate}
+                documentTitle="Product Strategy 2024"
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
+                editor={currentEditor}
+                documentContent={documentContent}
+              />
+            </div>
+          )}
+
+          {/* History Tab Back Button */}
+          {activeTab === "history" && (
+            <div className="fixed top-20 left-0 right-0 z-30 bg-white border-b border-gray-200 px-6 py-3">
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setActiveTab("editor")}
+                  className="flex items-center gap-2 text-gray-700 hover:text-gray-900"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  Back
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* Spacer for fixed menu */}
           <div className="h-[56px]"></div>
 
@@ -219,38 +300,165 @@ export default function DocumentEditor() {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
 
               <TabsContent value="editor" className="mt-2">
-                <div>
+                <div ref={documentContentRef}>
                   <Tiptap
                     initialContent={documentContent}
                     onUpdate={handleDocumentUpdate}
+                    onEditorReady={setCurrentEditor}
                     className=""
                   />
                 </div>
               </TabsContent>
 
               <TabsContent value="summary" className="h-full mt-4">
-                <Card className="h-full">
-                  <CardContent className="p-6 h-full overflow-auto">
-                    <div
-                      className="prose prose-lg max-w-none"
-                      dangerouslySetInnerHTML={{ __html: documentContent }}
-                    />
-                  </CardContent>
-                </Card>
+                <div className="h-full flex flex-col">
+                  {/* Summary Toolbar */}
+                  <div className="border-b border-gray-200 p-3 bg-white">
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={regenerateSummary}
+                      >
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Regenerate
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsEditingSummary(!isEditingSummary)}
+                      >
+                        <Edit className="w-4 h-4 mr-2" />
+                        {isEditingSummary ? 'View' : 'Edit'}
+                      </Button>
+                      <SimpleShare
+                        documentTitle="Product Strategy 2024"
+                        documentId="summary-doc-123"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Summary Content with same width as editor */}
+                  <div className="flex-1 overflow-auto p-6 bg-gray-50">
+                    <div className="max-w-[75vw] mx-auto bg-white rounded-lg shadow-sm border">
+                      <div className="p-8">
+                        <h2 className="text-2xl font-bold mb-6 text-gray-800">Document Summary</h2>
+                        {isEditingSummary ? (
+                          <div className="space-y-4">
+                            <Tiptap
+                              initialContent={summaryContent || getSummaryContent()}
+                              onUpdate={(content) => setSummaryContent(content)}
+                              onEditorReady={(editor) => console.log('Summary editor ready:', editor)}
+                              className="min-h-[400px] border rounded-lg"
+                            />
+                            <div className="flex gap-2">
+                              <Button onClick={() => setIsEditingSummary(false)}>
+                                Save Changes
+                              </Button>
+                              <Button variant="outline" onClick={() => setIsEditingSummary(false)}>
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div
+                            className="prose prose-lg max-w-none"
+                            dangerouslySetInnerHTML={{ __html: getSummaryContent() }}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </TabsContent>
 
               <TabsContent value="project" className="h-full mt-4">
-                <Card className="h-full">
-                  <CardHeader>
-                    <CardTitle>Project: Aurora Analytics</CardTitle>
-                    <CardDescription>Documents organized under the "Aurora Analytics" initiative</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="p-3 border rounded-lg">Roadmap Q4</div>
-                    <div className="p-3 border rounded-lg">Market Research Notes</div>
-                    <div className="p-3 border rounded-lg">Release Plan v1.2</div>
-                  </CardContent>
-                </Card>
+                <div className="h-full flex flex-col">
+                  {/* Project Header */}
+                  <Card className="mb-4">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <FileText className="w-5 h-5" />
+                        Project: Aurora Analytics
+                      </CardTitle>
+                      <CardDescription>All documents and resources for the Aurora Analytics initiative</CardDescription>
+                    </CardHeader>
+                  </Card>
+
+                  {/* Documents List */}
+                  <Card className="flex-1 overflow-hidden">
+                    <CardHeader>
+                      <CardTitle className="text-lg">Documents</CardTitle>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm">
+                          <Plus className="w-4 h-4 mr-2" />
+                          New Document
+                        </Button>
+                        <Button variant="outline" size="sm">
+                          <FolderOpen className="w-4 h-4 mr-2" />
+                          Import
+                        </Button>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex-1 overflow-auto space-y-3">
+                      {/* Current Document */}
+                      <div className="p-4 border-2 border-blue-200 bg-blue-50 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-semibold text-blue-900">Strategic Roadmap Q4 2024</h4>
+                            <p className="text-sm text-blue-700">Currently editing • Last saved 2 mins ago</p>
+                          </div>
+                          <div className="flex gap-2">
+                            <SimpleShare
+                              documentTitle="Strategic Roadmap Q4 2024"
+                              documentId="current-doc-123"
+                            />
+                            <Button variant="ghost" size="sm" title="Export document">
+                              <Download className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Other Documents */}
+                      <div className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-medium">Market Research Notes</h4>
+                            <p className="text-sm text-gray-600">Updated 3 days ago</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-medium">Release Plan v1.2</h4>
+                            <p className="text-sm text-gray-600">Updated 1 week ago</p>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="history" className="h-full mt-4">
+                <VersionHistory
+                  currentContent={documentContent}
+                  onRestoreVersion={setDocumentContent}
+                  onPreviewVersion={(content) => {
+                    // Could implement preview functionality
+                    console.log("Preview version:", content.slice(0, 100) + "...");
+                  }}
+                />
+              </TabsContent>
+
+              <TabsContent value="share" className="h-full mt-4">
+                <ShareSettings
+                  documentTitle="Product Strategy 2024"
+                  documentContent={documentContent}
+                />
               </TabsContent>
             </Tabs>
           </div>
@@ -270,6 +478,22 @@ export default function DocumentEditor() {
             />
           </div>
         </div>
+
+        {/* Fixed AI Chat Icon - Bottom Right (hidden when chat is open) */}
+        {!chatOpen && (
+          <Button
+            onClick={handleAIGenerate}
+            disabled={isAIGenerating}
+            className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full shadow-lg transition-all duration-200 bg-purple-500 hover:bg-purple-600 text-white"
+            title="AI Assistant"
+          >
+            {isAIGenerating ? (
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
+            ) : (
+              <MessageCircle className="w-6 h-6" />
+            )}
+          </Button>
+        )}
       </div>
     </div>
   );
