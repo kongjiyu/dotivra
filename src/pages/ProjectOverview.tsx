@@ -53,7 +53,7 @@ const ProjectOverview: React.FC = () => {
   const handleBackToDashboard = () => {
     console.log('Navigating back to dashboard');
     // 🎯 NAVIGATION: Go back to dashboard
-    navigate('/');
+    navigate('/dashboard');
   };
 
   const handleAddDocument = (category: 'user' | 'developer') => {
@@ -103,7 +103,7 @@ const ProjectOverview: React.FC = () => {
       <div className="max-w-7xl mx-auto px-6 py-8">
         {/* User Documentation Section */}
         <DocumentSection
-          title="For Users"
+          title="Users"
           category="user"
           documents={userDocs}
           onAddDocument={handleAddDocument}
@@ -113,7 +113,7 @@ const ProjectOverview: React.FC = () => {
 
         {/* Developer Documentation Section */}
         <DocumentSection
-          title="For Developers"
+          title="Developers"
           category="developer"
           documents={devDocs}
           onAddDocument={handleAddDocument}
