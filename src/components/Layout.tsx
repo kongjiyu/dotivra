@@ -22,7 +22,8 @@ import {
   Brain, 
   Settings, 
   User,
-  Plus
+  Plus,
+  Github
 } from 'lucide-react';
 
 interface LayoutProps {
@@ -37,6 +38,7 @@ const Layout = ({ children }: LayoutProps) => {
     { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { name: 'Document Editor', href: '/editor', icon: FileText },
     { name: 'AI Generator', href: '/ai-generator', icon: Brain },
+    { name: 'GitHub Connect', href: '/github-connect', icon: Github },
   ];
 
   const isActive = (href: string) => {

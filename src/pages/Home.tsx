@@ -22,6 +22,7 @@ import {
 
 
   Edit3,
+  Github,
 
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -180,7 +181,7 @@ const Home = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
             <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer group">
               <CardHeader>
                 <div className="w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-100 transition-colors">
@@ -235,6 +236,26 @@ const Home = () => {
                 <Link to="/ai-generator">
                   <Button className="w-full group-hover:bg-purple-600 transition-colors">
                     Generate Content
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-xl transition-all duration-300 cursor-pointer group">
+              <CardHeader>
+                <div className="w-12 h-12 bg-gray-50 rounded-lg flex items-center justify-center mb-4 group-hover:bg-gray-100 transition-colors">
+                  <Github className="w-6 h-6 text-gray-600" />
+                </div>
+                <CardTitle>GitHub Connect</CardTitle>
+                <CardDescription>
+                  Connect your GitHub repositories to fetch files and generate documentation with AI
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link to="/github-connect">
+                  <Button className="w-full group-hover:bg-gray-600 transition-colors">
+                    Connect GitHub
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 </Link>
