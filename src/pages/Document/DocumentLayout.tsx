@@ -94,7 +94,7 @@ export default function DocumentLayout({
                         <div className="flex items-center gap-3">
                             {/* Home button */}
                             <Button asChild variant="ghost" size="icon" className="h-12 w-12">
-                                <Link to="/">
+                                <Link to="/dashboard">
                                     <Home className="w-6 h-6" />
                                 </Link>
                             </Button>
