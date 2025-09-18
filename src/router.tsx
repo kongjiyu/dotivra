@@ -1,3 +1,5 @@
+export { default } from "@/routes";
+
 // src/router.tsx - Updated router with project navigation
 import { createBrowserRouter } from "react-router-dom";
 import Dashboard from "./pages/Dashboard";
