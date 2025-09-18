@@ -35,7 +35,7 @@ const Login: React.FC = () => {
               AI-Powered Documentation Made Simple
             </h2>
             <p className="text-blue-100 text-lg leading-relaxed">
-              Create, manage, and enhance your developer documentation with the power of artificial intelligence. 
+              Create, manage, and enhance your developer documentation with the power of artificial intelligence.
               Collaborate seamlessly and build better docs faster.
             </p>
           </div>
@@ -51,7 +51,7 @@ const Login: React.FC = () => {
                 <p className="text-blue-100 text-sm">Get intelligent suggestions and generate documentation content with AI</p>
               </div>
             </div>
-            
+
             <div className="flex items-start space-x-4">
               <div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md">
                 <Users className="h-5 w-5 text-white" strokeWidth={1.6} />
@@ -61,7 +61,7 @@ const Login: React.FC = () => {
                 <p className="text-blue-100 text-sm">Work together on documentation projects with real-time collaboration</p>
               </div>
             </div>
-            
+
             <div className="flex items-start space-x-4">
               <div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md">
                 <Shield className="h-5 w-5 text-white" strokeWidth={1.6} />
