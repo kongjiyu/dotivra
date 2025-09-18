@@ -28,6 +28,10 @@ const router = createBrowserRouter([
         element: <AIGenerator />,
       },
 
+      {
+        path: "/github-connect",
+        element: <GithubConnect />,
+      },
     
   ]);
 
