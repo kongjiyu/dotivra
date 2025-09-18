@@ -183,6 +183,26 @@ button:focus-visible {
 }
 
 /* --- TipTap Editor Content styling inside Document Editor --- */
+/* ADD (example styles; tweak to your theme) */
+.pm-search-hit {
+  background: #fff59d; /* yellow-ish */
+  border-radius: 2px;
+}
+.pm-search-current {
+  background: #ffcc80; /* orange-ish */
+  outline: 1px solid #fb8c00;
+  border-radius: 2px;
+}
+.pm-search-hover {
+  position: relative;
+  animation: pm-search-pulse 1.2s ease-out 1;
+}
+
+@keyframes pm-search-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(251, 140, 0, 0.6); }
+  60%  { box-shadow: 0 0 0 8px rgba(251, 140, 0, 0.0); }
+  100% { box-shadow: 0 0 0 0 rgba(251, 140, 0, 0.0); }
+}
 
 /* Tables: add subtle borders and spacing */
 .document-context .ProseMirror table {

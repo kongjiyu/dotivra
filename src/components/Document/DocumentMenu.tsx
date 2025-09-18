@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import html2pdf from '@digivorefr/html2pdf.js';
 import { marked } from 'marked';
@@ -12,7 +12,7 @@ import {
 	Undo2,
 	Redo2,
 	Printer,
-	Search,
+	Search as SearchIcon,
 	Upload,
 	FileText,
 	X,
@@ -24,11 +24,16 @@ import {
 	ChevronDown
 } from "lucide-react";
 
+// NEW: ProseMirror bits for decorations
+import { Plugin, PluginKey, TextSelection } from "prosemirror-state";
+import { Decoration, DecorationSet } from "prosemirror-view";
+import type { Editor } from "@tiptap/react";
+
 interface DocumentMenuProps {
 	onUpdate?: (content: string) => void;
 	onSaveAsTemplate?: () => void;
 	documentTitle?: string;
-	editor?: any; // TipTap editor instance
+	editor?: Editor; // TipTap editor instance
 	documentContent?: string; // Current document content for PDF export
 	context?: 'main' | 'project'; // To distinguish between main menu and project tab imports
 }
@@ -51,6 +56,65 @@ export default function DocumentMenu({
 	const [currentMatch, setCurrentMatch] = useState<number>(0);
 	const [searchResults, setSearchResults] = useState<Array<{ from: number, to: number }>>([]);
 	const [replaceText, setReplaceText] = useState<string>("");
+
+	// === NEW: Decoration plugin wiring ===
+	const searchPluginKeyRef = useRef(new PluginKey("search-highlights"));
+	const searchPluginRef = useRef<any>(null);
+
+	function buildSearchDecorations(doc: any, matches: Array<{ from: number; to: number }>, currentIndex: number) {
+		const decos: any[] = [];
+		matches.forEach((m, i) => {
+			const cls = i === currentIndex ? "pm-search-current" : "pm-search-hit";
+			decos.push(Decoration.inline(m.from, m.to, { class: cls }));
+		});
+		return DecorationSet.create(doc, decos);
+	}
+
+	function updateHighlights(matches: Array<{ from: number; to: number }>, currentIndex: number) {
+		if (!editor || !searchPluginRef.current) return;
+		const key = searchPluginKeyRef.current;
+		const tr = editor.state.tr.setMeta(key, { type: "SET_MATCHES", matches, currentIndex });
+		editor.view.dispatch(tr);
+	}
+
+	useEffect(() => {
+		if (!editor || searchPluginRef.current) return;
+
+		const key = searchPluginKeyRef.current;
+
+		searchPluginRef.current = new Plugin({
+			key,
+			state: {
+				init: (_config, state) => DecorationSet.empty,
+				apply(tr, oldDecos, _oldState, newState) {
+					const meta = tr.getMeta(key);
+					if (meta && meta.type === "SET_MATCHES") {
+						const { matches, currentIndex } = meta;
+						return buildSearchDecorations(newState.doc, matches, currentIndex);
+					}
+					if (tr.docChanged) return oldDecos.map(tr.mapping, tr.doc);
+					return oldDecos;
+				},
+			},
+			props: {
+				decorations(state) {
+					// @ts-ignore
+					return this.getState(state);
+				},
+			},
+		});
+
+		// Tiptap exposes registerPlugin/unregisterPlugin
+		editor.registerPlugin(searchPluginRef.current);
+
+		return () => {
+			if (editor && searchPluginRef.current) {
+				editor.unregisterPlugin(searchPluginKeyRef.current);
+				searchPluginRef.current = null;
+			}
+		};
+	}, [editor]);
+	// === END plugin wiring ===
 
 	// Document menu handlers
 	const handleUndo = () => {
@@ -165,7 +229,6 @@ export default function DocumentMenu({
 		}
 	};
 
-
 	const handleExportToPDF = async () => {
 		// Get content from props first, then fallback to editor
 		let contentToExport = documentContent;
@@ -177,7 +240,7 @@ export default function DocumentMenu({
 		}
 
 		try {
-			// Create element with content and styling for OKLCH-compatible PDF generation
+			// Create element with content and styling
 			const element = document.createElement('div');
 			const style = document.createElement("style");
 			element.innerHTML = contentToExport;
@@ -192,19 +255,13 @@ export default function DocumentMenu({
         background-color: white;
       `;
 			style.textContent = `
-      /* Hard page break: insert <div class="page-break"></div> */
       .page-break { page-break-before: always; break-before: page; }
-
-      /* Try to keep these blocks intact on one page */
       .avoid-break { page-break-inside: avoid; break-inside: avoid; }
-
       h1, h2, h3, table, pre, blockquote { page-break-inside: avoid; break-inside: avoid; }
       tr, img, figure { page-break-inside: avoid; break-inside: avoid; max-width: 100%; }
-
       table { border-collapse: collapse; width: 100%; }
       th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
       th { background: #f5f5f5; font-weight: 600; }
-
       h1 { font-size: 28px; font-weight: 700; margin: 24px 0 12px; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
       h2 { font-size: 24px; font-weight: 700; margin: 20px 0 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
       h3 { font-size: 20px; font-weight: 700; margin: 18px 0 9px; }
@@ -214,15 +271,10 @@ export default function DocumentMenu({
     `;
 			element.prepend(style);
 
-			// 4) Optionally tag common blocks to avoid breaks (best-effort)
 			element.querySelectorAll("h1,h2,h3,table,ul,ol,pre,blockquote").forEach((el) => {
 				el.classList.add("avoid-break");
 			});
 
-			// Apply basic styling to elements
-
-
-			// Configure html2pdf options with OKLCH support
 			const options = {
 				margin: 1,
 				filename: 'document.pdf',
@@ -233,7 +285,6 @@ export default function DocumentMenu({
 					allowTaint: true,
 					backgroundColor: '#ffffff',
 					logging: false,
-					// @digivorefr/html2pdf.js handles OKLCH colors automatically
 				},
 				jsPDF: {
 					unit: 'in',
@@ -241,26 +292,22 @@ export default function DocumentMenu({
 					orientation: 'portrait'
 				},
 				pagebreak: {
-					mode: ["css", "legacy"], // respect CSS break rules + legacy algorithm
-					before: ".page-break", // manual hard breaks
-					avoid:
-						"h1, h2, h3, table, pre, blockquote, .avoid-break, tr, img, figure",
+					mode: ["css", "legacy"],
+					before: ".page-break",
+					avoid: "h1, h2, h3, table, pre, blockquote, .avoid-break, tr, img, figure",
 				}
 			};
 
-			// Generate PDF with native OKLCH support
 			await html2pdf().set(options).from(element).save();
 
 		} catch (error) {
 			console.error('Error generating PDF:', error);
-			// Silently fail without showing alert
 		}
 	};
 
 	const toggleSearch = () => {
 		setShowSearch(!showSearch);
 		if (showSearch) {
-			// If we're closing the search, clear it
 			clearSearch();
 		}
 	};
@@ -270,11 +317,10 @@ export default function DocumentMenu({
 		setSearchMatches(0);
 		setCurrentMatch(0);
 		setSearchResults([]);
-		// Don't close the search bar here, let toggleSearch handle that
 		if (editor) {
-			// Clear any existing selections/highlights and remove search highlights
 			editor.commands.setTextSelection(0);
-			editor.commands.unsetHighlight();
+			// NEW: clear decorations instead of unsetHighlight()
+			updateHighlights([], -1);
 		}
 	};
 
@@ -288,6 +334,7 @@ export default function DocumentMenu({
 			setSearchResults([]);
 			setSearchMatches(0);
 			setCurrentMatch(0);
+			updateHighlights([], -1);
 			return [];
 		}
 
@@ -295,37 +342,40 @@ export default function DocumentMenu({
 		const results: Array<{ from: number, to: number }> = [];
 		const normalizedQuery = query.toLowerCase();
 
-		//FIXME
-		// Search through the document text
+		// Double-loop search within each text node (case-insensitive), supports multi-char & overlaps
 		doc.descendants((node: any, pos: number) => {
 			if (node.isText && node.text) {
-				const text = node.text.toLowerCase();
-				let startIndex = 0;
-				let index = text.indexOf(normalizedQuery, startIndex);
+				const lowerText = node.text.toLowerCase();
+				const q = normalizedQuery;
+				const qLen = q.length;
+				if (qLen === 0) return true;
 
-				while (index !== -1) {
-					results.push({
-						from: pos + index,
-						to: pos + index + query.length
-					});
-					startIndex = index + 1;
-					index = text.indexOf(normalizedQuery, startIndex);
+				for (let i = 0; i + qLen <= lowerText.length; i++) {
+					let ok = true;
+					for (let j = 0; j < qLen; j++) {
+						if (lowerText.charCodeAt(i + j) !== q.charCodeAt(j)) {
+							ok = false;
+							break;
+						}
+					}
+					if (ok) {
+						results.push({
+							from: pos + i,
+							to: pos + i + qLen,
+						});
+					}
 				}
 			}
 			return true;
 		});
-		console.log(results); //FIXME: log search results
+
 		setSearchResults(results);
 		setSearchMatches(results.length);
 		setCurrentMatch(results.length > 0 ? 1 : 0);
 
-		// Apply yellow highlights to all matches
-		if (results.length > 0) {
-			results.forEach(result => {
-				editor.commands.setTextSelection({ from: result.from, to: result.to });
-				editor.commands.setHighlight({ color: '#ffeb3b' });
-			});
-		}
+		// NEW: Paint via decorations (no marks, no node splitting)
+		const currentIndex = results.length > 0 ? 0 : -1;
+		updateHighlights(results, currentIndex);
 
 		return results;
 	};
@@ -335,26 +385,31 @@ export default function DocumentMenu({
 			return;
 		}
 
+		// NEW: repaint decorations with a special class for the current item
+		updateHighlights(results, currentIndex);
+
+		// Scroll the selection into view (optional: also set selection)
 		const match = results[currentIndex];
-
-		// First, reset all highlights to yellow
-		results.forEach(result => {
-			editor.commands.setTextSelection({ from: result.from, to: result.to });
-			editor.commands.setHighlight({ color: '#ffeb3b' });
-		});
-
-		// Then highlight the current match with orange
-		editor.commands.setTextSelection({ from: match.from, to: match.to });
-		editor.commands.setHighlight({ color: '#ff9800' });
-
-		// Scroll the selection into view
 		const { view } = editor;
-		const { from } = match;
-		const coords = view.coordsAtPos(from);
-		if (coords) {
-			const element = view.dom;
-			element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+		try {
+			view.dispatch(editor.state.tr.setSelection(TextSelection.create(editor.state.doc, match.from, match.to)));
+		} catch {
+			// ignore selection errors
 		}
+		try {
+			const coords = view.coordsAtPos(match.from);
+			if (coords) {
+				const el = view.dom.querySelector('.pm-search-current') as HTMLElement | null;
+				if (el) {
+					// Smooth center scroll (fallback in case scrollIntoView on tr isn't enough)
+					el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+
+					// Add a temporary pulse/hover effect
+					el.classList.add('pm-search-hover');
+					window.setTimeout(() => el.classList.remove('pm-search-hover'), 1200);
+				}
+			}
+		} catch { /* ignore */ }
 	};
 
 	const navigateMatch = (direction: 'next' | 'prev') => {
@@ -387,10 +442,9 @@ export default function DocumentMenu({
 			setTimeout(() => {
 				const newResults = findAllMatches(newQuery);
 				if (newResults.length > 0) {
-					// Try to maintain position, or go to previous if we're at the end
-					const newIndex = Math.min(currentIndex, newResults.length - 1);
-					setCurrentMatch(newIndex + 1);
-					highlightCurrentMatch(newResults, newIndex);
+					const newIdx = Math.min(currentIndex, newResults.length - 1);
+					setCurrentMatch(newIdx + 1);
+					highlightCurrentMatch(newResults, newIdx);
 				} else {
 					clearSearch();
 				}
@@ -422,11 +476,9 @@ export default function DocumentMenu({
 
 	const handleSearch = (query: string) => {
 		setSearchQuery(query);
-		console.log("Search For: " + query);
 
 		if (query.trim()) {
 			const results = findAllMatches(query);
-			console.log(`Found ${results.length} matches`);
 			if (results.length > 0) {
 				highlightCurrentMatch(results, 0);
 			}
@@ -468,7 +520,6 @@ export default function DocumentMenu({
 
 					if (onUpdate) {
 						onUpdate(htmlContent);
-						// You could also update the document title here if there's a callback for that
 						console.log(`Document "${documentName}" imported successfully`);
 					}
 				}
@@ -479,7 +530,6 @@ export default function DocumentMenu({
 		};
 		reader.readAsText(file);
 		setShowImportOptions(false);
-		// Reset the input value to allow importing the same file again
 		event.target.value = '';
 	};
 
@@ -489,7 +539,6 @@ export default function DocumentMenu({
 			return;
 		}
 
-		// Get the actual document content from props, editor, or fallback
 		let contentToExport = documentContent;
 		if (!contentToExport && editor) {
 			contentToExport = editor.getHTML();
@@ -499,13 +548,12 @@ export default function DocumentMenu({
 			return;
 		}
 
-		// Convert HTML to Markdown for .md export
 		const convertToMarkdown = (html: string): string => {
 			const tempDiv = document.createElement('div');
 			tempDiv.innerHTML = html;
 
 			// Basic HTML to Markdown conversion
-			let markdown = html
+			const markdown = html
 				.replace(/<h1[^>]*>(.*?)<\/h1>/gi, '# $1\n\n')
 				.replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n')
 				.replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n')
@@ -523,8 +571,8 @@ export default function DocumentMenu({
 				.replace(/<li[^>]*>(.*?)<\/li>/gi, '- $1\n')
 				.replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
 				.replace(/<br[^>]*>/gi, '\n')
-				.replace(/<[^>]*>/g, '') // Remove any remaining HTML tags
-				.replace(/\n{3,}/g, '\n\n') // Replace multiple newlines with double newlines
+				.replace(/<[^>]*>/g, '')
+				.replace(/\n{3,}/g, '\n\n')
 				.trim();
 
 			return markdown;
@@ -553,12 +601,9 @@ export default function DocumentMenu({
 	};
 
 	const handleCopyDocument = () => {
-		// Copy document content to clipboard
 		navigator.clipboard.writeText("Document content copied");
 		console.log("Document copied to clipboard");
 	};
-
-
 
 	return (
 		<div className="bg-white border-b border-gray-200">
@@ -598,18 +643,16 @@ export default function DocumentMenu({
 							<Button
 								variant="ghost"
 								size="sm"
-								onClick={toggleSearch}
+								onClick={() => setShowSearch((s) => !s)}
 								className={`h-7 w-7 p-0 hover:bg-white hover:shadow-sm ${showSearch ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600'}`}
 								title="Search"
 							>
-								<Search className="w-4 h-4" />
+								<SearchIcon className="w-4 h-4" />
 							</Button>
 						</div>
 
 						{/* File Operations */}
 						<div className="flex items-center space-x-1 ml-2">
-
-
 							<Popover open={showImportOptions} onOpenChange={setShowImportOptions}>
 								<PopoverTrigger asChild>
 									<Button
@@ -723,15 +766,41 @@ export default function DocumentMenu({
 				<div className="border-t border-gray-200 bg-gray-50 px-6 py-2">
 					<div className="flex items-center space-x-2 max-w-4xl">
 						<div className="relative flex-1">
-							<Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+							<SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
 							<Input
 								type="text"
 								placeholder="Search in document..."
 								value={searchQuery}
 								onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleSearch(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === 'Enter') {
+										e.preventDefault();
+										// If no results yet, run search first, then focus the first hit
+										if (!searchResults.length) {
+											const results = findAllMatches(searchQuery);
+											if (results.length) {
+												// Shift+Enter = previous, Enter = next from the first
+												if (e.shiftKey) {
+													highlightCurrentMatch(results, results.length - 1);
+												} else {
+													highlightCurrentMatch(results, 0); // first
+													navigateMatch('next');             // immediately move to next for Enter
+												}
+											}
+										} else {
+											// We already have results: navigate prev/next
+											if (e.shiftKey) {
+												navigateMatch('prev');
+											} else {
+												navigateMatch('next');
+											}
+										}
+									}
+								}}
 								className="pl-10 pr-10 h-7 text-sm bg-white"
 								autoFocus
 							/>
+
 							{searchQuery && (
 								<Button
 									variant="ghost"
@@ -751,8 +820,16 @@ export default function DocumentMenu({
 								placeholder="Replace with..."
 								value={replaceText}
 								onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReplaceText(e.target.value)}
+								onKeyDown={(e) => {
+									if (e.key === 'Enter') {
+										e.preventDefault();
+										// This already replaces current and advances to the next match
+										handleReplaceOne();
+									}
+								}}
 								className="h-7 text-sm bg-white w-48"
 							/>
+
 							<Button
 								variant="outline"
 								size="sm"
