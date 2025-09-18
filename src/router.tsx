@@ -5,7 +5,8 @@ import ProjectView from "./pages/ProjectOverview";
 import DocumentEditor from "./pages/DocumentEditor";
 import AIGenerator from "./pages/AIGenerator";
 import Login from "./pages/Login";  
-
+import Profile from "./pages/Profile";
+import Projects from "./pages/Projects"; // NEW: All projects page
 
 const router = createBrowserRouter([
   {
@@ -28,6 +29,14 @@ const router = createBrowserRouter([
     path: "/ai-generator",
     element: <AIGenerator />,
   },
+  {
+    path: "/profile",
+    element: <Profile />,
+  },
+  {
+    path: "/projects", // NEW: All projects page
+    element: <Projects />,
+  }
 ]);
 
 export default router;

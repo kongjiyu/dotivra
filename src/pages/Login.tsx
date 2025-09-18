@@ -1,7 +1,7 @@
 // src/components/auth/AuthPage.tsx - Static design only
 import React, { useState } from 'react';
 import { BookOpen, Zap, Users, Shield } from 'lucide-react';
-import LoginForm from '../components/auth/loginForm';
+import LoginForm from '../components/auth/LoginForm';
 import RegisterForm from '../components/auth/RegisterForm';
 
 const Login: React.FC = () => {
