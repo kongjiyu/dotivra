@@ -66,9 +66,9 @@ export const getTipTapExtensions = () => [
 ];
 
 // Editor Props Configuration
-export const getTipTapEditorProps = () => ({
+export const getTipTapEditorProps = (extraClasses: string = '') => ({
     attributes: {
-        class: 'prose prose-lg max-w-none focus:outline-none',
+        class: `document-content prose prose-lg max-w-none focus:outline-none ${extraClasses}`.trim(),
         spellcheck: 'true',
     },
 });
@@ -79,6 +79,7 @@ export const createTipTapConfig = (options: {
     editable?: boolean;
     onCreate?: () => void;
     onUpdate?: (editor: any) => void;
+    extraClasses?: string; // allow callers to add more utility classes
 }) => ({
     extensions: getTipTapExtensions(),
     content: options.content || "<p>Start writing your document...</p>",
@@ -91,7 +92,7 @@ export const createTipTapConfig = (options: {
     onCreate: options.onCreate,
     onUpdate: options.onUpdate,
     // Editor props for better UX
-    editorProps: getTipTapEditorProps(),
+    editorProps: getTipTapEditorProps(options.extraClasses),
 });
 
 // Legacy support - keeping the original editor creation for backwards compatibility
