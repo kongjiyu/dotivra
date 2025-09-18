@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { CircleUser, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TemplateGrid from '../components/dashboard/TemplateGrid';
-import ProjectGrid from '../components/dashboard/ProjectGrid';
+import ProjectGrid from '../components/dashboard/ProjectList';
 import type { Template, Project } from '../types';
 
 const Dashboard: React.FC = () => {
@@ -32,6 +32,12 @@ const Dashboard: React.FC = () => {
     // TODO: Show create project modal or form
   };
 
+  const handleViewAllProjects = () => {
+    console.log('View all projects clicked');
+    // Navigate to a dedicated projects page
+    navigate('/projects');
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -47,6 +53,7 @@ const Dashboard: React.FC = () => {
             </div>
             <button
               type="button"
+              onClick={() => navigate('/profile')}
               aria-label="Open profile"
               className="p-2 text-gray-500 rounded-full hover:text-gray-900 hover:bg-gray-100 transition-colors"
             >
@@ -68,6 +75,7 @@ const Dashboard: React.FC = () => {
         <ProjectGrid 
           onProjectClick={handleProjectClick}
           onNewProject={handleNewProject}
+          onViewAllProjects={handleViewAllProjects}
         />
       </div>
 

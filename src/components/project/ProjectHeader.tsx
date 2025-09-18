@@ -1,6 +1,6 @@
 // src/components/project/ProjectHeader.tsx
 import React from 'react';
-import { ArrowLeft, ExternalLink, FolderOpen } from 'lucide-react';
+import { ExternalLink, FolderOpen } from 'lucide-react';
 import type { Project } from '../../types';
 
 interface ProjectHeaderProps {
@@ -8,57 +8,38 @@ interface ProjectHeaderProps {
   onBackToDashboard: () => void;
 }
 
-const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, onBackToDashboard }) => {
+const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, onBackToDashboard: _onBackToDashboard }) => {
+  const totalDocuments = project.userDocsCount + project.devDocsCount;
+
   return (
     <div className="bg-white border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-6 py-6">
-        {/* Back Button */}
-        <button
-          onClick={onBackToDashboard}
-          className="flex items-center text-gray-500 hover:text-gray-700 transition-colors mb-4"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          <span className="text-sm">Back to Dashboard</span>
-        </button>
-
-        {/* Project Info */}
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-4">
-            <div className="flex-shrink-0 w-12 h-12 bg-blue-50 rounded-lg flex items-center justify-center">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-blue-50">
               <FolderOpen className="h-6 w-6 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {project.name}
-              </h1>
-              <p className="mt-2 text-gray-600 text-base leading-relaxed max-w-3xl">
-                {project.description}
-              </p>
-              
-              {/* GitHub Link */}
+              <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+              <p className="mt-2 max-w-3xl text-base leading-relaxed text-gray-600">{project.description}</p>
               <div className="mt-3">
                 <a
                   href={project.githubLink}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center text-blue-600 hover:text-blue-800 transition-colors"
+                  className="inline-flex items-center text-sm font-medium text-blue-600 transition-colors hover:text-blue-800"
                 >
-                  <ExternalLink className="h-4 w-4 mr-2" />
-                  <span className="text-sm font-medium">{project.githubLink}</span>
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  <span className="truncate">{project.githubLink}</span>
                 </a>
               </div>
             </div>
           </div>
 
-          {/* Project Stats */}
           <div className="text-left lg:text-right">
-            <div className="text-sm text-gray-500 mb-1">Total Documents</div>
-            <div className="text-2xl font-bold text-gray-900">
-              {project.userDocsCount + project.devDocsCount}
-            </div>
-            <div className="text-xs text-gray-500 mt-1">
-              Last updated {project.lastModified}
-            </div>
+            <div className="mb-1 text-sm text-gray-500">Total Documents</div>
+            <div className="text-2xl font-bold text-gray-900">{totalDocuments}</div>
+            <div className="mt-1 text-xs text-gray-500">Last updated {project.lastModified}</div>
           </div>
         </div>
       </div>
