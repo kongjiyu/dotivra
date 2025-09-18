@@ -26,6 +26,7 @@ const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
                             editor={editor}
                             className="prose prose-lg max-w-none focus:outline-none"
                             style={{ minHeight: '400px' }}
+                            data-testid="editor-content"
                         />
                         {/* Custom content overlay/children */}
                         {children && (
