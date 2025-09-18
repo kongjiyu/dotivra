@@ -117,33 +117,28 @@ export default function DocumentMenu({
 
             body {
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-			font-size: 20px;
-			line-height: 1.6;
-			color: #333;
-			max-width: 800px;
-			margin: 0 auto;
-			padding: 40px;
-			background-color: white;
+              font-size: 14px;
+              line-height: 1.6;
+              color: #333;
+              max-width: 800px;
+              margin: 0 auto;
+              padding: 40px;
+              background-color: white;
             }
-           /* Hard page break: insert <div class="page-break"></div> */
-      .page-break { page-break-before: always; break-before: page; }
 
-      /* Try to keep these blocks intact on one page */
-      .avoid-break { page-break-inside: avoid; break-inside: avoid; }
+            h1, h2, h3, table, pre, blockquote { page-break-inside: avoid; break-inside: avoid; }
+            tr, img, figure { page-break-inside: avoid; break-inside: avoid; max-width: 100%; }
 
-      h1, h2, h3, table, pre, blockquote { page-break-inside: avoid; break-inside: avoid; }
-      tr, img, figure { page-break-inside: avoid; break-inside: avoid; max-width: 100%; }
+            table { border-collapse: collapse; width: 100%; }
+            th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+            th { background: #f5f5f5; font-weight: 600; }
 
-      table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-      th { background: #f5f5f5; font-weight: 600; }
-
-      h1 { font-size: 28px; font-weight: 700; margin: 24px 0 12px; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
-      h2 { font-size: 24px; font-weight: 700; margin: 20px 0 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
-      h3 { font-size: 20px; font-weight: 700; margin: 18px 0 9px; }
-      p  { margin: 8px 0; text-align: justify; }
-      ul, ol { margin: 8px 0; padding-left: 24px; }
-      li { margin: 4px 0; }
+            h1 { font-size: 28px; font-weight: 700; margin: 24px 0 12px; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
+            h2 { font-size: 24px; font-weight: 700; margin: 20px 0 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
+            h3 { font-size: 20px; font-weight: 700; margin: 18px 0 9px; }
+            p  { margin: 8px 0; text-align: justify; }
+            ul, ol { margin: 8px 0; padding-left: 24px; }
+            li { margin: 4px 0; }
           }
         </style>
       </head>
@@ -169,6 +164,7 @@ export default function DocumentMenu({
 			window.print();
 		}
 	};
+
 
 	const handleExportToPDF = async () => {
 		// Get content from props first, then fallback to editor
@@ -299,6 +295,7 @@ export default function DocumentMenu({
 		const results: Array<{ from: number, to: number }> = [];
 		const normalizedQuery = query.toLowerCase();
 
+		//FIXME
 		// Search through the document text
 		doc.descendants((node: any, pos: number) => {
 			if (node.isText && node.text) {
@@ -317,7 +314,7 @@ export default function DocumentMenu({
 			}
 			return true;
 		});
-
+		console.log(results); //FIXME: log search results
 		setSearchResults(results);
 		setSearchMatches(results.length);
 		setCurrentMatch(results.length > 0 ? 1 : 0);
@@ -425,9 +422,11 @@ export default function DocumentMenu({
 
 	const handleSearch = (query: string) => {
 		setSearchQuery(query);
+		console.log("Search For: " + query);
 
 		if (query.trim()) {
 			const results = findAllMatches(query);
+			console.log(`Found ${results.length} matches`);
 			if (results.length > 0) {
 				highlightCurrentMatch(results, 0);
 			}

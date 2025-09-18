@@ -26,6 +26,7 @@ const Tiptap = ({
         createTipTapConfig({
             content: initialContent,
             editable,
+            extraClasses: 'break-words whitespace-pre-wrap',
             onCreate: () => {
                 setIsReady(true);
             },
@@ -37,6 +38,7 @@ const Tiptap = ({
         }),
         [initialContent, editable, onUpdate]
     );
+
 
     const editor = useEditor(editorConfig);
 
@@ -102,6 +104,7 @@ const Tiptap = ({
                 </div>
             </div>
         </EditorContext.Provider>
+
     );
 };
 
