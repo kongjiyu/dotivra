@@ -178,7 +178,10 @@ export default function DocumentMenu({
           @media print {
             .page-break { page-break-before: always; break-before: page; }
             .avoid-break { page-break-inside: avoid; break-inside: avoid; }
-
+			.pm-search-hit, .pm-search-current {
+				background: transparent !important;
+				outline: none !important;
+          	}
             body {
               font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
               font-size: 14px;
@@ -268,6 +271,7 @@ export default function DocumentMenu({
       p  { margin: 8px 0; text-align: justify; }
       ul, ol { margin: 8px 0; padding-left: 24px; }
       li { margin: 4px 0; }
+	  .pm-search-hit, .pm-search-current { background-color: transparent !important; outline: none !important; }
     `;
 			element.prepend(style);
 
@@ -605,6 +609,10 @@ export default function DocumentMenu({
 		console.log("Document copied to clipboard");
 	};
 
+	// Undo/Redo state
+	const canUndo = !!editor?.can().undo();
+	const canRedo = !!editor?.can().redo();
+
 	return (
 		<div className="bg-white border-b border-gray-200">
 			<div className="px-6 py-3">
@@ -616,7 +624,8 @@ export default function DocumentMenu({
 								variant="ghost"
 								size="sm"
 								onClick={handleUndo}
-								className="h-7 w-7 p-0 text-gray-600 hover:bg-white hover:shadow-sm"
+								disabled={!canUndo}
+								className="h-7 w-7 p-0 text-gray-600 disabled:opacity-40 hover:bg-white hover:shadow-sm"
 								title="Undo"
 							>
 								<Undo2 className="w-4 h-4" />
@@ -625,7 +634,8 @@ export default function DocumentMenu({
 								variant="ghost"
 								size="sm"
 								onClick={handleRedo}
-								className="h-7 w-7 p-0 text-gray-600 hover:bg-white hover:shadow-sm"
+								disabled={!canRedo}
+								className="h-7 w-7 p-0 text-gray-600 disabled:opacity-40 hover:bg-white hover:shadow-sm"
 								title="Redo"
 							>
 								<Redo2 className="w-4 h-4" />

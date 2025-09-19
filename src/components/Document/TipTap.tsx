@@ -1,7 +1,7 @@
 import { EditorContext, useEditor } from "@tiptap/react";
 import DocumentContext from "./DocumentContext";
 import ToolBar from "./ToolBar";
-import { useMemo, useCallback, useState, useEffect } from "react";
+import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { createTipTapConfig } from "../../config/tiptap-config";
 
 interface TiptapProps {
@@ -13,15 +13,17 @@ interface TiptapProps {
 }
 
 const Tiptap = ({
-    initialContent = "<p>Start writing your document...</p>",
+    initialContent,
     editable = true,
     onUpdate,
     onEditorReady,
     className = ""
 }: TiptapProps) => {
     const [isReady, setIsReady] = useState(false);
-
+    const initialAppliedRef = useRef(false); // NEW
+    console.log("Rendering Tiptap with initialContent:", initialContent);
     // Create editor configuration using the config file
+    //FIXME: adjust default content, prevent undo feature undo initial content set
     const editorConfig = useMemo(() =>
         createTipTapConfig({
             content: initialContent,
@@ -61,6 +63,29 @@ const Tiptap = ({
         if (editor && initialContent && editor.getHTML() !== initialContent) {
             editor.commands.setContent(initialContent);
         }
+        editor.view.dispatch(
+            editor.state.tr.setMeta('addToHistory', false)
+        );
+
+    }, [editor, initialContent]);
+
+    // Prevent first undo from reverting to empty document:
+    // Apply initialContent exactly once, suppress history + update.
+    useEffect(() => {
+        // Prevent first undo from reverting to empty document:
+        // Apply initialContent exactly once, suppress history + update.
+        if (!editor) return;
+        if (!initialContent) return;
+        if (initialAppliedRef.current) return;
+
+        if (editor.getHTML() !== initialContent) {
+            // false => do not emit update event, avoids extra history noise
+            editor.commands.setContent(initialContent, { emitUpdate: false });
+            // Ensure no history entry for this transaction
+            const tr = editor.state.tr.setMeta('addToHistoryty', false);
+            editor.view.dispatch(tr);
+        }
+        initialAppliedRef.current = true;
     }, [editor, initialContent]);
 
     // Call onEditorReady when editor is ready

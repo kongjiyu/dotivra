@@ -24,7 +24,7 @@ const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
                     <div className="p-[56px] sm:p-[64px]">
                         <EditorContent
                             editor={editor}
-                            className="prose prose-lg max-w-none focus:outline-none"
+                            className="tiptap prose prose-stale prose-lg max-w-none focus:outline-none text-base"
                             style={{ minHeight: '400px' }}
                             data-testid="editor-content"
                         />
