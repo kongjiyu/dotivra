@@ -3,17 +3,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     History,
-    Home,
     Cloud,
     MessageCircle,
     FileText,
     FolderOpen,
-    Dock
+    Dock,
+    Folder
 } from "lucide-react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import DocumentMenu from "@/components/Document/DocumentMenu";
-import ChatSidebar from "@/components/Document/ChatSidebar";
-import SimpleShare from "@/components/Document/SimpleShare";
+import { Link, useNavigate } from "react-router-dom";
+import DocumentMenu from "@/components/document/DocumentMenu";
+import ChatSidebar from "@/components/document/ChatSidebar";
+import SimpleShare from "@/components/document/SimpleShare";
 import { useDocument } from "@/context/DocumentContext";
 
 interface DocumentLayoutProps {
@@ -36,17 +36,6 @@ export default function DocumentLayout({
     const [chatOpen, setChatOpen] = useState(false);
     const [isAIGenerating, setIsAIGenerating] = useState(false);
     const navigate = useNavigate();
-    const location = useLocation();
-
-    // Determine active tab from current pathname
-    const getActiveTab = () => {
-        const path = location.pathname;
-        if (path.includes('/summary')) return 'summary';
-        if (path.includes('/project')) return 'project';
-        if (path.includes('/history')) return 'history';
-        if (path.includes('/share')) return 'share';
-        return 'editor';
-    };
 
     const handleTabChange = (tab: string) => {
         const basePath = '/document';
@@ -95,7 +84,7 @@ export default function DocumentLayout({
                             {/* Home button */}
                             <Button asChild variant="ghost" size="icon" className="h-12 w-12">
                                 <Link to="/dashboard">
-                                    <Home className="w-6 h-6" />
+                                    <FolderOpen className="h-9 w-9 text-blue-600" />
                                 </Link>
                             </Button>
 
@@ -155,7 +144,7 @@ export default function DocumentLayout({
                             className="text-gray-900"
                             onClick={() => handleTabChange("project")}
                         >
-                            <FolderOpen className="w-4 h-4 mr-2" />
+                            <Folder className="w-4 h-4 mr-2" />
                             Projects
                         </Button>
                         <div className="w-px h-5 bg-gray-300 mx-1 border-b"></div>

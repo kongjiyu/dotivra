@@ -1,28 +1,9 @@
 import DocumentLayout from "./DocumentLayout";
-import TipTap from "@/components/Document/TipTap";
+import TipTap from "@/components/document/TipTap";
 import { useDocument } from "@/context/DocumentContext";
 import { useRef, useEffect } from "react";
 
-export default function DocumentEditor() {
-    const {
-        documentContent,
-        setDocumentContent,
-        setCurrentEditor
-    } = useDocument();
-    const documentContentRef = useRef<HTMLDivElement>(null);
-
-    const handleDocumentUpdate = (content: string) => {
-        setDocumentContent(content);
-    };
-
-    const handleEditorReady = (editor: any) => {
-        setCurrentEditor(editor);
-    };
-
-    // Initialize with default content if empty
-    useEffect(() => {
-        if (!documentContent) {
-            const defaultContent = `<h1>Product Strategy 2024</h1>
+const DEFAULT_DOC = `<h1>Product Strategy 2024</h1>
 
 <h3>Executive Summary</h3>
 
@@ -125,15 +106,37 @@ export default function DocumentEditor() {
 <h2>Conclusion</h2>
 
 <p>This strategy provides a clear roadmap for achieving our 2024 objectives. Success depends on execution excellence, team collaboration, and customer-centric decision making.</p>`;
-            setDocumentContent(defaultContent);
+
+export default function DocumentEditor() {
+    const {
+        documentContent,
+        setDocumentContent,
+        setCurrentEditor
+    } = useDocument();
+    const documentContentRef = useRef<HTMLDivElement>(null);
+
+    const handleDocumentUpdate = (content: string) => {
+        setDocumentContent(content);
+    };
+
+    const handleEditorReady = (editor: any) => {
+        setCurrentEditor(editor);
+    };
+
+    // Initialize with default content if empty
+    useEffect(() => {
+        if (!documentContent) {
+            setDocumentContent(DEFAULT_DOC);
         }
     }, [documentContent, setDocumentContent]);
+
+    const effectiveContent = documentContent || DEFAULT_DOC;
 
     return (
         <DocumentLayout showDocumentMenu={true}>
             <div ref={documentContentRef} className="h-full">
                 <TipTap
-                    initialContent={documentContent}
+                    initialContent={effectiveContent}
                     onUpdate={handleDocumentUpdate}
                     onEditorReady={handleEditorReady}
                     className=""

@@ -15,6 +15,9 @@ import TableCell from "@tiptap/extension-table-cell";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import CharacterCount from "@tiptap/extension-character-count";
+import FontFamily from "@tiptap/extension-font-family"; // ADD THIS
+import FontSize from "@/types/fontSize"; // Adjusted import path
+import { cn } from "@/lib/utils";
 
 // TipTap Editor Configuration
 export const getTipTapExtensions = () => [
@@ -32,6 +35,12 @@ export const getTipTapExtensions = () => [
         types: ['textStyle'],
     }),
     TextStyle,
+    // ADD THESE TWO EXTENSIONS
+    FontFamily.configure({
+        types: ['textStyle'],
+    }),
+    FontSize,
+    // END NEW EXTENSIONS
     TextAlign.configure({
         types: ['heading', 'paragraph'],
     }),
@@ -41,12 +50,6 @@ export const getTipTapExtensions = () => [
         openOnClick: false,
         HTMLAttributes: {
             class: 'text-blue-600 underline cursor-pointer hover:text-blue-800',
-        },
-    }),
-    // Image extension
-    Image.configure({
-        HTMLAttributes: {
-            class: 'max-w-full h-auto rounded-lg',
         },
     }),
     // Table extensions
@@ -68,12 +71,13 @@ export const getTipTapExtensions = () => [
 // Editor Props Configuration
 export const getTipTapEditorProps = (extraClasses: string = '') => ({
     attributes: {
-        class: `document-content prose prose-lg max-w-none focus:outline-none ${extraClasses}`.trim(),
+        class: cn(`document-content prose prose-lg max-w-none [&_ol]:list-decimal [&_ul]:list-disc focus:outline-none`, extraClasses),
         spellcheck: 'true',
     },
 });
 
 // Complete Editor Configuration Factory
+//FIXME: adjust default content
 export const createTipTapConfig = (options: {
     content?: string;
     editable?: boolean;
@@ -82,7 +86,7 @@ export const createTipTapConfig = (options: {
     extraClasses?: string; // allow callers to add more utility classes
 }) => ({
     extensions: getTipTapExtensions(),
-    content: options.content || "<p>Start writing your document...</p>",
+    content: options.content || "<p>123 Start writing your document...</p>",
     editable: options.editable !== false,
     // Performance optimizations
     enableInputRules: true,

@@ -31,7 +31,6 @@ import {
     Code,
     MoreHorizontal,
     ChevronDown,
-    Image,
     Table,
     Link,
     CheckSquare,
@@ -43,14 +42,55 @@ const FONT_FAMILIES = [
     "Inter", "Arial", "Georgia", "Roboto", "Courier New", "Times New Roman", "Verdana", "Tahoma", "Monospace",
 ];
 
-
-const FONT_SIZES = [2, 4, 6, 8, 10, 12, 14, 18, 24, 36, 48, 60, 72, 96];
+// Define font size options with display names and actual values
+const FONT_SIZES = [
+    { display: '10', value: '10px' },
+    { display: '12', value: '12px' },
+    { display: '14', value: '14px' },
+    { display: '16', value: '16px' }, // default
+    { display: '18', value: '18px' },
+    { display: '20', value: '20px' },
+    { display: '24', value: '24px' },
+    { display: '30', value: '30px' },
+    { display: '36', value: '36px' },
+    { display: '48', value: '48px' },
+    { display: '60', value: '60px' },
+    { display: '72', value: '72px' },
+];
 
 const ToolBar = ({ editor }: { editor: Editor | null }) => {
     const tool: Tool | null = editor ? useTool(editor) : null;
     const [showMoreOptions, setShowMoreOptions] = useState(false);
-    const [currentFontSize, setCurrentFontSize] = useState<number>(16);
+    const [currentFontSize, setCurrentFontSize] = useState<string>('16px');
     const [currentFontFamily, setCurrentFontFamily] = useState<string>("Inter");
+
+    // Get current font attributes from editor when selection changes
+    useEffect(() => {
+        if (!editor) return;
+
+        const updateFontAttributes = () => {
+            const attrs = editor.getAttributes('textStyle');
+
+            // Update font family if set
+            if (attrs.fontFamily) {
+                setCurrentFontFamily(attrs.fontFamily);
+            }
+
+            // Update font size if set
+            if (attrs.fontSize) {
+                setCurrentFontSize(attrs.fontSize);
+            }
+        };
+
+        // Listen for selection changes
+        editor.on('selectionUpdate', updateFontAttributes);
+        editor.on('transaction', updateFontAttributes);
+
+        return () => {
+            editor.off('selectionUpdate', updateFontAttributes);
+            editor.off('transaction', updateFontAttributes);
+        };
+    }, [editor]);
 
     if (!tool || !editor) return <div>No editor available</div>;
 
@@ -71,6 +111,21 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
         document.addEventListener('mousedown', onDocMouseDown);
         return () => document.removeEventListener('mousedown', onDocMouseDown);
     }, [showMoreOptions]);
+
+    // Get the display value for the current font size
+    const getCurrentFontSizeDisplay = () => {
+        // Strip 'px' and convert to number for display
+        if (!currentFontSize) return '16';
+        const sizeMatch = currentFontSize.match(/^(\d+)px$/);
+        return sizeMatch ? sizeMatch[1] : '16';
+    };
+
+    // Apply font size with proper px unit
+    const applyFontSize = (size: string) => {
+        const newSize = `${size}px`;
+        setCurrentFontSize(newSize);
+        editor.chain().focus().setFontSize(newSize).run();
+    };
 
     return (
         <div ref={containerRef} className="toolbar flex flex-wrap items-center gap-1 p-3 m-2 rounded-sm border border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm overflow-visible w-full">
@@ -257,89 +312,114 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
 
                 <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
-                {/* Font Styling */}
-                <Select onValueChange={(value) => {
-                    tool.font?.family(value);
-                    setCurrentFontFamily(value);
-                }}>
+                {/* Font Styling - Updated to use TipTap extension directly */}
+                <Select
+                    value={currentFontFamily}
+                    onValueChange={(value) => {
+                        editor.chain().focus().setFontFamily(value).run();
+                        setCurrentFontFamily(value);
+                    }}
+                >
                     <SelectTrigger className="w-[140px] h-8 text-sm">
                         <SelectValue placeholder={currentFontFamily} />
                     </SelectTrigger>
                     <SelectContent>
                         {FONT_FAMILIES.map(f => (
-                            <SelectItem key={f} value={f}>{f}</SelectItem>
+                            <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
                         ))}
                     </SelectContent>
                 </Select>
 
-                {/* Font Size Adjuster: increment/decrement, manual input with dropdown */}
-                <div className="flex items-center gap-1">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-7 p-0 bg-white hover:bg-gray-50"
-                        onClick={() => {
-                            const newSize = Math.max(1, currentFontSize - 1);
-                            setCurrentFontSize(newSize);
-                            tool.font?.size(newSize);
-                        }}
-                        title="Decrease Font Size"
-                    >
-                        -
-                    </Button>
+                {/* Enhanced Font Size Selector with card-like appearance */}
+                <div className="relative">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <div className="flex items-center h-8 rounded-md border border-input bg-background">
+                                <button
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.stopPropagation(); // Prevent popover from opening
+                                        const currentSize = parseInt(getCurrentFontSizeDisplay(), 10);
+                                        if (currentSize > 1) {
+                                            applyFontSize((currentSize - 1).toString());
+                                        }
+                                    }}
+                                    className="h-full px-1.5 flex items-center justify-center border-r border-input 
+                                    text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-l-md"
+                                >
+                                    -
+                                </button>
 
-                    {/* Manual input field */}
-                    <input
-                        type="number"
-                        min="1"
-                        max="200"
-                        value={currentFontSize}
-                        onChange={e => {
-                            const size = Math.max(1, Math.min(200, parseInt(e.target.value) || 1));
-                            setCurrentFontSize(size);
-                            tool.font?.size(size);
-                        }}
-                        className="w-12 h-8 text-sm text-center border border-gray-300 rounded-md bg-white hover:border-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-                        title="Font Size (Max: 200)"
-                    />
+                                <input
+                                    type="text"
+                                    value={getCurrentFontSizeDisplay()}
+                                    onChange={(e) => {
+                                        const val = e.target.value.replace(/[^\d]/g, '');
+                                        if (val === '') {
+                                            setCurrentFontSize('');
+                                            return;
+                                        }
 
-                    {/* Dropdown for preset sizes */}
-                    <Select
-                        value={currentFontSize.toString()}
-                        onValueChange={value => {
-                            const size = parseInt(value);
-                            setCurrentFontSize(size);
-                            tool.font?.size(size);
-                        }}
-                    >
-                        <SelectTrigger className="w-4 h-8 p-0 border-none bg-transparent">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </SelectTrigger>
-                        <SelectContent>
-                            {FONT_SIZES.map(size => (
-                                <SelectItem key={size} value={size.toString()}>
-                                    {size}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                                        const numVal = parseInt(val, 10);
+                                        if (numVal >= 0 && numVal <= 100) {
+                                            applyFontSize(numVal.toString());
+                                        }
+                                    }}
+                                    onBlur={(e) => {
+                                        // If empty or 0, reset to default (16)
+                                        if (e.target.value === '' || parseInt(e.target.value, 10) === 0) {
+                                            applyFontSize('16');
+                                        }
+                                    }}
+                                    className="h-full w-8 bg-transparent text-sm text-center focus:outline-none"
+                                />
 
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 w-7 p-0 bg-white hover:bg-gray-50"
-                        onClick={() => {
-                            const newSize = Math.min(200, currentFontSize + 1);
-                            setCurrentFontSize(newSize);
-                            tool.font?.size(newSize);
-                        }}
-                        title="Increase Font Size"
-                    >
-                        +
-                    </Button>
-                </div>                <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+                                <div className="flex items-center h-full">
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation(); // Prevent popover from opening
+                                            const currentSize = parseInt(getCurrentFontSizeDisplay(), 10);
+                                            if (currentSize < 100) {
+                                                applyFontSize((currentSize + 1).toString());
+                                            }
+                                        }}
+                                        className="h-full px-1.5 flex items-center justify-center border-l border-input 
+                                        text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                    >
+                                        +
+                                    </button>
+
+                            
+                                </div>
+                            </div>
+                        </PopoverTrigger>
+
+                        <PopoverContent align="center" side="bottom" className="p-0 w-16 border border-gray-300">
+                            <ul className="py-1 text-sm">
+                                {['8', '9', '10', '11', '12', '14', '18', '24', '30', '36', '48', '60', '72', '96'].map(disp => {
+                                    const isActiveSize = getCurrentFontSizeDisplay() === disp;
+                                    return (
+                                        <li key={disp}>
+                                            <button
+                                                type="button"
+                                                onClick={() => applyFontSize(disp)}
+                                                className={`w-full text-left px-3 py-1.5 hover:bg-gray-100 
+                                                focus:bg-gray-100 focus:outline-none
+                                                ${isActiveSize ? 'bg-gray-100' : ''}`}
+                                            >
+                                                {disp}
+                                            </button>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        </PopoverContent>
+                    </Popover>
+                </div>
+
+                <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
                 {/* Text Color: 8 most used colors for light theme */}
                 <Popover>
@@ -591,20 +671,6 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                             <div className="border-b pb-3">
                                 <h4 className="text-xs font-semibold text-gray-500 mb-2 uppercase tracking-wide">Insert</h4>
                                 <div className="flex flex-wrap gap-1">
-                                    <Button variant="outline"
-                                        onClick={() => {
-                                            const url = window.prompt('Enter image URL:');
-                                            const alt = window.prompt('Enter alt text (optional):');
-                                            const title = window.prompt('Enter title (optional):');
-                                            if (url) tool.image(url, alt || '', title || '');
-                                        }}
-                                        className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors  text-sm"
-                                        title="Insert Image"
-                                    >
-                                        <Image className="w-4 h-4" />
-                                        Image
-                                    </Button>
-
                                     <Button variant="outline"
                                         onClick={() => {
                                             const rowsInput = window.prompt('Number of rows:', '3');
