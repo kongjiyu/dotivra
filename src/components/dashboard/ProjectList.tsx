@@ -7,13 +7,12 @@ import  AddProjectModal  from '../modal/addProject';
 
 interface ProjectListProps {
   onProjectClick: (project: Project) => void;
-  onNewProject: () => void;
   onViewAllProjects?: () => void;
 }
 
 
 
-const ProjectList: React.FC<ProjectListProps> = ({ onProjectClick, onNewProject, onViewAllProjects }) => {
+const ProjectList: React.FC<ProjectListProps> = ({ onProjectClick, onViewAllProjects }) => {
   const [isModalOpen, setIsModalOpen] = React.useState(false);
 
   const handleCreateProject = async (projectData: {
@@ -33,7 +32,7 @@ const ProjectList: React.FC<ProjectListProps> = ({ onProjectClick, onNewProject,
           <p className="text-gray-600 text-sm mt-1">Your documentation projects</p>
         </div>
         <button
-          onClick={onNewProject}
+          onClick={() => setIsModalOpen(true)}
           className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
         >
           <Plus className="h-4 w-4 mr-2" />

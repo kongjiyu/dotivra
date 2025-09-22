@@ -1,6 +1,7 @@
 // src/components/project/ProjectView.tsx - With URL parameters
 import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { FileText, Code } from 'lucide-react';
 import ProjectHeader from '../components/project/ProjectHeader';
 import DocumentSection from '../components/project/DocumentSection';
 import AddDocumentModal from '../components/project/AddDocumentModal';
@@ -25,6 +26,7 @@ const ProjectOverview: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'user' | 'developer' | null>(null);
 
   // Get project data from URL parameter (Mock data for now)
@@ -56,9 +58,15 @@ const ProjectOverview: React.FC = () => {
     navigate('/dashboard');
   };
 
+  const handleAddDocumentClick = () => {
+    console.log('Show category selection');
+    setShowCategoryModal(true);
+  };
+
   const handleAddDocument = (category: 'user' | 'developer') => {
     console.log('Add document for category:', category);
     setSelectedCategory(category);
+    setShowCategoryModal(false);
     setShowAddModal(true);
   };
 
@@ -97,6 +105,7 @@ const ProjectOverview: React.FC = () => {
       <ProjectHeader 
         project={project}
         onBackToDashboard={handleBackToDashboard}
+        onAddDocument={handleAddDocumentClick}
       />
 
       {/* Main Content */}
@@ -106,7 +115,6 @@ const ProjectOverview: React.FC = () => {
           title="Users"
           category="user"
           documents={userDocs}
-          onAddDocument={handleAddDocument}
           onEditDocument={handleEditDocument}
           onDeleteDocument={handleDeleteDocument}
         />
@@ -116,11 +124,52 @@ const ProjectOverview: React.FC = () => {
           title="Developers"
           category="developer"
           documents={devDocs}
-          onAddDocument={handleAddDocument}
           onEditDocument={handleEditDocument}
           onDeleteDocument={handleDeleteDocument}
         />
       </div>
+
+      {/* Category Selection Modal */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setShowCategoryModal(false)} />
+          <div className="flex min-h-full items-center justify-center p-4">
+            <div className="relative w-full max-w-md transform overflow-hidden rounded-xl bg-white shadow-xl">
+              <div className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Choose Document Type</h3>
+                <div className="space-y-3">
+                  <button
+                    onClick={() => handleAddDocument('user')}
+                    className="w-full flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                  >
+                    <FileText className="h-5 w-5 text-blue-600 mr-3" />
+                    <div className="text-left">
+                      <div className="font-medium text-gray-900">User Documentation</div>
+                      <div className="text-sm text-gray-600">For end users and customers</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => handleAddDocument('developer')}
+                    className="w-full flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                  >
+                    <Code className="h-5 w-5 text-purple-600 mr-3" />
+                    <div className="text-left">
+                      <div className="font-medium text-gray-900">Developer Documentation</div>
+                      <div className="text-sm text-gray-600">For developers and technical users</div>
+                    </div>
+                  </button>
+                </div>
+                <button
+                  onClick={() => setShowCategoryModal(false)}
+                  className="w-full mt-4 px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Add Document Modal */}
       <AddDocumentModal

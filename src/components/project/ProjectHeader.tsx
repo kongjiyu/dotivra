@@ -1,14 +1,15 @@
 // src/components/project/ProjectHeader.tsx
 import React from 'react';
-import { ExternalLink, FolderOpen } from 'lucide-react';
+import { ExternalLink, FolderOpen, Plus } from 'lucide-react';
 import type { Project } from '../../types';
 
 interface ProjectHeaderProps {
   project: Project;
   onBackToDashboard: () => void;
+  onAddDocument: () => void;
 }
 
-const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, onBackToDashboard: _onBackToDashboard }) => {
+const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, onBackToDashboard: _onBackToDashboard, onAddDocument }) => {
   const totalDocuments = project.userDocsCount + project.devDocsCount;
 
   return (
@@ -36,10 +37,15 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, onBackToDashboar
             </div>
           </div>
 
-          <div className="text-left lg:text-right">
-            <div className="mb-1 text-sm text-gray-500">Total Documents</div>
-            <div className="text-2xl font-bold text-gray-900">{totalDocuments}</div>
-            <div className="mt-1 text-xs text-gray-500">Last updated {project.lastModified}</div>
+          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+            
+            <button
+              onClick={onAddDocument}
+              className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+            >
+              <Plus className="h-5 w-5 mr-2" />
+              Add Document
+            </button>
           </div>
         </div>
       </div>
