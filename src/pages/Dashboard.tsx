@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { CircleUser, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TemplateGrid from '../components/dashboard/TemplateGrid';
-import ProjectGrid from '../components/dashboard/ProjectList';
+import ProjectList from '../components/dashboard/ProjectList';
 import type { Template, Project } from '../types';
 
 const Dashboard: React.FC = () => {
@@ -25,11 +25,6 @@ const Dashboard: React.FC = () => {
     console.log('Navigating to project:', project.name);
     // 🎯 NAVIGATION: Go to project view based on project ID 
     navigate(`/project/${project.id}`);
-  };
-
-  const handleNewProject = () => {
-    console.log('New project clicked');
-    // TODO: Show create project modal or form
   };
 
   const handleViewAllProjects = () => {
@@ -72,9 +67,8 @@ const Dashboard: React.FC = () => {
         />
 
         {/* Projects Section - Bottom */}
-        <ProjectGrid 
+        <ProjectList 
           onProjectClick={handleProjectClick}
-          onNewProject={handleNewProject}
           onViewAllProjects={handleViewAllProjects}
         />
       </div>

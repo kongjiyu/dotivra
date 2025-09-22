@@ -6,9 +6,7 @@ import DocumentEditor from "./pages/Document/DocumentEditor";
 import AIGenerator from "./pages/AIGenerator";
 import GithubConnect from "./pages/GithubConnect";
 import Login from "./pages/Login";  
-
-
-
+import ProjectView from "./pages/ProjectOverview";
 import DocumentSummary from "@/pages/Document/DocumentSummary";
 import DocumentProject from "@/pages/Document/DocumentProject";
 import DocumentHistory from "@/pages/Document/DocumentHistory";
