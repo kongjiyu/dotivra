@@ -2,6 +2,7 @@ import type { Editor } from "@tiptap/react";
 import { type Tool, useTool } from "../../lib/Tools/Tool";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import LinkTooltip from "./LinkTooltip";
 import {
     Select,
     SelectContent,
@@ -42,27 +43,18 @@ const FONT_FAMILIES = [
     "Inter", "Arial", "Georgia", "Roboto", "Courier New", "Times New Roman", "Verdana", "Tahoma", "Monospace",
 ];
 
-// Define font size options with display names and actual values
-const FONT_SIZES = [
-    { display: '10', value: '10px' },
-    { display: '12', value: '12px' },
-    { display: '14', value: '14px' },
-    { display: '16', value: '16px' }, // default
-    { display: '18', value: '18px' },
-    { display: '20', value: '20px' },
-    { display: '24', value: '24px' },
-    { display: '30', value: '30px' },
-    { display: '36', value: '36px' },
-    { display: '48', value: '48px' },
-    { display: '60', value: '60px' },
-    { display: '72', value: '72px' },
-];
+
 
 const ToolBar = ({ editor }: { editor: Editor | null }) => {
     const tool: Tool | null = editor ? useTool(editor) : null;
     const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [currentFontSize, setCurrentFontSize] = useState<string>('16px');
     const [currentFontFamily, setCurrentFontFamily] = useState<string>("Inter");
+    const [linkTooltipOpen, setLinkTooltipOpen] = useState(false);
+    const [linkTooltipPosition, setLinkTooltipPosition] = useState({ x: 0, y: 0 });
+    const [selectedTextForLink, setSelectedTextForLink] = useState<string>('');
+    const [isEditingLink, setIsEditingLink] = useState(false);
+    const [existingLinkUrl, setExistingLinkUrl] = useState<string>('');
 
     // Get current font attributes from editor when selection changes
     useEffect(() => {
@@ -89,6 +81,23 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
         return () => {
             editor.off('selectionUpdate', updateFontAttributes);
             editor.off('transaction', updateFontAttributes);
+        };
+    }, [editor]);
+
+    // Track when a code block is selected
+    useEffect(() => {
+        if (!editor) return;
+
+        const updateCodeBlockState = () => {
+            // Code block state tracking (unused for now)
+        };
+
+        editor.on('selectionUpdate', updateCodeBlockState);
+        editor.on('transaction', updateCodeBlockState);
+
+        return () => {
+            editor.off('selectionUpdate', updateCodeBlockState);
+            editor.off('transaction', updateCodeBlockState);
         };
     }, [editor]);
 
@@ -391,7 +400,6 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                         +
                                     </button>
 
-                            
                                 </div>
                             </div>
                         </PopoverTrigger>
@@ -622,16 +630,36 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
 
 
                 <Button variant="outline"
-                    onClick={() => tool.list?.indent()}
-                    className=" rounded-md bg-white hover:bg-gray-50 transition-colors  text-sm"
+                    onClick={() => {
+                        // Universal indent command for both paragraphs and headings
+                        // Silently do nothing if at maximum limit - no visual feedback
+                        if (editor) {
+                            if (editor.isActive('paragraph')) {
+                                editor.chain().focus().indentParagraph().run();
+                            } else if (editor.isActive('heading')) {
+                                editor.chain().focus().indentHeading().run();
+                            }
+                        }
+                    }}
+                    className="rounded-md bg-white hover:bg-gray-50 transition-colors text-sm"
                     title="Indent"
                 >
                     <IndentIncrease />
                 </Button>
 
                 <Button variant="outline"
-                    onClick={() => tool.list?.outdent()}
-                    className=" rounded-md bg-white hover:bg-gray-50 transition-colors  text-sm"
+                    onClick={() => {
+                        // Universal outdent command for both paragraphs and headings
+                        // Silently do nothing if at minimum level (0) - no visual feedback
+                        if (editor) {
+                            if (editor.isActive('paragraph')) {
+                                editor.chain().focus().outdentParagraph().run();
+                            } else if (editor.isActive('heading')) {
+                                editor.chain().focus().outdentHeading().run();
+                            }
+                        }
+                    }}
+                    className="rounded-md bg-white hover:bg-gray-50 transition-colors text-sm"
                     title="Outdent"
                 >
                     <IndentDecrease />
@@ -644,8 +672,6 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                     Clear Format
                 </Button>
                 <div className="w-px h-6 bg-gray-300 mx-1"></div>
-
-
             </div>
 
             {/* MORE OPTIONS DROPDOWN */}
@@ -689,9 +715,36 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                     </Button>
 
                                     <Button variant="outline"
-                                        onClick={() => {
-                                            const url = window.prompt('Enter URL:');
-                                            if (url) tool.font?.link(url);
+                                        onClick={(e) => {
+                                            // Check if we're currently in a link
+                                            const currentLink = editor?.getAttributes('link');
+
+                                            if (currentLink?.href) {
+                                                // If already a link, remove it
+                                                editor?.chain().focus().unsetLink().run();
+                                                return;
+                                            }
+
+                                            // Get selected text
+                                            const { state } = editor || { state: null };
+                                            if (!state) return;
+
+                                            const { from, to } = state.selection;
+                                            const selectedText = state.doc.textBetween(from, to, '');
+
+                                            // Always show tooltip - with or without selected text
+                                            setSelectedTextForLink(selectedText);
+                                            setIsEditingLink(false);
+                                            setExistingLinkUrl('');
+
+                                            // Get cursor position for tooltip
+                                            const rect = e.currentTarget.getBoundingClientRect();
+                                            setLinkTooltipPosition({
+                                                x: rect.left + rect.width / 2,
+                                                y: rect.bottom + 8
+                                            });
+
+                                            setLinkTooltipOpen(true);
                                         }}
                                         className={`flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors text-sm ${isActive('link') ? 'bg-blue-100 text-blue-600' : ''
                                             }`}
@@ -771,8 +824,27 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
             </div>
 
             {/* Outside click handled via document listener to avoid blocking scroll */}
+
+            {/* Link Tooltip */}
+            {editor && (
+                <LinkTooltip
+                    editor={editor}
+                    isOpen={linkTooltipOpen}
+                    onClose={() => {
+                        setLinkTooltipOpen(false);
+                        setIsEditingLink(false);
+                        setExistingLinkUrl('');
+                        setSelectedTextForLink('');
+                    }}
+                    position={linkTooltipPosition}
+                    selectedText={selectedTextForLink}
+                    isEditing={isEditingLink}
+                    existingUrl={existingLinkUrl}
+                />
+            )}
         </div>
     );
 }
+
 
 export default ToolBar;

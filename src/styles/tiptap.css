@@ -7,3 +7,638 @@
 .tiptap h4 { font-size: 1rem;    font-weight: 600;                 margin: 1rem 0 0.5rem;    }
 .tiptap h5 { font-size: .83rem;  font-weight: 600;                 margin: .75rem 0 0.5rem;  }
 .tiptap h6 { font-size: .67rem;  font-weight: 600;                 margin: .5rem  0 0.5rem;  }
+
+/* Blockquote styling with vertical line */
+.tiptap blockquote {
+  margin: 1.5em 0;
+  padding: 0.5em 0 0.5em 1.2em;
+  position: relative;
+  color: #4B5563; /* Slate gray */
+  font-style: normal;
+  border: none;
+}
+
+/* Vertical line styling */
+.tiptap blockquote::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #c3cde3; /* Light Cloud Blue vertical line */
+  border-radius: 2px;
+}
+
+/* Style for text inside blockquote */
+.tiptap blockquote p {
+  margin: 0;
+}
+
+/* Code block styling with visible language */
+.tiptap pre {
+  font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  background-color: #f8f9fc;
+  border-radius: 6px;
+  margin: 1.5rem 0;
+  position: relative;
+  border: 1px solid #e9ecef;
+  display: flex;
+  flex-direction: column;
+  max-height: 400px; /* Limit height to ensure scrolling for long code blocks */
+}
+
+/* Code block language display */
+.tiptap pre::before {
+  content: attr(data-language);
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  background-color: #e9ecef;
+  padding: 0.35rem 1rem;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+  border-bottom: 1px solid #dde1e6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Hide language display if empty or 'null' */
+.tiptap pre[data-language=""]::before,
+.tiptap pre[data-language="null"]::before {
+  content: "code";
+  color: #9ca3af;
+  font-style: italic;
+}
+
+/* Editable topic styling */
+.tiptap pre[contenteditable="true"]::before {
+  cursor: text;
+}
+
+/* Indicator for editable topic */
+.tiptap pre::after {
+  content: "✎";
+  position: absolute;
+  right: 10px;
+  top: 0.35rem;
+  font-size: 12px;
+  color: #9ca3af;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.tiptap pre:hover::after {
+  opacity: 1;
+}
+
+/* Code container with improved scrolling */
+.tiptap pre code {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  color: #383a42;
+  display: block;
+  tab-size: 2;
+  padding: 1.25rem;
+  overflow-x: auto;
+  max-width: 100%;
+  
+  /* Modern scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
+}
+
+/* Webkit scrollbar styling for code blocks */
+.tiptap pre code::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+
+.tiptap pre code::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 3px;
+}
+
+.tiptap pre code::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.4);
+  border-radius: 3px;
+  border: 2px solid transparent;
+}
+
+.tiptap pre code::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(156, 163, 175, 0.6);
+}
+
+/* Default language indication when not specified */
+.tiptap pre:not([data-language])::before {
+  content: 'code';
+}
+
+/* Ensure good spacing when code is inside a pre but not directly */
+.tiptap pre > div {
+  padding: 1.25rem;
+  overflow: auto;
+}
+
+/* Styling for the custom editable code block component */
+.tiptap pre .code-block-topic {
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #6b7280;
+  background-color: #e9ecef;
+  padding: 0.35rem 1rem;
+  border-top-left-radius: 5px;
+  border-top-right-radius: 5px;
+  border-bottom: 1px solid #dde1e6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* Language input styling */
+.tiptap pre .code-block-topic .language-input {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  background-color: white;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  padding: 0.15rem 0.5rem;
+  outline: none;
+  width: 100%;
+}
+
+.tiptap pre .code-block-topic .language-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+/* Language label styling */
+.tiptap pre .code-block-topic .language-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.tiptap pre .code-block-topic .language-label .edit-icon {
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.tiptap pre .code-block-topic .language-label:hover .edit-icon {
+  opacity: 1;
+}
+
+/* Remove the pseudo-elements since we have custom elements now */
+.tiptap pre[class*="language-"]::before,
+.tiptap pre::before {
+  content: none;
+}
+
+.tiptap pre::after {
+  content: none;
+}
+
+/* Controlled indentation support for paragraphs and headings - maximum 21 levels */
+/* This prevents content overflow while still providing extensive indentation options */
+.tiptap p[data-indent],
+.tiptap h1[data-indent],
+.tiptap h2[data-indent],
+.tiptap h3[data-indent],
+.tiptap h4[data-indent],
+.tiptap h5[data-indent],
+.tiptap h6[data-indent] {
+  /* The margin-left is set via inline style attribute from the extension */
+  /* Maximum indentation is 21 levels = 42rem = ~336px to prevent overflow */
+  transition: margin-left 0.2s ease;
+}
+
+/* CSS fallback rules for common indentation levels (1-21) */
+/* These provide better performance for the most commonly used levels */
+.tiptap p[data-indent="1"], .tiptap h1[data-indent="1"], .tiptap h2[data-indent="1"], .tiptap h3[data-indent="1"], .tiptap h4[data-indent="1"], .tiptap h5[data-indent="1"], .tiptap h6[data-indent="1"] { margin-left: 2rem; }
+.tiptap p[data-indent="2"], .tiptap h1[data-indent="2"], .tiptap h2[data-indent="2"], .tiptap h3[data-indent="2"], .tiptap h4[data-indent="2"], .tiptap h5[data-indent="2"], .tiptap h6[data-indent="2"] { margin-left: 4rem; }
+.tiptap p[data-indent="3"], .tiptap h1[data-indent="3"], .tiptap h2[data-indent="3"], .tiptap h3[data-indent="3"], .tiptap h4[data-indent="3"], .tiptap h5[data-indent="3"], .tiptap h6[data-indent="3"] { margin-left: 6rem; }
+.tiptap p[data-indent="4"], .tiptap h1[data-indent="4"], .tiptap h2[data-indent="4"], .tiptap h3[data-indent="4"], .tiptap h4[data-indent="4"], .tiptap h5[data-indent="4"], .tiptap h6[data-indent="4"] { margin-left: 8rem; }
+.tiptap p[data-indent="5"], .tiptap h1[data-indent="5"], .tiptap h2[data-indent="5"], .tiptap h3[data-indent="5"], .tiptap h4[data-indent="5"], .tiptap h5[data-indent="5"], .tiptap h6[data-indent="5"] { margin-left: 10rem; }
+.tiptap p[data-indent="6"], .tiptap h1[data-indent="6"], .tiptap h2[data-indent="6"], .tiptap h3[data-indent="6"], .tiptap h4[data-indent="6"], .tiptap h5[data-indent="6"], .tiptap h6[data-indent="6"] { margin-left: 12rem; }
+.tiptap p[data-indent="7"], .tiptap h1[data-indent="7"], .tiptap h2[data-indent="7"], .tiptap h3[data-indent="7"], .tiptap h4[data-indent="7"], .tiptap h5[data-indent="7"], .tiptap h6[data-indent="7"] { margin-left: 14rem; }
+.tiptap p[data-indent="8"], .tiptap h1[data-indent="8"], .tiptap h2[data-indent="8"], .tiptap h3[data-indent="8"], .tiptap h4[data-indent="8"], .tiptap h5[data-indent="8"], .tiptap h6[data-indent="8"] { margin-left: 16rem; }
+.tiptap p[data-indent="9"], .tiptap h1[data-indent="9"], .tiptap h2[data-indent="9"], .tiptap h3[data-indent="9"], .tiptap h4[data-indent="9"], .tiptap h5[data-indent="9"], .tiptap h6[data-indent="9"] { margin-left: 18rem; }
+.tiptap p[data-indent="10"], .tiptap h1[data-indent="10"], .tiptap h2[data-indent="10"], .tiptap h3[data-indent="10"], .tiptap h4[data-indent="10"], .tiptap h5[data-indent="10"], .tiptap h6[data-indent="10"] { margin-left: 20rem; }
+.tiptap p[data-indent="11"], .tiptap h1[data-indent="11"], .tiptap h2[data-indent="11"], .tiptap h3[data-indent="11"], .tiptap h4[data-indent="11"], .tiptap h5[data-indent="11"], .tiptap h6[data-indent="11"] { margin-left: 22rem; }
+.tiptap p[data-indent="12"], .tiptap h1[data-indent="12"], .tiptap h2[data-indent="12"], .tiptap h3[data-indent="12"], .tiptap h4[data-indent="12"], .tiptap h5[data-indent="12"], .tiptap h6[data-indent="12"] { margin-left: 24rem; }
+.tiptap p[data-indent="13"], .tiptap h1[data-indent="13"], .tiptap h2[data-indent="13"], .tiptap h3[data-indent="13"], .tiptap h4[data-indent="13"], .tiptap h5[data-indent="13"], .tiptap h6[data-indent="13"] { margin-left: 26rem; }
+.tiptap p[data-indent="14"], .tiptap h1[data-indent="14"], .tiptap h2[data-indent="14"], .tiptap h3[data-indent="14"], .tiptap h4[data-indent="14"], .tiptap h5[data-indent="14"], .tiptap h6[data-indent="14"] { margin-left: 28rem; }
+.tiptap p[data-indent="15"], .tiptap h1[data-indent="15"], .tiptap h2[data-indent="15"], .tiptap h3[data-indent="15"], .tiptap h4[data-indent="15"], .tiptap h5[data-indent="15"], .tiptap h6[data-indent="15"] { margin-left: 30rem; }
+.tiptap p[data-indent="16"], .tiptap h1[data-indent="16"], .tiptap h2[data-indent="16"], .tiptap h3[data-indent="16"], .tiptap h4[data-indent="16"], .tiptap h5[data-indent="16"], .tiptap h6[data-indent="16"] { margin-left: 32rem; }
+.tiptap p[data-indent="17"], .tiptap h1[data-indent="17"], .tiptap h2[data-indent="17"], .tiptap h3[data-indent="17"], .tiptap h4[data-indent="17"], .tiptap h5[data-indent="17"], .tiptap h6[data-indent="17"] { margin-left: 34rem; }
+.tiptap p[data-indent="18"], .tiptap h1[data-indent="18"], .tiptap h2[data-indent="18"], .tiptap h3[data-indent="18"], .tiptap h4[data-indent="18"], .tiptap h5[data-indent="18"], .tiptap h6[data-indent="18"] { margin-left: 36rem; }
+.tiptap p[data-indent="19"], .tiptap h1[data-indent="19"], .tiptap h2[data-indent="19"], .tiptap h3[data-indent="19"], .tiptap h4[data-indent="19"], .tiptap h5[data-indent="19"], .tiptap h6[data-indent="19"] { margin-left: 38rem; }
+.tiptap p[data-indent="20"], .tiptap h1[data-indent="20"], .tiptap h2[data-indent="20"], .tiptap h3[data-indent="20"], .tiptap h4[data-indent="20"], .tiptap h5[data-indent="20"], .tiptap h6[data-indent="20"] { margin-left: 40rem; }
+.tiptap p[data-indent="21"], .tiptap h1[data-indent="21"], .tiptap h2[data-indent="21"], .tiptap h3[data-indent="21"], .tiptap h4[data-indent="21"], .tiptap h5[data-indent="21"], .tiptap h6[data-indent="21"] { margin-left: 42rem; }
+
+/* Ensure content doesn't overflow the document area by setting a reasonable maximum width */
+.tiptap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* For very deeply indented content, ensure it remains readable */
+.tiptap p[data-indent], .tiptap h1[data-indent], .tiptap h2[data-indent], .tiptap h3[data-indent], .tiptap h4[data-indent], .tiptap h5[data-indent], .tiptap h6[data-indent] {
+  max-width: calc(100% - var(--indent-margin, 0px));
+  word-wrap: break-word;
+}
+
+/* Task List Styling */
+.tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.tiptap ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  margin: 0.5rem 0;
+}
+
+.tiptap ul[data-type="taskList"] li > label {
+  flex: 0 0 auto;
+  margin-right: 0.5rem;
+  user-select: none;
+  margin-top: 0.125rem; /* Slight adjustment to align with text */
+}
+
+.tiptap ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+}
+
+.tiptap ul[data-type="taskList"] li[data-checked="true"] > div {
+  text-decoration: line-through;
+  color: #6b7280;
+}
+
+.tiptap ul[data-type="taskList"] input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+  border: 2px solid #373a3e;
+  border-radius: 3px;
+  position: relative;
+}
+
+.tiptap ul[data-type="taskList"] input[type="checkbox"]:checked {
+  border-color: #373a3e;
+  background: transparent;
+}
+
+.tiptap ul[data-type="taskList"] input[type="checkbox"]:checked::before {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #373a3e;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+/* Nested task lists */
+.tiptap ul[data-type="taskList"] ul[data-type="taskList"] {
+  margin: 0.25rem 0 0.25rem 1.5rem;
+}
+
+/* Task list items */
+.tiptap li[data-type="taskItem"] {
+  display: flex;
+  align-items: flex-start;
+}
+
+.tiptap li[data-type="taskItem"] > label {
+  flex: 0 0 auto;
+  margin-right: 0.5rem;
+  user-select: none;
+  margin-top: 0.125rem;
+}
+
+/* Alternative styling using CSS classes if data attributes don't work */
+.tiptap .task-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.tiptap .task-item {
+  display: flex;
+  align-items: flex-start;
+  margin: 0.5rem 0;
+}
+
+.tiptap .task-item label {
+  flex: 0 0 auto;
+  margin-right: 0.5rem;
+  user-select: none;
+  margin-top: 0.125rem;
+}
+
+.tiptap .task-item label input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+  border: 2px solid #373a3e;
+  border-radius: 3px;
+  position: relative;
+}
+
+.tiptap .task-item label input[type="checkbox"]:checked {
+  border-color: #373a3e;
+  background: transparent;
+}
+
+.tiptap .task-item label input[type="checkbox"]:checked::before {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #373a3e;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+/* Styling for completed tasks */
+.tiptap .task-item[data-checked="true"] p,
+.tiptap .task-item[data-checked="true"] div {
+  text-decoration: line-through;
+  color: #6b7280;
+}
+
+/* Link Styling with Black & White Theme */
+.tiptap a {
+  color: #000000;
+  text-decoration: underline;
+  text-decoration-color: #666666;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+  text-underline-offset: 2px;
+}
+
+.tiptap a:hover {
+  color: #333333;
+  text-decoration-color: #000000;
+}
+
+/* Link Hover Preview Tooltip with Page Preview */
+.tiptap a:hover::after {
+  content: attr(href);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid #000000;
+  padding: 0.75rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  z-index: 1000;
+  margin-bottom: 0.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  animation: fadeInTooltip 0.3s ease-in-out 0.7s forwards;
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-weight: normal;
+  text-decoration: none;
+}
+
+/* Tooltip arrow with black & white theme */
+.tiptap a:hover::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #000000;
+  z-index: 1001;
+  margin-bottom: 0.375rem;
+  opacity: 0;
+  animation: fadeInTooltip 0.3s ease-in-out 0.7s forwards;
+}
+
+/* Enhanced fade in animation */
+@keyframes fadeInTooltip {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Link styling when editing */
+.tiptap a[contenteditable="false"] {
+  pointer-events: auto;
+}
+
+/* Link insertion tooltip styles */
+.link-tooltip {
+  position: absolute;
+  background: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  z-index: 2000;
+  min-width: 300px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.link-tooltip h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #000000;
+}
+
+.link-tooltip input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #000000;
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  background: #ffffff;
+  color: #000000;
+}
+
+.link-tooltip input:focus {
+  outline: none;
+  border-color: #000000;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+.link-tooltip input::placeholder {
+  color: #666666;
+}
+
+.link-tooltip .button-group {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.link-tooltip button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #000000;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #000000;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.link-tooltip button:hover {
+  background: #000000;
+  color: #ffffff;
+}
+
+.link-tooltip button.primary {
+  background: #000000;
+  color: #ffffff;
+}
+
+.link-tooltip button.primary:hover {
+  background: #333333;
+}
+
+.link-tooltip button.delete {
+  background: #ffffff;
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+.link-tooltip button.delete:hover {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+/* Link Preview Styles */
+.link-preview {
+  max-width: 400px;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.link-preview-content {
+  padding: 16px;
+}
+
+.link-preview-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #666666;
+  font-size: 14px;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e0e0e0;
+  border-top: 2px solid #000000;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.link-preview-error {
+  color: #dc2626;
+  font-size: 14px;
+}
+
+.link-preview-data {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.link-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.link-preview-favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+.link-preview-title {
+  font-weight: 600;
+  color: #1a1a1a;
+  font-size: 14px;
+  flex: 1;
+}
+
+.link-preview-description {
+  color: #666666;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.link-preview-url {
+  color: #999999;
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  word-break: break-all;
+  background: #f8f8f8;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #e8e8e8;
+}
