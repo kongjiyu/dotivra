@@ -19,9 +19,9 @@ interface AddDocumentModalProps {
 }
 
 const roleOptions = [
-  { value: 'author', label: 'Author' },
-  { value: 'reviewer', label: 'Reviewer' },
-  { value: 'viewer', label: 'Viewer' }
+  { value: 'user', label: 'User Documentation' },
+  { value: 'developer', label: 'Developer Documentation' },
+  { value: 'admin', label: 'Admin Documentation' }
 ];
 
 const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
@@ -36,12 +36,10 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
   const [selectedRole, setSelectedRole] = useState(roleOptions[0]?.value ?? 'author');
   const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
 
-  // Filter templates by category or show all if general
+  // Show all templates regardless of category
   const relevantTemplates = useMemo(
-    () => mockTemplates.filter(template => 
-      template.category === category || template.category === 'general'
-    ),
-    [category]
+    () => mockTemplates,
+    []
   );
 
   const selectedTemplate = useMemo(
@@ -97,10 +95,10 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                Select Template for {category === 'user' ? 'User' : 'Developer'} Documentation
+                Create New Document
               </h3>
               <p className="text-sm text-gray-600 mt-1">
-                Choose a template to create your document
+                Choose a template and role for your document
               </p>
             </div>
             <button
@@ -130,7 +128,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-role">
-                    Role
+                    Document Type
                   </label>
                   <select
                     id="document-role"
