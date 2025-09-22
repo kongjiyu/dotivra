@@ -85,7 +85,7 @@ export default function DocumentMenu({
 		searchPluginRef.current = new Plugin({
 			key,
 			state: {
-				init: (_config, state) => DecorationSet.empty,
+				init: (_config) => DecorationSet.empty,
 				apply(tr, oldDecos, _oldState, newState) {
 					const meta = tr.getMeta(key);
 					if (meta && meta.type === "SET_MATCHES") {
@@ -309,12 +309,6 @@ export default function DocumentMenu({
 		}
 	};
 
-	const toggleSearch = () => {
-		setShowSearch(!showSearch);
-		if (showSearch) {
-			clearSearch();
-		}
-	};
 
 	const clearSearch = () => {
 		setSearchQuery("");

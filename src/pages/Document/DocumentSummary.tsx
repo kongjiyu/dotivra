@@ -2,7 +2,6 @@
 import DocumentLayout from "./DocumentLayout";
 import ToolBar from "@/components/document/ToolBar";
 import TipTap from "@/components/document/TipTap";
-import { Button } from "@/components/ui/button";
 import { useDocument } from "../../context/DocumentContext";
 
 export default function DocumentSummary() {
