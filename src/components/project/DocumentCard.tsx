@@ -32,8 +32,15 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
   return (
     <div
       onClick={handleCardClick}
-      className="bg-white/80 backdrop-blur-sm border border-gray-200/60 rounded-2xl p-6 hover:shadow-2xl hover:shadow-blue-100/50 hover:border-blue-300/60 transition-all duration-300 cursor-pointer group transform hover:-translate-y-1 hover:scale-[1.02]"
+      className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
     >
+
+      {/* Thumbnail Section */}
+      <div className="relative bg-blue-50 h-32 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+        <FileText className="h-12 w-12 text-blue-500" />
+        
+        {/* Actions Dropdown - Top Right */}
+        <div className="absolute top-2 right-2">
       {/* Document Header */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-start space-x-3 flex-1 min-w-0">
@@ -64,9 +71,9 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
               e.stopPropagation();
               setShowDropdown(!showDropdown);
             }}
-            className="p-1 rounded-md hover:bg-gray-100 transition-colors opacity-0 group-hover:opacity-100"
+            className="p-1.5 rounded-full bg-white/80 hover:bg-white transition-colors opacity-0 group-hover:opacity-100"
           >
-            <MoreHorizontal className="h-4 w-4 text-gray-400" />
+            <MoreHorizontal className="h-4 w-4 text-gray-600" />
           </button>
 
           {showDropdown && (
@@ -78,7 +85,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
               />
 
               {/* Dropdown Menu */}
-              <div className="absolute right-0 top-8 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-20">
+              <div className="absolute right-0 top-10 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-20">
                 <button
                   onClick={handleEdit}
                   className="w-full px-3 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center"
@@ -99,17 +106,34 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
         </div>
       </div>
 
-      {/* Document Info */}
-      <div className="flex items-center justify-between text-sm text-gray-500">
-        <div className="flex items-center space-x-1">
-          <Clock className="h-3 w-3" />
+      {/* Details Section */}
+      <div className="p-4 space-y-2">
+        {/* Document Title */}
+        <h3 className="font-medium text-gray-900 group-hover:text-blue-700 transition-colors">
+          {document.name}
+        </h3>
+
+        {/* Template Badge */}
+        <div>
+          <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+            document.template.category === 'user' 
+              ? 'bg-blue-50 text-blue-700'
+              : document.template.category === 'developer'
+              ? 'bg-purple-50 text-purple-700'
+              : 'bg-gray-50 text-gray-700'
+          }`}>
+            {document.template.name}
+          </span>
+        </div>
+
+        {/* Last Edited */}
+        <div className="flex items-center text-sm text-gray-500">
+          <Clock className="h-3 w-3 mr-1" />
           <span>Edited {document.lastEdited}</span>
         </div>
-      </div>
 
-      {/* Open Button - Hidden until hover */}
-      <div className="mt-3 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button className="w-full py-2 text-sm text-blue-600 border border-blue-200 rounded-md hover:bg-blue-50 transition-colors">
+        {/* Open Button */}
+        <button className="w-full py-2 text-sm text-blue-600 hover:bg-blue-50 rounded transition-colors mt-3">
           Open Document
         </button>
       </div>

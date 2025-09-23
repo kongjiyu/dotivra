@@ -6,10 +6,13 @@ import DocumentEditor from "./pages/Document/DocumentEditor";
 import AIGenerator from "./pages/AIGenerator";
 import GithubConnect from "./pages/GithubConnect";
 import Login from "./pages/Login";  
+import ProjectView from "./pages/ProjectOverview";
 import DocumentSummary from "@/pages/Document/DocumentSummary";
 import DocumentProject from "@/pages/Document/DocumentProject";
 import DocumentHistory from "@/pages/Document/DocumentHistory";
 import { DocumentProvider } from "./context/DocumentContext";
+        import Profile from "./pages/Profile";
+import Projects from "./pages/Projects"; // NEW: All projects page
 
 // Wrapper component for document pages that need context
 const DocumentPageWrapper = ({ children }: { children: React.ReactNode }) => (
@@ -56,6 +59,19 @@ const router = createBrowserRouter([
         path: "/editor",
         element: <DocumentPageWrapper><DocumentEditor /></DocumentPageWrapper>
     },
+    {
+    path: "/profile",
+    element: <Profile />,
+  },
+    {
+    path: "/project/:projectId",  // NEW: Dynamic project route
+    element: <ProjectView />,
+  },
+  {
+    path: "/projects", // NEW: All projects page
+    element: <Projects />,
+  }
   ]);
+
 
 export default router;
