@@ -14,6 +14,8 @@ interface DocumentContextType {
     setIsDocumentModified: (modified: boolean) => void;
     documentId?: string;
     setDocumentId: (id: string) => void;
+    onOpenChat?: (message?: string) => void;
+    setOnOpenChat: (fn: (message?: string) => void) => void;
 }
 
 const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
@@ -29,6 +31,7 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
     const [currentEditor, setCurrentEditor] = useState<any>(null);
     const [isDocumentModified, setIsDocumentModified] = useState<boolean>(false);
     const [documentId, setDocumentId] = useState<string>('');
+    const [onOpenChat, setOnOpenChat] = useState<((message?: string) => void) | undefined>(undefined);
 
     const handleTitleChange = (title: string) => {
         setDocumentTitle(title);
@@ -58,6 +61,8 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
         setIsDocumentModified,
         documentId,
         setDocumentId,
+        onOpenChat,
+        setOnOpenChat,
     };
 
     return (

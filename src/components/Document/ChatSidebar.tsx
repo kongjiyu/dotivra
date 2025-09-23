@@ -22,6 +22,7 @@ interface ChatSidebarProps {
     onSend?: (message: string) => void;
     suggestions?: string[];
     editor?: Editor; // Add editor prop for AI content integration
+    initialMessage?: string; // Add initial message prop
 }
 
 export default function ChatSidebar({
@@ -31,6 +32,7 @@ export default function ChatSidebar({
     onSend,
     suggestions,
     editor,
+    initialMessage,
 }: ChatSidebarProps) {
     const [input, setInput] = useState("");
     const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([]);
@@ -57,6 +59,13 @@ export default function ChatSidebar({
             setInternalMessages([helloMsg]);
         }
     }, [open, externalMessages, internalMessages.length]);
+
+    // Handle initial message from context menu
+    useEffect(() => {
+        if (open && initialMessage && initialMessage.trim()) {
+            setInput(initialMessage);
+        }
+    }, [open, initialMessage]);
 
     // Suggestions UI removed per request; associated helpers removed.
 

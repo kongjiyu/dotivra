@@ -29,29 +29,6 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
     // TODO: Navigate to document editor
   };
 
-  const getCategoryColors = () => {
-    if (document.template.category === 'user') {
-      return {
-        badge: 'bg-gradient-to-r from-emerald-100 to-green-100 text-emerald-700 border border-emerald-200',
-        icon: 'bg-gradient-to-br from-emerald-500 to-green-600',
-        hover: 'group-hover:from-emerald-600 group-hover:to-green-700'
-      };
-    } else if (document.template.category === 'developer') {
-      return {
-        badge: 'bg-gradient-to-r from-violet-100 to-purple-100 text-violet-700 border border-violet-200',
-        icon: 'bg-gradient-to-br from-violet-500 to-purple-600',
-        hover: 'group-hover:from-violet-600 group-hover:to-purple-700'
-      };
-    }
-    return {
-      badge: 'bg-gradient-to-r from-gray-100 to-slate-100 text-gray-700 border border-gray-200',
-      icon: 'bg-gradient-to-br from-gray-500 to-slate-600',
-      hover: 'group-hover:from-gray-600 group-hover:to-slate-700'
-    };
-  };
-
-  const colors = getCategoryColors();
-
   return (
     <div
       onClick={handleCardClick}
@@ -68,19 +45,18 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
               {document.name}
             </h3>
             <div className="flex items-center space-x-2 mt-1">
-              <span className={`inline-block px-2 py-1 rounded-full text-xs ${
-                document.template.category === 'user' 
+              <span className={`inline-block px-2 py-1 rounded-full text-xs ${document.template.category === 'user'
                   ? 'bg-green-100 text-green-700'
                   : document.template.category === 'developer'
-                  ? 'bg-purple-100 text-purple-700'
-                  : 'bg-gray-100 text-gray-700'
-              }`}>
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-gray-100 text-gray-700'
+                }`}>
                 {document.template.name}
               </span>
             </div>
           </div>
         </div>
-        
+
         {/* Actions Dropdown */}
         <div className="relative">
           <button
@@ -92,15 +68,15 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
           >
             <MoreHorizontal className="h-4 w-4 text-gray-400" />
           </button>
-          
+
           {showDropdown && (
             <>
               {/* Backdrop */}
-              <div 
+              <div
                 className="fixed inset-0 z-10"
                 onClick={() => setShowDropdown(false)}
               />
-              
+
               {/* Dropdown Menu */}
               <div className="absolute right-0 top-8 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-20">
                 <button

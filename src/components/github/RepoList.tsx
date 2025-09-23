@@ -1,7 +1,6 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Repository } from '../../lib/githubClient';
+import type { Repository } from '../../lib/githubClient';
 import { ExternalLink, Lock, Users, GitBranch } from 'lucide-react';
 
 interface RepoListProps {
@@ -56,16 +55,15 @@ export function RepoList({ repositories, loading, onSelectRepo, selectedRepo }: 
           Accessible Repositories ({repositories.length})
         </h3>
       </div>
-      
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {repositories.map((repo) => (
           <Card
             key={repo.id}
-            className={`cursor-pointer transition-all hover:shadow-md ${
-              selectedRepo?.id === repo.id
+            className={`cursor-pointer transition-all hover:shadow-md ${selectedRepo?.id === repo.id
                 ? 'ring-2 ring-blue-500 border-blue-200'
                 : 'hover:border-gray-300'
-            }`}
+              }`}
             onClick={() => onSelectRepo(repo)}
           >
             <CardHeader className="pb-3">
@@ -94,14 +92,14 @@ export function RepoList({ repositories, loading, onSelectRepo, selectedRepo }: 
                 </div>
               </div>
             </CardHeader>
-            
+
             <CardContent className="pt-0">
               {repo.description && (
                 <p className="text-xs text-gray-600 mb-3 line-clamp-2">
                   {repo.description}
                 </p>
               )}
-              
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Badge variant="secondary" className="text-xs">
@@ -112,7 +110,7 @@ export function RepoList({ repositories, loading, onSelectRepo, selectedRepo }: 
                     )}
                   </Badge>
                 </div>
-                
+
                 <div className="flex items-center text-xs text-gray-500">
                   <GitBranch className="h-3 w-3 mr-1" />
                   {repo.default_branch}

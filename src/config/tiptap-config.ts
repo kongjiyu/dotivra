@@ -19,12 +19,14 @@ import { cn } from "@/lib/utils";
 import Paragraph from "@/lib/extensions/Paragraph"; // Import our custom paragraph extension
 import Heading from "@/lib/extensions/Heading"; // Import our custom heading extension
 import Mermaid from "@/lib/extensions/Mermaid"; // Import Mermaid extension
+import { CodeBlockWithHighlight } from "@/lib/extensions/CodeBlockWithHighlight"; // Import highlight.js CodeBlock extension
 
 // TipTap Editor Configuration
 export const getTipTapExtensions = () => [
     StarterKit.configure({
         heading: false, // we'll add Heading explicitly below
         paragraph: false, // we'll use our custom paragraph extension
+        codeBlock: false, // we'll use our custom code block extension
     }),
     // Custom paragraph extension with limited indent support to prevent overflow
     Paragraph.configure({
@@ -35,6 +37,8 @@ export const getTipTapExtensions = () => [
         levels: [1, 2, 3, 4, 5],
         maxIndent: 21, // Maximum 21 levels (42rem = ~336px) to prevent content overflow
     }),
+    // Custom code block extension with highlight.js support
+    CodeBlockWithHighlight,
     // Text formatting extensions
     Highlight.configure({
         multicolor: true,
@@ -72,7 +76,11 @@ export const getTipTapExtensions = () => [
     }),
     TableRow,
     TableHeader,
-    TableCell,
+    TableCell.configure({
+        HTMLAttributes: {
+            class: 'table-cell',
+        },
+    }),
     // Task list extensions
     TaskList.configure({
         itemTypeName: 'taskItem',

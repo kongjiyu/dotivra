@@ -40,7 +40,7 @@ export default function GithubConnect() {
   const [loading, setLoading] = useState(false);
   const [installationId, setInstallationId] = useState('');
   const [manualIdInput, setManualIdInput] = useState('');
-  const [installations, setInstallations] = useState<any[]>([]);
+  const [, setInstallations] = useState<any[]>([]);
 
   // Check for installation_id in URL params on mount
   useEffect(() => {
@@ -49,12 +49,12 @@ export default function GithubConnect() {
     const connected = urlParams.get('connected');
     const callback = urlParams.get('callback');
     const error = urlParams.get('error');
-    
+
     if (instId && connected === 'true') {
       setInstallationId(instId);
       setIsConnected(true);
       fetchRepositories(instId);
-      
+
       // Clean up URL parameters
       window.history.replaceState({}, '', window.location.pathname);
     } else if (error) {
@@ -65,7 +65,7 @@ export default function GithubConnect() {
       // Check for existing installations
       fetchInstallations();
     }
-    
+
     // Always fetch install URL for initial connection
     fetchInstallUrl();
   }, []);
@@ -75,7 +75,7 @@ export default function GithubConnect() {
       const response = await fetch(`${API_BASE}/github/installations`);
       const data = await response.json();
       setInstallations(data.installations || []);
-      
+
       // If we have installations, automatically connect with the first one
       if (data.installations && data.installations.length > 0) {
         const firstInstallation = data.installations[0];
@@ -118,7 +118,7 @@ export default function GithubConnect() {
         `${API_BASE}/github/repository/${repo.full_name.split('/')[0]}/${repo.full_name.split('/')[1]}/contents?path=${path}&installation_id=${installationId}`
       );
       const data = await response.json();
-      
+
       if (Array.isArray(data)) {
         setRepoContents(data);
       } else {
@@ -209,19 +209,19 @@ export default function GithubConnect() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <Button 
-                  onClick={handleConnectGitHub} 
+                <Button
+                  onClick={handleConnectGitHub}
                   className="w-full"
                   disabled={!installUrl}
                 >
                   <Github className="h-4 w-4 mr-2" />
                   Install GitHub App
                 </Button>
-                
+
                 <div className="text-center text-sm text-gray-500">
                   Already installed? Refresh the page to auto-connect
                 </div>
-                
+
                 <div className="border-t pt-4">
                   <div className="text-sm text-gray-600 mb-2">
                     Manual connection (if you know your installation ID):
@@ -234,7 +234,7 @@ export default function GithubConnect() {
                       placeholder="Installation ID"
                       className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
                     />
-                    <Button 
+                    <Button
                       onClick={handleManualConnect}
                       variant="outline"
                       size="sm"
@@ -261,9 +261,9 @@ export default function GithubConnect() {
                     {repositories.length} repositories available
                   </CardDescription>
                   <div className="pt-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={handleManageRepoAccess}
                       className="flex items-center gap-2"
                     >
@@ -282,11 +282,10 @@ export default function GithubConnect() {
                       {repositories.map((repo) => (
                         <div
                           key={repo.id}
-                          className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                            selectedRepo?.id === repo.id
+                          className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedRepo?.id === repo.id
                               ? 'border-blue-500 bg-blue-50'
                               : 'border-gray-200 hover:border-gray-300'
-                          }`}
+                            }`}
                           onClick={() => handleSelectRepo(repo)}
                         >
                           <div className="flex items-start justify-between">
@@ -312,8 +311,8 @@ export default function GithubConnect() {
                                 )}
                               </div>
                             </div>
-                            <ExternalLink 
-                              className="h-4 w-4 text-gray-400 ml-2 flex-shrink-0" 
+                            <ExternalLink
+                              className="h-4 w-4 text-gray-400 ml-2 flex-shrink-0"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 window.open(repo.html_url, '_blank');
@@ -391,8 +390,8 @@ export default function GithubConnect() {
                       </pre>
                     </div>
                     <div className="mt-4">
-                      <Button 
-                        variant="outline" 
+                      <Button
+                        variant="outline"
                         size="sm"
                         onClick={() => {
                           navigator.clipboard.writeText(selectedFile.content);
