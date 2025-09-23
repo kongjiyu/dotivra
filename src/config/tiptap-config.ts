@@ -18,6 +18,7 @@ import FontSize from "@/types/fontSize"; // Adjusted import path
 import { cn } from "@/lib/utils";
 import Paragraph from "@/lib/extensions/Paragraph"; // Import our custom paragraph extension
 import Heading from "@/lib/extensions/Heading"; // Import our custom heading extension
+import Mermaid from "@/lib/extensions/Mermaid"; // Import Mermaid extension
 
 // TipTap Editor Configuration
 export const getTipTapExtensions = () => [
@@ -87,6 +88,8 @@ export const getTipTapExtensions = () => [
     }),
     // Character count for status bar
     CharacterCount,
+    // Mermaid diagram support
+    Mermaid,
 ];
 
 // Editor Props Configuration

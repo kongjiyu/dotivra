@@ -28,9 +28,12 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        // Only accept Markdown files
-        if (!file.name.endsWith('.md')) {
-            alert('Please select a Markdown (.md) file');
+        // Accept Markdown and Mermaid files
+        const allowedExtensions = ['.md', '.mmd', '.mermaid'];
+        const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+
+        if (!allowedExtensions.includes(fileExtension)) {
+            alert('Please select a Markdown (.md) or Mermaid diagram (.mmd, .mermaid) file');
             return;
         }
 
@@ -38,7 +41,9 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
 
         // Auto-suggest title from filename
         if (!documentTitle) {
-            const suggestedTitle = file.name.replace('.md', '').replace(/[-_]/g, ' ');
+            const suggestedTitle = file.name
+                .replace(/\.(md|mmd|mermaid)$/i, '')
+                .replace(/[-_]/g, ' ');
             setDocumentTitle(suggestedTitle);
         }
     };
@@ -53,11 +58,19 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
         try {
             const reader = new FileReader();
             reader.onload = async (e) => {
-                const markdownContent = e.target?.result as string;
+                const fileContent = e.target?.result as string;
+                const fileExtension = selectedFile.name.toLowerCase().substring(selectedFile.name.lastIndexOf('.'));
 
                 try {
-                    // Convert Markdown to HTML using marked
-                    const htmlContent = await marked(markdownContent);
+                    let htmlContent = '';
+
+                    if (fileExtension === '.md') {
+                        // Convert Markdown to HTML using marked
+                        htmlContent = await marked(fileContent);
+                    } else if (fileExtension === '.mmd' || fileExtension === '.mermaid') {
+                        // Create HTML with Mermaid diagram
+                        htmlContent = `<div data-type="mermaid" data-chart="${fileContent.trim()}" data-theme="default"></div>`;
+                    }
 
                     if (htmlContent) {
                         onImport(htmlContent, documentTitle.trim());
@@ -68,8 +81,8 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
                         setIsOpen(false);
                     }
                 } catch (error) {
-                    console.error('Error converting markdown:', error);
-                    alert('Failed to process markdown file. Please try again.');
+                    console.error('Error processing file:', error);
+                    alert('Failed to process file. Please try again.');
                 } finally {
                     setIsImporting(false);
                 }
@@ -105,7 +118,7 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
                 <DialogHeader>
                     <DialogTitle>Import Document</DialogTitle>
                     <DialogDescription>
-                        Import a Markdown file to your project. Enter a title for the document and select a .md file.
+                        Import a Markdown file (.md) or Mermaid diagram file (.mmd, .mermaid) to your project. Enter a title for the document and select a file.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -127,20 +140,20 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
                     {/* File Upload */}
                     <div className="grid gap-2">
                         <label htmlFor="file" className="text-sm font-medium">
-                            Markdown File
+                            Markdown or Mermaid File
                         </label>
                         <div className="relative">
-                            <input
+                            <Input
                                 id="file"
                                 type="file"
-                                accept=".md"
+                                accept=".md,.mmd,.mermaid"
                                 onChange={handleFileSelect}
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                                 disabled={isImporting}
                             />
                             <div className={`flex items-center justify-center w-full h-24 border-2 border-dashed rounded-lg transition-colors ${selectedFile
-                                    ? 'border-green-300 bg-green-50'
-                                    : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+                                ? 'border-green-300 bg-green-50'
+                                : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
                                 } ${isImporting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
                                 <div className="text-center">
                                     {selectedFile ? (
@@ -152,8 +165,8 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
                                     ) : (
                                         <div className="flex flex-col items-center">
                                             <FolderOpen className="w-5 h-5 text-gray-400 mb-1" />
-                                            <span className="text-sm text-gray-600">Click to select .md file</span>
-                                            <span className="text-xs text-gray-500">Or drag and drop</span>
+                                            <span className="text-sm text-gray-600">Click to select file</span>
+                                            <span className="text-xs text-gray-500">.md, .mmd, .mermaid files</span>
                                         </div>
                                     )}
                                 </div>
