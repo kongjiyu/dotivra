@@ -1,28 +1,71 @@
 // src/components/dashboard/ProjectList.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Plus, FolderOpen, ExternalLink, Clock, FileText, Code, ChevronRight } from 'lucide-react';
-import { mockProjects } from '../../utils/mockData';
 import type { Project } from '../../types';
-import  AddProjectModal  from '../modal/addProject';
+import AddProjectModal from '../modal/addProject';
 
 interface ProjectListProps {
   onProjectClick: (project: Project) => void;
   onViewAllProjects?: () => void;
+  onNewProject?: () => void;
 }
 
+const ProjectList: React.FC<ProjectListProps> = ({ onProjectClick, onViewAllProjects, onNewProject }) => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
+  // Load projects from API
+  const loadProjects = async () => {
+    try {
+      console.log('🔄 Dashboard ProjectList: Loading projects from API...');
+      setLoading(true);
+      setError(null);
+      
+      const response = await fetch('http://localhost:3001/api/projects');
+      console.log('📡 Dashboard API Response status:', response.status);
+      
+      if (!response.ok) {
+        throw new Error('Failed to load projects');
+      }
+      
+      const data = await response.json();
+      console.log('📋 Dashboard received projects data:', data);
+      console.log('📦 Dashboard setting projects:', data.projects || []);
+      setProjects(data.projects || []);
+    } catch (err) {
+      console.error('❌ Dashboard error loading projects:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load projects');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-const ProjectList: React.FC<ProjectListProps> = ({ onProjectClick, onViewAllProjects }) => {
-  const [isModalOpen, setIsModalOpen] = React.useState(false);
+  // Load projects on component mount
+  useEffect(() => {
+    loadProjects();
+  }, []);
 
-  const handleCreateProject = async (projectData: {
+  const handleNewProjectClick = () => {
+    if (onNewProject) {
+      // Use parent's handler if provided
+      onNewProject();
+    } else {
+      // Fallback to local modal
+      setIsModalOpen(true);
+    }
+  };
+
+  const handleCreateProject = (projectData: {
     name: string;
     description: string;
     githubLink: string;
+    selectedRepo?: string;
   }) => {
     console.log('Creating new project:', projectData);
-
-  } 
+    // TODO: Implement actual project creation
+  }; 
   
   return (
     <div>
@@ -32,7 +75,7 @@ const ProjectList: React.FC<ProjectListProps> = ({ onProjectClick, onViewAllProj
           <p className="text-gray-600 text-sm mt-1">Your documentation projects</p>
         </div>
         <button
-          onClick={() => setIsModalOpen(true)}
+          onClick={handleNewProjectClick}
           className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all"
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -41,8 +84,38 @@ const ProjectList: React.FC<ProjectListProps> = ({ onProjectClick, onViewAllProj
       </div>
     
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-        <div className="divide-y divide-gray-100">
-          {mockProjects.map((project) => (
+        {loading ? (
+          <div className="text-center py-12">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Loading projects...</p>
+          </div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <h3 className="text-lg font-medium text-red-900 mb-2">Error Loading Projects</h3>
+            <p className="text-red-600 mb-4">{error}</p>
+            <button
+              onClick={loadProjects}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : projects.length === 0 ? (
+          <div className="text-center py-12">
+            <FolderOpen className="h-16 w-16 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No projects yet</h3>
+            <p className="text-gray-600 mb-6">Create your first project to get started with documentation</p>
+            <button
+              onClick={handleNewProjectClick}
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Your First Project
+            </button>
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {projects.map((project: Project) => (
             <div
               key={project.id}
               onClick={() => onProjectClick(project)}
@@ -63,7 +136,7 @@ const ProjectList: React.FC<ProjectListProps> = ({ onProjectClick, onViewAllProj
                         {project.name}
                       </h3>
                       <span className="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
-                        {project.userDocsCount + project.devDocsCount} docs
+                        {(project.userDocsCount || 0) + (project.devDocsCount || 0)} docs
                       </span>
                     </div>
                     
@@ -105,8 +178,9 @@ const ProjectList: React.FC<ProjectListProps> = ({ onProjectClick, onViewAllProj
                 </div>
               </div>
             </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
     <AddProjectModal
@@ -116,7 +190,7 @@ const ProjectList: React.FC<ProjectListProps> = ({ onProjectClick, onViewAllProj
       />
       
       {/* Footer with View All Projects button */}
-      {onViewAllProjects && mockProjects.length > 0 && (
+      {onViewAllProjects && projects.length > 0 && (
         <div className="mt-8 flex justify-center">
           <button
             onClick={onViewAllProjects}

@@ -1,7 +1,7 @@
 // src/components/project/AddDocumentModal.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { X } from 'lucide-react';
-import { mockTemplates } from '../../utils/mockData';
+import { templates } from '../../utils/mockData';
 import type { Template } from '../../types';
 
 interface CreateDocumentArgs {
@@ -38,7 +38,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
 
   // Show all templates regardless of category
   const relevantTemplates = useMemo(
-    () => mockTemplates,
+    () => templates,
     []
   );
 

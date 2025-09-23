@@ -1,16 +1,22 @@
 // src/components/project/ProjectHeader.tsx
 import React from 'react';
-import { ExternalLink, FolderOpen, Plus } from 'lucide-react';
+import { ExternalLink, FolderOpen, Plus, PencilLine } from 'lucide-react';
 import type { Project } from '../../types';
 
 interface ProjectHeaderProps {
   project: Project;
   onBackToDashboard: () => void;
   onAddDocument: () => void;
+  onEditProject?: () => void;
 }
 
-const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, onBackToDashboard: _onBackToDashboard, onAddDocument }) => {
-  const totalDocuments = project.userDocsCount + project.devDocsCount;
+const ProjectHeader: React.FC<ProjectHeaderProps> = ({
+  project,
+  onBackToDashboard: _onBackToDashboard,
+  onAddDocument,
+  onEditProject
+}) => {
+  const totalDocuments = (project.userDocsCount || 0) + (project.devDocsCount || 0);
 
   return (
     <div className="bg-white border-b border-gray-200">
@@ -21,19 +27,33 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({ project, onBackToDashboar
               <FolderOpen className="h-6 w-6 text-blue-600" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
-              <p className="mt-2 max-w-3xl text-base leading-relaxed text-gray-600">{project.description}</p>
-              <div className="mt-3">
-                <a
-                  href={project.githubLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center text-sm font-medium text-blue-600 transition-colors hover:text-blue-800"
-                >
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  <span className="truncate">{project.githubLink}</span>
-                </a>
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+                {onEditProject && (
+                  <button
+                    type="button"
+                    onClick={onEditProject}
+                    className="inline-flex items-center justify-center rounded-md p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                    aria-label="Edit project"
+                  >
+                    <PencilLine className="h-4 w-4" />
+                  </button>
+                )}
               </div>
+              <p className="mt-2 max-w-3xl text-base leading-relaxed text-gray-600">{project.description}</p>
+              {project.githubLink && (
+                <div className="mt-3">
+                  <a
+                    href={project.githubLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center text-sm font-medium text-blue-600 transition-colors hover:text-blue-800"
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    <span className="truncate">{project.githubLink}</span>
+                  </a>
+                </div>
+              )}
             </div>
           </div>
 
