@@ -1,6 +1,6 @@
 // src/components/dashboard/TemplateGrid.tsx
 import React from 'react';
-import { mockTemplates } from '../../utils/mockData';
+import { templates } from '../../utils/mockData';
 import type { Template } from '../../types';
 
 interface TemplateGridProps {
@@ -25,7 +25,7 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({ onTemplateClick, onExploreA
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {mockTemplates.map((template) => {
+        {templates.map((template) => {
           const Icon = template.icon;
           return (
             <div
