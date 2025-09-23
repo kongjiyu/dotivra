@@ -16,6 +16,10 @@ export interface AIContentOptions {
   onComplete?: () => void;
   /** Callback for each character during animation */
   onProgress?: (progress: number, totalLength: number) => void;
+  /** Whether this is preview content that should be highlighted */
+  isPreview?: boolean;
+  /** Unique ID for preview content tracking */
+  previewId?: string;
 }
 
 export interface StreamingOptions extends AIContentOptions {
@@ -41,6 +45,8 @@ export class AIContentWriter {
   private editor: Editor;
   private isAnimating: boolean = false;
   private animationController?: AbortController;
+  private originalContent: string = '';
+  private previewContentId: string | null = null;
 
   constructor(editor: Editor) {
     this.editor = editor;
@@ -242,6 +248,77 @@ export class AIContentWriter {
   }
 
   /**
+   * Create a preview version with highlighted AI content
+   */
+  async createPreviewWithAIContent(
+    aiContent: string,
+    options: AIContentOptions & ContentParseOptions = {}
+  ): Promise<{ originalContent: string; previewId: string }> {
+    // Store original content
+    this.originalContent = this.editor.getHTML();
+    
+    // Generate unique preview ID
+    this.previewContentId = `ai-preview-${Date.now()}`;
+    
+    // Insert AI content with preview highlighting
+    await this.writeContent(aiContent, {
+      ...options,
+      isPreview: true,
+      previewId: this.previewContentId,
+      parseMarkdown: true,
+      animate: true
+    });
+
+    return {
+      originalContent: this.originalContent,
+      previewId: this.previewContentId
+    };
+  }
+
+  /**
+   * Accept preview changes - remove highlighting and make permanent
+   */
+  acceptPreviewChanges(): void {
+    if (!this.previewContentId) return;
+
+    const previewElements = document.querySelectorAll(`[data-ai-content-id="${this.previewContentId}"]`);
+    previewElements.forEach(element => {
+      element.classList.remove('ai-preview-content');
+      element.classList.add('ai-generated-content');
+      element.removeAttribute('data-ai-content-id');
+
+      // Remove highlighting after brief moment
+      setTimeout(() => {
+        element.classList.remove('ai-generated-content');
+      }, 2000);
+    });
+
+    this.originalContent = '';
+    this.previewContentId = null;
+  }
+
+  /**
+   * Reject preview changes - restore original content
+   */
+  rejectPreviewChanges(): void {
+    if (!this.originalContent) return;
+
+    // Remove preview highlighting
+    if (this.previewContentId) {
+      const previewElements = document.querySelectorAll(`[data-ai-content-id="${this.previewContentId}"]`);
+      previewElements.forEach(element => {
+        element.remove();
+      });
+    }
+
+    // Restore original content
+    this.editor.commands.setContent(this.originalContent, { emitUpdate: false });
+    
+    this.originalContent = '';
+    this.previewContentId = null;
+  }
+
+  /**
    * Private method to set cursor position
    */
   private setPosition(position: AIContentOptions['position']): void {
@@ -269,6 +346,51 @@ export class AIContentWriter {
     } else {
       this.editor.commands.insertContent(content);
     }
+
+    // Apply preview highlighting if needed
+    this.applyPreviewHighlighting();
+  }
+
+  /**
+   * Apply preview highlighting to recently inserted content
+   */
+  private applyPreviewHighlighting(): void {
+    if (!this.previewContentId) return;
+
+    // Find recently inserted elements and apply highlighting
+    setTimeout(() => {
+      const proseMirrorElement = this.editor.options.element?.querySelector('.ProseMirror');
+      if (!proseMirrorElement) return;
+
+      const walker = document.createTreeWalker(
+        proseMirrorElement,
+        NodeFilter.SHOW_ELEMENT,
+        null
+      );
+
+      let node;
+      const elementsToHighlight: HTMLElement[] = [];
+
+      while (node = walker.nextNode()) {
+        const element = node as HTMLElement;
+        if (element.tagName && (
+          element.tagName.match(/^H[1-6]$/) ||
+          element.tagName === 'P' ||
+          element.tagName === 'LI' ||
+          element.tagName === 'UL' ||
+          element.tagName === 'OL' ||
+          element.tagName === 'BLOCKQUOTE'
+        ) && !element.hasAttribute('data-ai-content-id')) {
+          elementsToHighlight.push(element);
+        }
+      }
+
+      // Apply highlighting to new elements
+      elementsToHighlight.forEach(element => {
+        element.classList.add('ai-preview-content');
+        element.setAttribute('data-ai-content-id', this.previewContentId!);
+      });
+    }, 100);
   }
 
   /**

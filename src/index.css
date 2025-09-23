@@ -301,3 +301,133 @@ button:focus-visible {
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
   background-color: rgba(0,0,0,0.28);
 }
+
+/* AI Generated Content Highlighting */
+.ai-generated-content {
+  position: relative;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(16, 185, 129, 0.08) 100%);
+  border-left: 3px solid #10b981;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  margin: 0.25rem 0;
+  transition: all 0.3s ease;
+}
+
+.ai-generated-content::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(16, 185, 129, 0.12) 100%);
+  border-radius: 4px;
+  pointer-events: none;
+  animation: ai-content-pulse 2s ease-in-out infinite;
+}
+
+/* AI Preview Content - more prominent highlighting */
+.ai-preview-content {
+  position: relative;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(16, 185, 129, 0.15) 100%);
+  border: 2px solid #10b981;
+  border-radius: 6px;
+  padding: 0.5rem;
+  margin: 0.5rem 0;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.2);
+}
+
+.ai-preview-content::before {
+  content: 'AI Generated Content - Preview';
+  position: absolute;
+  top: -12px;
+  left: 12px;
+  background: #10b981;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  z-index: 10;
+}
+
+@keyframes ai-content-pulse {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes ai-content-highlight {
+  0% {
+    background: linear-gradient(135deg, rgba(147, 51, 234, 0.2) 0%, rgba(59, 130, 246, 0.2) 100%);
+    box-shadow: 0 0 0 2px rgba(147, 51, 234, 0.3);
+  }
+  100% {
+    background: linear-gradient(135deg, rgba(147, 51, 234, 0.05) 0%, rgba(59, 130, 246, 0.05) 100%);
+    box-shadow: none;
+  }
+}
+
+@keyframes ai-content-fade {
+  0% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes ai-content-flash {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  10% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  20% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1);
+  }
+}
+
+/* AI Content highlighting for specific elements */
+.ai-generated-content h1,
+.ai-generated-content h2,
+.ai-generated-content h3,
+.ai-generated-content h4,
+.ai-generated-content h5,
+.ai-generated-content h6,
+.ai-preview-content h1,
+.ai-preview-content h2,
+.ai-preview-content h3,
+.ai-preview-content h4,
+.ai-preview-content h5,
+.ai-preview-content h6 {
+  color: #059669;
+  font-weight: 600;
+}
+
+.ai-generated-content p,
+.ai-preview-content p {
+  position: relative;
+}
+
+.ai-generated-content ul,
+.ai-generated-content ol,
+.ai-preview-content ul,
+.ai-preview-content ol {
+  border-left: 2px solid rgba(34, 197, 94, 0.3);
+  padding-left: 1rem;
+}

@@ -25,9 +25,7 @@ const Tiptap = ({
     const [isReady, setIsReady] = useState(false);
     // const [linkPreview, setLinkPreview] = useState... // Temporarily disabled
     const initialAppliedRef = useRef(false); // NEW
-    console.log("Rendering Tiptap with initialContent:", initialContent);
     // Create editor configuration using the config file
-    //FIXME: adjust default content, prevent undo feature undo initial content set
     const editorConfig = useMemo(() =>
         createTipTapConfig({
             content: initialContent,
@@ -47,6 +45,11 @@ const Tiptap = ({
 
 
     const editor = useEditor(editorConfig);
+
+    // Debug onOpenChat prop
+    useEffect(() => {
+        console.log('TipTap onOpenChat prop:', onOpenChat);
+    }, [onOpenChat]);
 
     // Temporarily disable hover event listeners to prevent corruption
     // TODO: Re-implement with safer event handling
