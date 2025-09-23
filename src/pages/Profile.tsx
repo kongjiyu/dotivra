@@ -1,7 +1,6 @@
 // src/pages/Profile.tsx - Main profile page (moved from components)
 import React from 'react';
 import { ProfileHeader, ProfileInfoCard, RecentProjectsCard, DangerZoneCard } from '../components/profile';
-import { mockProjects } from '../utils/mockData';
 import type { Project } from '../types';
 
 const Profile: React.FC = () => {
@@ -14,8 +13,8 @@ const Profile: React.FC = () => {
     avatar: undefined
   };
 
-  // Filter recent projects (showing 6 most recent)
-  const recentProjects = mockProjects.slice(0, 6);
+  // Recent projects (will be loaded from real data)
+  const recentProjects: Project[] = [];
 
   // Event handlers
   const handleViewAllProjects = () => {

@@ -192,6 +192,98 @@ app.get('/api/github/repository/:owner/:repo/file', async (req, res) => {
   }
 });
 
+// ============================================================================
+// PROJECT MANAGEMENT ENDPOINTS
+// ============================================================================
+
+// In-memory storage for projects (replace with database later)
+let projects = [];
+let projectIdCounter = 1;
+
+// Create a new project
+app.post('/api/projects', async (req, res) => {
+  try {
+    console.log('🔥 POST /api/projects received:', req.body);
+    const { name, description, githubLink, selectedRepo, installationId } = req.body;
+    
+    // Validate required fields
+    if (!name || !description) {
+      console.log('❌ Validation failed: missing name or description');
+      return res.status(400).json({ error: 'Name and description are required' });
+    }
+
+    // Create the project object
+    const project = {
+      id: projectIdCounter++,
+      name: name.trim(),
+      description: description.trim(),
+      githubLink: githubLink || null,
+      selectedRepo: selectedRepo || null,
+      installationId: installationId || null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      documents: [], // Will hold project documents
+      status: 'active'
+    };
+
+    // Add to in-memory storage
+    projects.push(project);
+
+    console.log('✅ Project created:', project.name);
+    
+    res.status(201).json({
+      success: true,
+      project
+    });
+  } catch (error) {
+    console.error('Error creating project:', error);
+    res.status(500).json({
+      error: 'Failed to create project',
+      details: error.message
+    });
+  }
+});
+
+// Get all projects
+app.get('/api/projects', (req, res) => {
+  try {
+    console.log('📋 GET /api/projects - returning', projects.length, 'projects');
+    res.json({
+      success: true,
+      projects: projects.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    });
+  } catch (error) {
+    console.error('Error fetching projects:', error);
+    res.status(500).json({
+      error: 'Failed to fetch projects',
+      details: error.message
+    });
+  }
+});
+
+// Get a specific project
+app.get('/api/projects/:id', (req, res) => {
+  try {
+    const projectId = parseInt(req.params.id);
+    const project = projects.find(p => p.id === projectId);
+    
+    if (!project) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    
+    res.json({
+      success: true,
+      project
+    });
+  } catch (error) {
+    console.error('Error fetching project:', error);
+    res.status(500).json({
+      error: 'Failed to fetch project',
+      details: error.message
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
