@@ -37,7 +37,8 @@ import {
     CheckSquare,
     IndentDecrease,
     IndentIncrease,
-    Network
+    Network,
+    Eraser
 } from "lucide-react";
 
 const FONT_FAMILIES = [
@@ -177,15 +178,6 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                     title="Strikethrough"
                 >
                     <Strikethrough className="w-4 h-4" />
-                </Button>
-
-                <Button variant="outline" size="sm"
-                    onClick={() => editor.chain().focus().toggleCode().run()}
-                    className={`h-8 w-8 p-0 ${isActive('code') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                        }`}
-                    title="Inline Code"
-                >
-                    <Code className="w-4 h-4" />
                 </Button>
 
                 <div className="w-px h-6 bg-gray-300 mx-1"></div>
@@ -497,15 +489,31 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                             <Highlighter className="w-4 h-4" />
                         </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-64 p-4" side="bottom" align="center">
-                        <div className="space-y-3">
+                    <PopoverContent className="w-80 p-4" side="bottom" align="center">
+                        <div className="space-y-4">
                             <h4 className="text-sm font-medium text-gray-700">Background Color</h4>
+
+                            {/* Context Detection */}
+                            <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
+                                {editor?.isActive('tableCell')
+                                    ? "💡 You're in a table cell - colors will be applied to the cell background"
+                                    : "💡 Colors will be applied as text highlighting"
+                                }
+                            </div>
 
                             {/* Default Background */}
                             <div className="flex items-center gap-2">
                                 <button
                                     className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
-                                    onClick={() => editor?.chain().focus().unsetHighlight().run()}
+                                    onClick={() => {
+                                        if (editor?.isActive('tableCell')) {
+                                            // Remove cell background
+                                            editor?.chain().focus().updateAttributes('tableCell', { style: '' }).run();
+                                        } else {
+                                            // Remove text highlighting
+                                            editor?.chain().focus().unsetHighlight().run();
+                                        }
+                                    }}
                                     title="No Background"
                                 >
                                     ✕
@@ -534,12 +542,51 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                                 backgroundColor: `${color}80`, // 80 = ~50% opacity for backgrounds
                                                 borderColor: color
                                             }}
-                                            onClick={() => editor?.chain().focus().setHighlight({ color }).run()}
+                                            onClick={() => {
+                                                if (editor?.isActive('tableCell')) {
+                                                    // Apply to table cell background
+                                                    editor?.chain().focus().updateAttributes('tableCell', {
+                                                        style: `background-color: ${color}`
+                                                    }).run();
+                                                } else {
+                                                    // Apply as text highlighting
+                                                    editor?.chain().focus().setHighlight({ color }).run();
+                                                }
+                                            }}
                                             title={name}
                                         />
                                     ))}
                                 </div>
                             </div>
+
+                            {/* Additional Table Cell Colors */}
+                            {editor?.isActive('tableCell') && (
+                                <div>
+                                    <p className="text-xs text-gray-500 mb-2">Additional Cell Colors</p>
+                                    <div className="grid grid-cols-6 gap-1">
+                                        {[
+                                            { color: '#E0E7FF', name: 'Light Indigo' },
+                                            { color: '#FCE7F3', name: 'Light Pink' },
+                                            { color: '#F0FDF4', name: 'Very Light Green' },
+                                            { color: '#FEF7CD', name: 'Very Light Yellow' },
+                                            { color: '#FDF4FF', name: 'Very Light Purple' },
+                                            { color: '#F8FAFC', name: 'Very Light Gray' }
+                                        ].map(({ color, name }) => (
+                                            <button
+                                                key={color}
+                                                className="w-8 h-8 rounded border border-gray-300 hover:scale-110 transition-transform"
+                                                style={{ backgroundColor: color }}
+                                                onClick={() => {
+                                                    editor?.chain().focus().updateAttributes('tableCell', {
+                                                        style: `background-color: ${color}`
+                                                    }).run();
+                                                }}
+                                                title={name}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </PopoverContent>
                 </Popover>
@@ -667,10 +714,10 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                 </Button>
                 <Button variant="outline" size="sm"
                     onClick={() => tool.font?.clearMarks()}
-                    className="px-3 h-8 bg-white hover:bg-gray-50 text-sm"
+                    className="h-8 w-8 p-0 bg-white hover:bg-gray-50"
                     title="Clear All Formatting"
                 >
-                    Clear Format
+                    <Eraser className="w-4 h-4" />
                 </Button>
                 <div className="w-px h-6 bg-gray-300 mx-1"></div>
             </div>

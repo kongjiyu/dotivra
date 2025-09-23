@@ -11,6 +11,7 @@ interface TiptapProps {
     onUpdate?: (content: string) => void;
     onEditorReady?: (editor: any) => void;
     className?: string;
+    onOpenChat?: (message?: string) => void;
 }
 
 const Tiptap = ({
@@ -18,7 +19,8 @@ const Tiptap = ({
     editable = true,
     onUpdate,
     onEditorReady,
-    className = ""
+    className = "",
+    onOpenChat
 }: TiptapProps) => {
     const [isReady, setIsReady] = useState(false);
     // const [linkPreview, setLinkPreview] = useState... // Temporarily disabled
@@ -180,7 +182,7 @@ const Tiptap = ({
 
                     {/* Document Content */}
                     <div className="min-h-0">
-                        <DocumentContext editor={editor}>
+                        <DocumentContext editor={editor} onOpenChat={onOpenChat}>
                             {/* Any additional overlay content can be passed as children */}
                         </DocumentContext>
                     </div>

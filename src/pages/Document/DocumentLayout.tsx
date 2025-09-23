@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -30,12 +30,23 @@ export default function DocumentLayout({
         setDocumentTitle,
         documentContent,
         setDocumentContent,
-        currentEditor
+        currentEditor,
+        setOnOpenChat
     } = useDocument();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [chatOpen, setChatOpen] = useState(false);
     const [isAIGenerating, setIsAIGenerating] = useState(false);
+    const [initialChatMessage, setInitialChatMessage] = useState<string>('');
     const navigate = useNavigate();
+
+    useEffect(() => {
+        setOnOpenChat((message?: string) => {
+            if (message) {
+                setInitialChatMessage(message);
+            }
+            setChatOpen(true);
+        });
+    }, [setOnOpenChat]);
 
     const handleTabChange = (tab: string) => {
         const basePath = '/document';
@@ -200,8 +211,12 @@ export default function DocumentLayout({
                 <div className="h-full p-4">
                     <ChatSidebar
                         open={chatOpen}
-                        onClose={() => setChatOpen(false)}
+                        onClose={() => {
+                            setChatOpen(false);
+                            setInitialChatMessage('');
+                        }}
                         editor={currentEditor}
+                        initialMessage={initialChatMessage}
                         suggestions={[
                             "Strengthen success metrics",
                             "Review executive summary",
