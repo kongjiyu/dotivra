@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
 interface DocumentContextType {
@@ -16,6 +16,10 @@ interface DocumentContextType {
     setDocumentId: (id: string) => void;
     onOpenChat?: (message?: string) => void;
     setOnOpenChat: (fn: (message?: string) => void) => void;
+    showAIActions?: (content: string, beforeContent: string) => void;
+    setShowAIActions: (fn: (content: string, beforeContent: string) => void) => void;
+    chatSidebarOpen: boolean;
+    setChatSidebarOpen: (open: boolean) => void;
 }
 
 const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
@@ -32,6 +36,13 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
     const [isDocumentModified, setIsDocumentModified] = useState<boolean>(false);
     const [documentId, setDocumentId] = useState<string>('');
     const [onOpenChat, setOnOpenChat] = useState<((message?: string) => void) | undefined>(undefined);
+    const [showAIActions, setShowAIActions] = useState<((content: string, beforeContent: string) => void) | undefined>(undefined);
+    const [chatSidebarOpen, setChatSidebarOpen] = useState<boolean>(false);
+
+    // Add debugging for onOpenChat changes
+    useEffect(() => {
+        console.log('DocumentContext onOpenChat changed:', onOpenChat);
+    }, [onOpenChat]);
 
     const handleTitleChange = (title: string) => {
         setDocumentTitle(title);
@@ -63,6 +74,10 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
         setDocumentId,
         onOpenChat,
         setOnOpenChat,
+        showAIActions,
+        setShowAIActions,
+        chatSidebarOpen,
+        setChatSidebarOpen,
     };
 
     return (

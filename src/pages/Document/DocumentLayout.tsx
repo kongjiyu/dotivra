@@ -31,22 +31,30 @@ export default function DocumentLayout({
         documentContent,
         setDocumentContent,
         currentEditor,
-        setOnOpenChat
+        setOnOpenChat,
+        chatSidebarOpen,
+        setChatSidebarOpen
     } = useDocument();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
-    const [chatOpen, setChatOpen] = useState(false);
     const [isAIGenerating, setIsAIGenerating] = useState(false);
     const [initialChatMessage, setInitialChatMessage] = useState<string>('');
     const navigate = useNavigate();
 
+    // Remove the local chatOpen state and use context instead
+
     useEffect(() => {
-        setOnOpenChat((message?: string) => {
+        const chatFunction = (message?: string) => {
+            console.log('DocumentLayout onOpenChat called with:', message);
             if (message) {
                 setInitialChatMessage(message);
             }
-            setChatOpen(true);
-        });
-    }, [setOnOpenChat]);
+            setChatSidebarOpen(true);
+            console.log('Chat should now be open, chatSidebarOpen state:', true);
+        };
+
+        console.log('Setting up onOpenChat function in DocumentLayout');
+        setOnOpenChat(chatFunction);
+    }, [setOnOpenChat, setChatSidebarOpen]);
 
     const handleTabChange = (tab: string) => {
         const basePath = '/document';
@@ -76,7 +84,7 @@ export default function DocumentLayout({
     };
 
     const handleAIGenerate = () => {
-        setChatOpen(!chatOpen);
+        setChatSidebarOpen(!chatSidebarOpen);
         setIsAIGenerating(true);
         setTimeout(() => setIsAIGenerating(false), 600);
     };
@@ -207,12 +215,12 @@ export default function DocumentLayout({
             </div>
 
             {/* Fixed Chat Sidebar overlay */}
-            <div className={`fixed top-[136px] right-0 h-[calc(100vh-136px)] w-[28rem] border-l border-gray-200 bg-white shadow-xl transition-transform duration-200 z-20 ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className={`fixed top-[136px] right-0 h-[calc(100vh-136px)] w-[28rem] border-l border-gray-200 bg-white shadow-xl transition-transform duration-200 z-20 ${chatSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                 <div className="h-full p-4">
                     <ChatSidebar
-                        open={chatOpen}
+                        open={chatSidebarOpen}
                         onClose={() => {
-                            setChatOpen(false);
+                            setChatSidebarOpen(false);
                             setInitialChatMessage('');
                         }}
                         editor={currentEditor}
@@ -228,7 +236,7 @@ export default function DocumentLayout({
             </div>
 
             {/* Fixed AI Chat Icon */}
-            {!chatOpen && (
+            {!chatSidebarOpen && (
                 <Button
                     onClick={handleAIGenerate}
                     disabled={isAIGenerating}

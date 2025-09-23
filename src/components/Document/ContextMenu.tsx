@@ -189,10 +189,30 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                             size="sm"
                             className="w-full justify-start px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700"
                             onClick={() => executeCommand(() => {
-                                const selection = window.getSelection()
-                                if (selection && onOpenChat) {
-                                    const selectedText = selection.toString()
-                                    onOpenChat(`Please help me with this content: "${selectedText}"`)
+                                // Get selected text from TipTap editor instead of window selection
+                                const { state } = editor;
+                                const { from, to } = state.selection;
+                                let selectedText = '';
+
+                                if (from !== to) {
+                                    // There's a selection - get the text content
+                                    selectedText = state.doc.textBetween(from, to, ' ');
+                                } else {
+                                    // No selection - try window.getSelection as fallback
+                                    const selection = window.getSelection();
+                                    selectedText = selection ? selection.toString() : '';
+                                }
+                                console.log('Selected text:', selectedText);
+                                console.log('onOpenChat function:', onOpenChat);
+
+                                if (selectedText.trim() && onOpenChat) {
+                                    console.log('Calling onOpenChat with selected text');
+                                    onOpenChat(`Please help me with this content: "${selectedText.trim()}"`);
+                                } else if (onOpenChat) {
+                                    console.log('Calling onOpenChat with default message');
+                                    onOpenChat('Please help me with this document.');
+                                } else {
+                                    console.log('onOpenChat is not available');
                                 }
                             })}
                         >
@@ -494,10 +514,30 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                                 size="sm"
                                 className="w-full justify-start px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700"
                                 onClick={() => executeCommand(() => {
-                                    const selection = window.getSelection()
-                                    if (selection && onOpenChat) {
-                                        const selectedText = selection.toString()
-                                        onOpenChat(`Please help me with this content: "${selectedText}"`)
+                                    // Get selected text from TipTap editor instead of window selection
+                                    const { state } = editor;
+                                    const { from, to } = state.selection;
+                                    let selectedText = '';
+
+                                    if (from !== to) {
+                                        // There's a selection - get the text content
+                                        selectedText = state.doc.textBetween(from, to, ' ');
+                                    } else {
+                                        // No selection - try window.getSelection as fallback
+                                        const selection = window.getSelection();
+                                        selectedText = selection ? selection.toString() : '';
+                                    }
+                                    console.log('Selected text (general):', selectedText);
+                                    console.log('onOpenChat function (general):', onOpenChat);
+
+                                    if (selectedText.trim() && onOpenChat) {
+                                        console.log('Calling onOpenChat with selected text (general)');
+                                        onOpenChat(`Please help me with this content: "${selectedText.trim()}"`);
+                                    } else if (onOpenChat) {
+                                        console.log('Calling onOpenChat with default message (general)');
+                                        onOpenChat('Please help me with this document.');
+                                    } else {
+                                        console.log('onOpenChat is not available (general)');
                                     }
                                 })}
                             >

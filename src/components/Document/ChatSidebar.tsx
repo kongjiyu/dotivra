@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Sparkles, SendHorizonal, Wand2 } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 import { writeAIContent, streamAIContent } from "@/utils/aiContentWriter";
-import AIPreviewModal from "./AIPreviewModal";
+import { useDocument } from "@/context/DocumentContext";
 
 export type ChatMessage = {
     id: string;
@@ -37,12 +37,11 @@ export default function ChatSidebar({
     const [input, setInput] = useState("");
     const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
-    const [showPreviewModal, setShowPreviewModal] = useState(false);
-    const [previewContent, setPreviewContent] = useState("");
-    const [isRegenerating, setIsRegenerating] = useState(false);
-    const [lastPrompt, setLastPrompt] = useState("");
     const listRef = useRef<HTMLDivElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+
+    // Get AI actions function from document context
+    const { showAIActions, documentContent } = useDocument();
 
     // Combine external messages (if any) with internal state
     const messages = useMemo(() => externalMessages ?? internalMessages, [externalMessages, internalMessages]);
@@ -105,85 +104,29 @@ export default function ChatSidebar({
         if (!editor) return;
 
         try {
-            // Insert the content into the editor with animation
-            await insertContentToEditor(content, {
+            // Store the content before AI insertion for potential undo
+            const beforeContent = documentContent;
+
+            // Insert the content as a preview with highlighting
+            await insertPreviewContentToEditor(content, {
                 animate: true,
                 parseMarkdown: true,
                 position: 'current'
             });
 
-            // Store the content and show the modal
-            setPreviewContent(content);
-            setShowPreviewModal(true);
+            // Show the AI action container after content insertion is complete
+            // Adding a small delay to ensure highlighting is applied first
+            setTimeout(() => {
+                if (showAIActions) {
+                    showAIActions(content, beforeContent);
+                }
+            }, 200);
         } catch (error) {
             console.error('Error showing preview in editor:', error);
         }
     };
 
-    const handleAcceptPreview = () => {
-        // Content is already in the editor, just close the modal
-        setShowPreviewModal(false);
-        setPreviewContent("");
-
-        // Update chat to show acceptance
-        const confirmMsg: ChatMessage = {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: "✅ AI content accepted and added to your document.",
-            timestamp: Date.now(),
-        };
-        setInternalMessages(prev => [...prev, confirmMsg]);
-    };
-
-    const handleRejectPreview = () => {
-        // Undo the content insertion
-        if (editor) {
-            editor.commands.undo();
-        }
-
-        setShowPreviewModal(false);
-        setPreviewContent("");
-
-        // Update chat to show rejection
-        const rejectMsg: ChatMessage = {
-            id: crypto.randomUUID(),
-            role: "assistant",
-            content: "❌ AI content rejected. No changes made to your document.",
-            timestamp: Date.now(),
-        };
-        setInternalMessages(prev => [...prev, rejectMsg]);
-    };
-
-    const handleRegenerateContent = async () => {
-        if (!lastPrompt || !editor) return;
-
-        setIsRegenerating(true);
-
-        try {
-            // Undo the current content first
-            editor.commands.undo();
-
-            // Generate new content with the same prompt
-            const newContent = await generateAIContent(lastPrompt);
-
-            // Insert the new content
-            await insertContentToEditor(newContent, {
-                animate: true,
-                parseMarkdown: true,
-                position: 'current'
-            });
-
-            // Update the preview content
-            setPreviewContent(newContent);
-
-        } catch (error) {
-            console.error('Error regenerating content:', error);
-        } finally {
-            setIsRegenerating(false);
-        }
-    };
-
-    const insertContentToEditor = async (content: string, options: {
+    const insertPreviewContentToEditor = async (content: string, options: {
         animate?: boolean;
         position?: 'current' | 'end' | 'start';
         parseMarkdown?: boolean;
@@ -193,6 +136,10 @@ export default function ChatSidebar({
         const { animate = true, position = 'current', parseMarkdown = true } = options;
 
         try {
+            // Mark the current position before inserting content
+            const startPos = editor.state.selection.from;
+
+            // Insert the content normally first
             if (animate) {
                 await streamAIContent(editor, content, {
                     position,
@@ -207,17 +154,76 @@ export default function ChatSidebar({
                     focus: true
                 });
             }
+
+            // After content insertion, add persistent green highlighting
+            setTimeout(() => {
+                const endPos = editor.state.selection.from;
+
+                // Select the inserted content range
+                if (endPos > startPos) {
+                    editor.commands.setTextSelection({ from: startPos, to: endPos });
+
+                    // Apply preview highlighting using CSS class
+                    const editorElement = editor.options.element;
+                    if (editorElement) {
+                        const proseMirrorElement = editorElement.querySelector('.ProseMirror');
+                        if (proseMirrorElement) {
+                            // Create a unique identifier for this AI content
+                            const aiContentId = `ai-content-${Date.now()}`;
+
+                            // Get all text nodes in the selection
+                            const walker = document.createTreeWalker(
+                                proseMirrorElement,
+                                NodeFilter.SHOW_ELEMENT,
+                                null
+                            );
+
+                            let node;
+                            const elementsToHighlight: HTMLElement[] = [];
+
+                            // Find elements that contain the cursor position
+                            while (node = walker.nextNode()) {
+                                const element = node as HTMLElement;
+                                if (element.tagName && (
+                                    element.tagName.match(/^H[1-6]$/) ||
+                                    element.tagName === 'P' ||
+                                    element.tagName === 'LI' ||
+                                    element.tagName === 'UL' ||
+                                    element.tagName === 'OL' ||
+                                    element.tagName === 'BLOCKQUOTE'
+                                )) {
+                                    // Check if this element was just inserted
+                                    const elementPos = editor.view.posAtDOM(element, 0);
+                                    if (elementPos >= startPos && elementPos <= endPos) {
+                                        elementsToHighlight.push(element);
+                                    }
+                                }
+                            }
+
+                            // Apply highlighting to found elements
+                            elementsToHighlight.forEach(element => {
+                                element.classList.add('ai-preview-content');
+                                element.setAttribute('data-ai-content-id', aiContentId);
+                            });
+
+                            // Store the AI content ID globally for later cleanup
+                            (window as any).currentAIContentId = aiContentId;
+                        }
+                    }
+
+                    // Position cursor at the end of inserted content
+                    editor.commands.setTextSelection(endPos);
+                }
+            }, 100);
+
         } catch (error) {
-            console.error('Error inserting content to editor:', error);
+            console.error('Error inserting preview content to editor:', error);
         }
     };
 
     const handleSend = async () => {
         const text = input.trim();
         if (!text) return;
-
-        // Store the prompt for potential regeneration
-        setLastPrompt(text);
 
         // Add user message
         const userMsg: ChatMessage = {
@@ -246,7 +252,7 @@ export default function ChatSidebar({
                 const assistantMsg: ChatMessage = {
                     id: crypto.randomUUID(),
                     role: "assistant",
-                    content: "✨ AI content preview shown in document. Review and choose your action in the modal above.",
+                    content: "✨ AI content preview generated and highlighted in your document. Review the green-highlighted content and use the action container to accept, reject, or regenerate.",
                     timestamp: Date.now(),
                 };
 
@@ -314,7 +320,7 @@ export default function ChatSidebar({
                                 <div ref={messagesEndRef} />
 
                                 {/* Loading indicator */}
-                                {(isGenerating || isRegenerating) && (
+                                {isGenerating && (
                                     <div className="flex justify-start">
                                         <div className="bg-gradient-to-r from-purple-50 to-blue-50 text-gray-900 border-2 border-purple-200 rounded-lg px-4 py-3 max-w-[85%] text-[0.95rem] leading-relaxed">
                                             <div className="flex items-center space-x-3">
@@ -324,7 +330,7 @@ export default function ChatSidebar({
                                                     <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                                                 </div>
                                                 <span className="text-sm font-medium text-purple-700">
-                                                    {isRegenerating ? 'AI is regenerating content...' : 'AI is thinking...'}
+                                                    AI is thinking...
                                                 </span>
                                             </div>
                                         </div>
@@ -392,16 +398,6 @@ export default function ChatSidebar({
                     </div>
                 </CardContent>
             </Card>
-
-            {/* AI Preview Modal */}
-            <AIPreviewModal
-                open={showPreviewModal}
-                onAccept={handleAcceptPreview}
-                onReject={handleRejectPreview}
-                onRegenerate={handleRegenerateContent}
-                contentPreview={previewContent}
-                isRegenerating={isRegenerating}
-            />
         </div>
     );
 }
