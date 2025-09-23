@@ -8,7 +8,7 @@ interface Font {
     
     clearColor: () => boolean;
     
-    link:(href: string, openInNewTab?: boolean) => boolean;
+    link:(href: string, text?: string, openInNewTab?: boolean) => boolean;
     
     unlink: () => boolean;
     
@@ -45,9 +45,26 @@ const font: Font = {
         }
         return false;
     },
-    link(href: string): boolean {
+    link(href: string, text?: string): boolean {
         if (this.editor) {
-            return this.editor.chain().focus().setLink({ href: href }).run();
+            const { from, to } = this.editor.state.selection;
+            
+            if (text && from === to) {
+                // No selection and custom text provided - insert new content
+                return this.editor.chain().focus().insertContent(`<a href="${href}">${text}</a>`).run();
+            } else if (text && from !== to) {
+                // Selection exists and custom text provided - replace with custom text
+                return this.editor.chain().focus().insertContent(`<a href="${href}">${text}</a>`).run();
+            } else {
+                // Default behavior - apply link to selection or insert URL as text
+                if (from === to) {
+                    // No selection - insert URL as text with link
+                    return this.editor.chain().focus().insertContent(`<a href="${href}">${href}</a>`).run();
+                } else {
+                    // Apply link to current selection
+                    return this.editor.chain().focus().setLink({ href: href }).run();
+                }
+            }
         }
         
         return false;

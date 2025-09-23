@@ -1,0 +1,1048 @@
+/* Reset editor base so headings use root-relative sizing */
+.tiptap { 
+  font-size: 1rem !important; 
+  line-height: 1.5; 
+}
+
+/* Default paragraph styling - 18px Times New Roman */
+.tiptap p {
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  margin: 0.5em 0;
+}
+
+.tiptap h1 { font-size: 2rem;    font-weight: 700; line-height: 1.1; margin: 2rem 0 0.75rem; }
+.tiptap h2 { font-size: 1.5rem;  font-weight: 600;                 margin: 1.5rem 0 0.5rem;  }
+.tiptap h3 { font-size: 1.17rem; font-weight: 600;                 margin: 1.25rem 0 0.5rem; }
+.tiptap h4 { font-size: 1rem;    font-weight: 600;                 margin: 1rem 0 0.5rem;    }
+.tiptap h5 { font-size: .83rem;  font-weight: 600;                 margin: .75rem 0 0.5rem;  }
+.tiptap h6 { font-size: .67rem;  font-weight: 600;                 margin: .5rem  0 0.5rem;  }
+
+/* Blockquote styling with vertical line */
+.tiptap blockquote {
+  margin: 1.5em 0;
+  padding: 0.5em 0 0.5em 1.2em;
+  position: relative;
+  color: #4B5563; /* Slate gray */
+  font-style: normal;
+  border: none;
+}
+
+/* Vertical line styling */
+.tiptap blockquote::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background-color: #c3cde3; /* Light Cloud Blue vertical line */
+  border-radius: 2px;
+}
+
+/* Style for text inside blockquote */
+.tiptap blockquote p {
+  margin: 0;
+}
+
+/* Controlled indentation support for paragraphs and headings - maximum 21 levels */
+/* This prevents content overflow while still providing extensive indentation options */
+.tiptap p[data-indent],
+.tiptap h1[data-indent],
+.tiptap h2[data-indent],
+.tiptap h3[data-indent],
+.tiptap h4[data-indent],
+.tiptap h5[data-indent],
+.tiptap h6[data-indent] {
+  /* The margin-left is set via inline style attribute from the extension */
+  /* Maximum indentation is 21 levels = 42rem = ~336px to prevent overflow */
+  transition: margin-left 0.2s ease;
+}
+
+/* CSS fallback rules for common indentation levels (1-21) */
+/* These provide better performance for the most commonly used levels */
+.tiptap p[data-indent="1"], .tiptap h1[data-indent="1"], .tiptap h2[data-indent="1"], .tiptap h3[data-indent="1"], .tiptap h4[data-indent="1"], .tiptap h5[data-indent="1"], .tiptap h6[data-indent="1"] { margin-left: 2rem; }
+.tiptap p[data-indent="2"], .tiptap h1[data-indent="2"], .tiptap h2[data-indent="2"], .tiptap h3[data-indent="2"], .tiptap h4[data-indent="2"], .tiptap h5[data-indent="2"], .tiptap h6[data-indent="2"] { margin-left: 4rem; }
+.tiptap p[data-indent="3"], .tiptap h1[data-indent="3"], .tiptap h2[data-indent="3"], .tiptap h3[data-indent="3"], .tiptap h4[data-indent="3"], .tiptap h5[data-indent="3"], .tiptap h6[data-indent="3"] { margin-left: 6rem; }
+.tiptap p[data-indent="4"], .tiptap h1[data-indent="4"], .tiptap h2[data-indent="4"], .tiptap h3[data-indent="4"], .tiptap h4[data-indent="4"], .tiptap h5[data-indent="4"], .tiptap h6[data-indent="4"] { margin-left: 8rem; }
+.tiptap p[data-indent="5"], .tiptap h1[data-indent="5"], .tiptap h2[data-indent="5"], .tiptap h3[data-indent="5"], .tiptap h4[data-indent="5"], .tiptap h5[data-indent="5"], .tiptap h6[data-indent="5"] { margin-left: 10rem; }
+.tiptap p[data-indent="6"], .tiptap h1[data-indent="6"], .tiptap h2[data-indent="6"], .tiptap h3[data-indent="6"], .tiptap h4[data-indent="6"], .tiptap h5[data-indent="6"], .tiptap h6[data-indent="6"] { margin-left: 12rem; }
+.tiptap p[data-indent="7"], .tiptap h1[data-indent="7"], .tiptap h2[data-indent="7"], .tiptap h3[data-indent="7"], .tiptap h4[data-indent="7"], .tiptap h5[data-indent="7"], .tiptap h6[data-indent="7"] { margin-left: 14rem; }
+.tiptap p[data-indent="8"], .tiptap h1[data-indent="8"], .tiptap h2[data-indent="8"], .tiptap h3[data-indent="8"], .tiptap h4[data-indent="8"], .tiptap h5[data-indent="8"], .tiptap h6[data-indent="8"] { margin-left: 16rem; }
+.tiptap p[data-indent="9"], .tiptap h1[data-indent="9"], .tiptap h2[data-indent="9"], .tiptap h3[data-indent="9"], .tiptap h4[data-indent="9"], .tiptap h5[data-indent="9"], .tiptap h6[data-indent="9"] { margin-left: 18rem; }
+.tiptap p[data-indent="10"], .tiptap h1[data-indent="10"], .tiptap h2[data-indent="10"], .tiptap h3[data-indent="10"], .tiptap h4[data-indent="10"], .tiptap h5[data-indent="10"], .tiptap h6[data-indent="10"] { margin-left: 20rem; }
+.tiptap p[data-indent="11"], .tiptap h1[data-indent="11"], .tiptap h2[data-indent="11"], .tiptap h3[data-indent="11"], .tiptap h4[data-indent="11"], .tiptap h5[data-indent="11"], .tiptap h6[data-indent="11"] { margin-left: 22rem; }
+.tiptap p[data-indent="12"], .tiptap h1[data-indent="12"], .tiptap h2[data-indent="12"], .tiptap h3[data-indent="12"], .tiptap h4[data-indent="12"], .tiptap h5[data-indent="12"], .tiptap h6[data-indent="12"] { margin-left: 24rem; }
+.tiptap p[data-indent="13"], .tiptap h1[data-indent="13"], .tiptap h2[data-indent="13"], .tiptap h3[data-indent="13"], .tiptap h4[data-indent="13"], .tiptap h5[data-indent="13"], .tiptap h6[data-indent="13"] { margin-left: 26rem; }
+.tiptap p[data-indent="14"], .tiptap h1[data-indent="14"], .tiptap h2[data-indent="14"], .tiptap h3[data-indent="14"], .tiptap h4[data-indent="14"], .tiptap h5[data-indent="14"], .tiptap h6[data-indent="14"] { margin-left: 28rem; }
+.tiptap p[data-indent="15"], .tiptap h1[data-indent="15"], .tiptap h2[data-indent="15"], .tiptap h3[data-indent="15"], .tiptap h4[data-indent="15"], .tiptap h5[data-indent="15"], .tiptap h6[data-indent="15"] { margin-left: 30rem; }
+.tiptap p[data-indent="16"], .tiptap h1[data-indent="16"], .tiptap h2[data-indent="16"], .tiptap h3[data-indent="16"], .tiptap h4[data-indent="16"], .tiptap h5[data-indent="16"], .tiptap h6[data-indent="16"] { margin-left: 32rem; }
+.tiptap p[data-indent="17"], .tiptap h1[data-indent="17"], .tiptap h2[data-indent="17"], .tiptap h3[data-indent="17"], .tiptap h4[data-indent="17"], .tiptap h5[data-indent="17"], .tiptap h6[data-indent="17"] { margin-left: 34rem; }
+.tiptap p[data-indent="18"], .tiptap h1[data-indent="18"], .tiptap h2[data-indent="18"], .tiptap h3[data-indent="18"], .tiptap h4[data-indent="18"], .tiptap h5[data-indent="18"], .tiptap h6[data-indent="18"] { margin-left: 36rem; }
+.tiptap p[data-indent="19"], .tiptap h1[data-indent="19"], .tiptap h2[data-indent="19"], .tiptap h3[data-indent="19"], .tiptap h4[data-indent="19"], .tiptap h5[data-indent="19"], .tiptap h6[data-indent="19"] { margin-left: 38rem; }
+.tiptap p[data-indent="20"], .tiptap h1[data-indent="20"], .tiptap h2[data-indent="20"], .tiptap h3[data-indent="20"], .tiptap h4[data-indent="20"], .tiptap h5[data-indent="20"], .tiptap h6[data-indent="20"] { margin-left: 40rem; }
+.tiptap p[data-indent="21"], .tiptap h1[data-indent="21"], .tiptap h2[data-indent="21"], .tiptap h3[data-indent="21"], .tiptap h4[data-indent="21"], .tiptap h5[data-indent="21"], .tiptap h6[data-indent="21"] { margin-left: 42rem; }
+
+/* Ensure content doesn't overflow the document area by setting a reasonable maximum width */
+.tiptap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* For very deeply indented content, ensure it remains readable */
+.tiptap p[data-indent], .tiptap h1[data-indent], .tiptap h2[data-indent], .tiptap h3[data-indent], .tiptap h4[data-indent], .tiptap h5[data-indent], .tiptap h6[data-indent] {
+  max-width: calc(100% - var(--indent-margin, 0px));
+  word-wrap: break-word;
+}
+
+/* Task List Styling */
+.tiptap ul[data-type="taskList"] {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.tiptap ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  margin: 0.5rem 0;
+}
+
+.tiptap ul[data-type="taskList"] li > label {
+  flex: 0 0 auto;
+  margin-right: 0.5rem;
+  user-select: none;
+  margin-top: 0.125rem; /* Slight adjustment to align with text */
+}
+
+.tiptap ul[data-type="taskList"] li > div {
+  flex: 1 1 auto;
+}
+
+.tiptap ul[data-type="taskList"] li[data-checked="true"] > div {
+  text-decoration: line-through;
+  color: #6b7280;
+}
+
+.tiptap ul[data-type="taskList"] input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+  border: 2px solid #373a3e;
+  border-radius: 3px;
+  position: relative;
+}
+
+.tiptap ul[data-type="taskList"] input[type="checkbox"]:checked {
+  border-color: #373a3e;
+  background: transparent;
+}
+
+.tiptap ul[data-type="taskList"] input[type="checkbox"]:checked::before {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #373a3e;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+/* Nested task lists */
+.tiptap ul[data-type="taskList"] ul[data-type="taskList"] {
+  margin: 0.25rem 0 0.25rem 1.5rem;
+}
+
+/* Task list items */
+.tiptap li[data-type="taskItem"] {
+  display: flex;
+  align-items: flex-start;
+}
+
+.tiptap li[data-type="taskItem"] > label {
+  flex: 0 0 auto;
+  margin-right: 0.5rem;
+  user-select: none;
+  margin-top: 0.125rem;
+}
+
+/* Alternative styling using CSS classes if data attributes don't work */
+.tiptap .task-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+}
+
+.tiptap .task-item {
+  display: flex;
+  align-items: flex-start;
+  margin: 0.5rem 0;
+}
+
+.tiptap .task-item label {
+  flex: 0 0 auto;
+  margin-right: 0.5rem;
+  user-select: none;
+  margin-top: 0.125rem;
+}
+
+.tiptap .task-item label input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  cursor: pointer;
+  appearance: none;
+  background: transparent;
+  border: 2px solid #373a3e;
+  border-radius: 3px;
+  position: relative;
+}
+
+.tiptap .task-item label input[type="checkbox"]:checked {
+  border-color: #373a3e;
+  background: transparent;
+}
+
+.tiptap .task-item label input[type="checkbox"]:checked::before {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #373a3e;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+/* Styling for completed tasks */
+.tiptap .task-item[data-checked="true"] p,
+.tiptap .task-item[data-checked="true"] div {
+  text-decoration: line-through;
+  color: #6b7280;
+}
+
+/* Link Styling with Black & White Theme */
+.tiptap a {
+  color: #000000;
+  text-decoration: underline;
+  text-decoration-color: #666666;
+  cursor: pointer;
+  position: relative;
+  transition: all 0.2s ease;
+  text-underline-offset: 2px;
+}
+
+.tiptap a:hover {
+  color: #333333;
+  text-decoration-color: #000000;
+}
+
+/* Link Hover Preview Tooltip with Page Preview */
+.tiptap a:hover::after {
+  content: attr(href);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ffffff;
+  color: #000000;
+  border: 1px solid #000000;
+  padding: 0.75rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  z-index: 1000;
+  margin-bottom: 0.5rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  opacity: 0;
+  animation: fadeInTooltip 0.3s ease-in-out 0.7s forwards;
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  font-weight: normal;
+  text-decoration: none;
+}
+
+/* Tooltip arrow with black & white theme */
+.tiptap a:hover::before {
+  content: '';
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: #000000;
+  z-index: 1001;
+  margin-bottom: 0.375rem;
+  opacity: 0;
+  animation: fadeInTooltip 0.3s ease-in-out 0.7s forwards;
+}
+
+/* Enhanced fade in animation */
+@keyframes fadeInTooltip {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Link styling when editing */
+.tiptap a[contenteditable="false"] {
+  pointer-events: auto;
+}
+
+/* Link insertion tooltip styles */
+.link-tooltip {
+  position: absolute;
+  background: #ffffff;
+  border: 2px solid #000000;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  z-index: 2000;
+  min-width: 300px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.link-tooltip h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #000000;
+}
+
+.link-tooltip input {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid #000000;
+  border-radius: 4px;
+  margin-bottom: 0.75rem;
+  font-size: 0.875rem;
+  background: #ffffff;
+  color: #000000;
+}
+
+.link-tooltip input:focus {
+  outline: none;
+  border-color: #000000;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.1);
+}
+
+.link-tooltip input::placeholder {
+  color: #666666;
+}
+
+.link-tooltip .button-group {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.link-tooltip button {
+  padding: 0.5rem 1rem;
+  border: 1px solid #000000;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #000000;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.link-tooltip button:hover {
+  background: #000000;
+  color: #ffffff;
+}
+
+.link-tooltip button.primary {
+  background: #000000;
+  color: #ffffff;
+}
+
+.link-tooltip button.primary:hover {
+  background: #333333;
+}
+
+.link-tooltip button.delete {
+  background: #ffffff;
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+.link-tooltip button.delete:hover {
+  background: #dc2626;
+  color: #ffffff;
+}
+
+/* Link Preview Styles */
+.link-preview {
+  max-width: 400px;
+  background: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.link-preview-content {
+  padding: 16px;
+}
+
+.link-preview-loading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #666666;
+  font-size: 14px;
+}
+
+.loading-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e0e0e0;
+  border-top: 2px solid #000000;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.link-preview-error {
+  color: #dc2626;
+  font-size: 14px;
+}
+
+.link-preview-data {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.link-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.link-preview-favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+}
+
+.link-preview-title {
+  font-weight: 600;
+  color: #1a1a1a;
+  font-size: 14px;
+  flex: 1;
+}
+
+.link-preview-description {
+  color: #666666;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.link-preview-url {
+  color: #999999;
+  font-size: 12px;
+  font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+  word-break: break-all;
+  background: #f8f8f8;
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid #e8e8e8;
+}
+
+/* CodeBlock Component Styling */
+.code-block-wrapper {
+  margin: 1.5rem 0;
+  border-radius: 8px;
+  overflow: hidden;
+  font-family: 'Monaco', 'Menlo', 'Courier New', 'Consolas', monospace;
+}
+
+.code-block-wrapper pre {
+  margin: 0;
+  padding: 1rem;
+  background-color: #1e1e1e; /* Dark background for code blocks */
+  color: #d4d4d4; /* Light text color for better contrast */
+  font-size: 0.875rem; /* Slightly smaller font size for code */
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+/* Ensure code content maintains proper styling */
+.code-block-wrapper .NodeViewContent {
+  font-family: 'Monaco', 'Menlo', 'Courier New', 'Consolas', monospace !important;
+  white-space: pre;
+  outline: none;
+  caret-color: white;
+}
+
+/* Language-specific background colors for better visual distinction */
+.code-block-wrapper.language-javascript {
+  border-left: 4px solid #f7df1e;
+}
+
+.code-block-wrapper.language-typescript {
+  border-left: 4px solid #3178c6;
+}
+
+.code-block-wrapper.language-python {
+  border-left: 4px solid #3776ab;
+}
+
+.code-block-wrapper.language-java {
+  border-left: 4px solid #ed8b00;
+}
+
+.code-block-wrapper.language-html {
+  border-left: 4px solid #e34f26;
+}
+
+.code-block-wrapper.language-css {
+  border-left: 4px solid #1572b6;
+}
+
+.code-block-wrapper.language-json {
+  border-left: 4px solid #000000;
+}
+
+.code-block-wrapper.language-markdown {
+  border-left: 4px solid #083fa1;
+}
+
+.code-block-wrapper.language-plaintext {
+  border-left: 4px solid #6b7280;
+}
+
+/* Highlight.js Theme Integration */
+
+/* Dark Theme (VS Code Dark+) */
+.hljs-dark {
+  background: #1e1e1e !important;
+  color: #d4d4d4 !important;
+}
+
+.theme-dark .hljs-keyword,
+.theme-dark .hljs-operator,
+.theme-dark .hljs-pattern-match {
+  color: #569cd6;
+  font-weight: bold;
+}
+
+.theme-dark .hljs-function,
+.theme-dark .hljs-class .hljs-title,
+.theme-dark .hljs-title.function_ {
+  color: #dcdcaa;
+}
+
+.theme-dark .hljs-title.function_.invoke__,
+.theme-dark .hljs-function > .hljs-title {
+  color: #dcdcaa;
+  font-weight: normal;
+}
+
+.theme-dark .hljs-string,
+.theme-dark .hljs-doctag {
+  color: #ce9178;
+}
+
+.theme-dark .hljs-number,
+.theme-dark .hljs-literal {
+  color: #b5cea8;
+}
+
+.theme-dark .hljs-comment,
+.theme-dark .hljs-quote {
+  color: #6a9955;
+  font-style: italic;
+}
+
+.theme-dark .hljs-variable,
+.theme-dark .hljs-template-variable,
+.theme-dark .hljs-attribute {
+  color: #9cdcfe;
+}
+
+.theme-dark .hljs-tag,
+.theme-dark .hljs-name {
+  color: #569cd6;
+}
+
+.theme-dark .hljs-attr {
+  color: #92c5f7;
+}
+
+.theme-dark .hljs-built_in,
+.theme-dark .hljs-builtin-name {
+  color: #ccd369;
+}
+
+.theme-dark .hljs-meta {
+  color: #569cd6;
+}
+
+.theme-dark .hljs-params {
+  color: #9cdcfe;
+}
+
+.theme-dark .hljs-property {
+  color: #9cdcfe;
+}
+
+.theme-dark .hljs-type {
+  color: #4ec9b0;
+}
+
+.theme-dark .hljs-deletion {
+  background: #b91c1c;
+}
+
+.theme-dark .hljs-addition {
+  background: #16a34a;
+}
+
+.theme-dark .hljs-emphasis {
+  font-style: italic;
+}
+
+.theme-dark .hljs-strong {
+  font-weight: bold;
+}
+
+/* Light Theme (VS Code Light+) */
+.hljs-light {
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+.theme-light .hljs-keyword,
+.theme-light .hljs-operator,
+.theme-light .hljs-pattern-match {
+  color: #0000ff;
+  font-weight: bold;
+}
+
+.theme-light .hljs-function,
+.theme-light .hljs-class .hljs-title,
+.theme-light .hljs-title.function_ {
+  color: #795e26;
+}
+
+.theme-light .hljs-title.function_.invoke__,
+.theme-light .hljs-function > .hljs-title {
+  color: #795e26;
+  font-weight: normal;
+}
+
+.theme-light .hljs-string,
+.theme-light .hljs-doctag {
+  color: #a31515;
+}
+
+.theme-light .hljs-number,
+.theme-light .hljs-literal {
+  color: #098658;
+}
+
+.theme-light .hljs-comment,
+.theme-light .hljs-quote {
+  color: #008000;
+  font-style: italic;
+}
+
+.theme-light .hljs-variable,
+.theme-light .hljs-template-variable,
+.theme-light .hljs-attribute {
+  color: #001080;
+}
+
+.theme-light .hljs-tag,
+.theme-light .hljs-name {
+  color: #800000;
+}
+
+.theme-light .hljs-attr {
+  color: #ff0000;
+}
+
+.theme-light .hljs-built_in,
+.theme-light .hljs-builtin-name {
+  color: #267f99;
+}
+
+.theme-light .hljs-meta {
+  color: #0000ff;
+}
+
+.theme-light .hljs-params {
+  color: #001080;
+}
+
+.theme-light .hljs-property {
+  color: #001080;
+}
+
+.theme-light .hljs-type {
+  color: #267f99;
+}
+
+.theme-light .hljs-deletion {
+  background: #fecaca;
+}
+
+.theme-light .hljs-addition {
+  background: #bbf7d0;
+}
+
+.theme-light .hljs-emphasis {
+  font-style: italic;
+}
+
+.theme-light .hljs-strong {
+  font-weight: bold;
+}
+
+/* Theme-specific backgrounds for code blocks */
+.theme-dark pre {
+  background: #1e1e1e !important;
+  color: #d4d4d4 !important;
+}
+
+.theme-light pre {
+  background: #ffffff !important;
+  color: #000000 !important;
+  border: 1px solid #e5e7eb;
+}
+
+
+
+/* Markdown-specific styling */
+.theme-dark .language-markdown .hljs-section,
+.theme-dark .language-markdown .hljs-title {
+  color: #569cd6;
+  font-weight: bold;
+}
+
+.theme-dark .language-markdown .hljs-emphasis {
+  color: #ce9178;
+  font-style: italic;
+}
+
+.theme-dark .language-markdown .hljs-strong {
+  color: #dcdcaa;
+  font-weight: bold;
+}
+
+.theme-dark .language-markdown .hljs-code {
+  color: #b5cea8;
+  background-color: #2d2d30;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.theme-dark .language-markdown .hljs-link {
+  color: #9cdcfe;
+  text-decoration: underline;
+}
+
+.theme-light .language-markdown .hljs-section,
+.theme-light .language-markdown .hljs-title {
+  color: #0000ff;
+  font-weight: bold;
+}
+
+.theme-light .language-markdown .hljs-emphasis {
+  color: #a31515;
+  font-style: italic;
+}
+
+.theme-light .language-markdown .hljs-strong {
+  color: #795e26;
+  font-weight: bold;
+}
+
+.theme-light .language-markdown .hljs-code {
+  color: #098658;
+  background-color: #f6f8fa;
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+.theme-light .language-markdown .hljs-link {
+  color: #001080;
+  text-decoration: underline;
+}
+
+/* Mermaid diagram styling */
+.theme-dark .language-mermaid {
+  color: #d4d4d4;
+  background-color: #1e1e1e;
+}
+
+.theme-dark .language-mermaid .hljs-keyword {
+  color: #569cd6;
+  font-weight: bold;
+}
+
+.theme-dark .language-mermaid .hljs-string {
+  color: #ce9178;
+}
+
+.theme-dark .language-mermaid .hljs-title {
+  color: #dcdcaa;
+  font-weight: bold;
+}
+
+.theme-dark .language-mermaid .hljs-type {
+  color: #4ec9b0;
+}
+
+.theme-dark .language-mermaid .hljs-variable {
+  color: #9cdcfe;
+}
+
+.theme-dark .language-mermaid .hljs-number {
+  color: #b5cea8;
+}
+
+.theme-dark .language-mermaid .hljs-comment {
+  color: #6a9955;
+  font-style: italic;
+}
+
+.theme-light .language-mermaid {
+  color: #333333;
+  background-color: #f8f8f8;
+}
+
+.theme-light .language-mermaid .hljs-keyword {
+  color: #0000ff;
+  font-weight: bold;
+}
+
+.theme-light .language-mermaid .hljs-string {
+  color: #a31515;
+}
+
+.theme-light .language-mermaid .hljs-title {
+  color: #795e26;
+  font-weight: bold;
+}
+
+.theme-light .language-mermaid .hljs-type {
+  color: #267f99;
+}
+
+.theme-light .language-mermaid .hljs-variable {
+  color: #001080;
+}
+
+.theme-light .language-mermaid .hljs-number {
+  color: #098658;
+}
+
+.theme-light .language-mermaid .hljs-comment {
+  color: #008000;
+  font-style: italic;
+}
+
+/* Mermaid preview container styling */
+.mermaid-preview {
+  padding: 16px;
+  border-radius: 6px;
+  background-color: white;
+  margin: 8px 0;
+  overflow: auto;
+  max-width: 100%;
+}
+
+.theme-dark .mermaid-preview {
+  background-color: #2d2d30;
+}
+
+.mermaid-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-error {
+  color: #f14668;
+  background-color: #fdf2f2;
+  border: 1px solid #f14668;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-family: monospace;
+  font-size: 14px;
+  margin: 8px 0;
+}
+
+.theme-dark .mermaid-error {
+  color: #ff6b7a;
+  background-color: #2d1b1b;
+  border-color: #ff6b7a;
+}
+
+/* Custom scrollbar for dropdown */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thumb-gray-400 {
+  scrollbar-color: #9ca3af #f3f4f6;
+}
+
+.dark .scrollbar-thumb-gray-600 {
+  scrollbar-color: #4b5563 #1f2937;
+}
+
+/* Webkit scrollbar styling */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #9ca3af;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-track {
+  background: #1f2937;
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #4b5563;
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #6b7280;
+}
+
+/* Table Cell Selection Support */
+.tiptap table {
+  border-collapse: collapse;
+  margin: 1rem 0;
+  overflow: hidden;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.tiptap table td,
+.tiptap table th {
+  border: 2px solid #ced4da;
+  box-sizing: border-box;
+  min-width: 1em;
+  padding: 0.5rem;
+  position: relative;
+  vertical-align: top;
+}
+
+.tiptap table th {
+  background-color: #f8f9fa;
+  font-weight: bold;
+  text-align: left;
+}
+
+/* Table cell selection (highlight entire cell) */
+.tiptap table .selectedCell,
+.tiptap table td.selectedCell,
+.tiptap table th.selectedCell {
+  background-color: rgba(59, 130, 246, 0.15);
+  border-color: #3b82f6;
+}
+
+/* Table content selection within cells (highlight text content only) */
+.tiptap table td::selection,
+.tiptap table th::selection,
+.tiptap table td *::selection,
+.tiptap table th *::selection {
+  background-color: rgba(59, 130, 246, 0.3);
+}
+
+/* Active cell border for editing */
+.tiptap table td:focus,
+.tiptap table th:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 1px #3b82f6;
+}
+
+/* Table resize handle */
+.tiptap table .resize-cursor {
+  cursor: col-resize;
+}
+
+/* ProseMirror table selection classes */
+.tiptap .ProseMirror-selectednode {
+  outline: 2px solid #3b82f6;
+}
+
+.tiptap table .ProseMirror-cell-selection {
+  background-color: rgba(59, 130, 246, 0.15);
+}
+
+/* Table hover effects */
+.tiptap table td:hover,
+.tiptap table th:hover {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.tiptap table th:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Dark theme table styles */
+.theme-dark .tiptap table td,
+.theme-dark .tiptap table th {
+  border-color: #4b5563;
+}
+
+.theme-dark .tiptap table th {
+  background-color: #374151;
+  color: #f9fafb;
+}
+
+.theme-dark .tiptap table .selectedCell,
+.theme-dark .tiptap table td.selectedCell,
+.theme-dark .tiptap table th.selectedCell {
+  background-color: rgba(59, 130, 246, 0.25);
+}
+
+.theme-dark .tiptap table td:hover,
+.theme-dark .tiptap table th:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.theme-dark .tiptap table th:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
