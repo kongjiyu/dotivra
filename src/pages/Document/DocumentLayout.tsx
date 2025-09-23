@@ -201,6 +201,7 @@ export default function DocumentLayout({
                     <ChatSidebar
                         open={chatOpen}
                         onClose={() => setChatOpen(false)}
+                        editor={currentEditor}
                         suggestions={[
                             "Strengthen success metrics",
                             "Review executive summary",

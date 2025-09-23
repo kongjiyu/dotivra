@@ -36,7 +36,8 @@ import {
     Link,
     CheckSquare,
     IndentDecrease,
-    IndentIncrease
+    IndentIncrease,
+    Network
 } from "lucide-react";
 
 const FONT_FAMILIES = [
@@ -712,6 +713,27 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                     >
                                         <Table className="w-4 h-4" />
                                         Table
+                                    </Button>
+
+                                    <Button variant="outline"
+                                        onClick={() => {
+                                            const defaultChart = `graph TD
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Do something]
+    B -->|No| D[Do something else]
+    C --> E[End]
+                                            D --> E`;
+
+                                            const chart = window.prompt('Enter Mermaid diagram code:', defaultChart);
+                                            if (chart && chart.trim()) {
+                                                editor?.commands.insertMermaidDiagram({ chart: chart.trim() });
+                                            }
+                                        }}
+                                        className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-gray-100 transition-colors text-sm"
+                                        title="Insert Mermaid Diagram"
+                                    >
+                                        <Network className="w-4 h-4" />
+                                        Diagram
                                     </Button>
 
                                     <Button variant="outline"
