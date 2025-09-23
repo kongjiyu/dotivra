@@ -34,12 +34,38 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
       onClick={handleCardClick}
       className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
     >
+
       {/* Thumbnail Section */}
       <div className="relative bg-blue-50 h-32 flex items-center justify-center group-hover:bg-blue-100 transition-colors">
         <FileText className="h-12 w-12 text-blue-500" />
         
         {/* Actions Dropdown - Top Right */}
         <div className="absolute top-2 right-2">
+      {/* Document Header */}
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-start space-x-3 flex-1 min-w-0">
+          <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+            <FileText className="h-4 w-4 text-blue-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="font-medium text-gray-900 truncate group-hover:text-blue-700 transition-colors">
+              {document.name}
+            </h3>
+            <div className="flex items-center space-x-2 mt-1">
+              <span className={`inline-block px-2 py-1 rounded-full text-xs ${document.template.category === 'user'
+                  ? 'bg-green-100 text-green-700'
+                  : document.template.category === 'developer'
+                    ? 'bg-purple-100 text-purple-700'
+                    : 'bg-gray-100 text-gray-700'
+                }`}>
+                {document.template.name}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Actions Dropdown */}
+        <div className="relative">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -49,15 +75,15 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
           >
             <MoreHorizontal className="h-4 w-4 text-gray-600" />
           </button>
-          
+
           {showDropdown && (
             <>
               {/* Backdrop */}
-              <div 
+              <div
                 className="fixed inset-0 z-10"
                 onClick={() => setShowDropdown(false)}
               />
-              
+
               {/* Dropdown Menu */}
               <div className="absolute right-0 top-10 w-32 bg-white border border-gray-200 rounded-md shadow-lg z-20">
                 <button
