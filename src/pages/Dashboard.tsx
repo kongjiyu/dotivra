@@ -4,16 +4,27 @@ import { CircleUser, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import TemplateGrid from '../components/dashboard/TemplateGrid';
 import ProjectList from '../components/dashboard/ProjectList';
+import AddProjectModal from '../components/modal/addProject';
 import type { Template, Project } from '../types';
+
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Debug: Log the modal state
+  console.log('🔍 Dashboard component rendered, isModalOpen:', isModalOpen);
 
   const handleTemplateClick = (template: Template) => {
     console.log('Template clicked:', template.name);
     // TODO: Show project selection modal or navigate to template creation
     setSelectedTemplate(template);
+  };
+
+  const handleNewProject = () => {
+    console.log('🎯 Opening modal from Dashboard...');
+    setIsModalOpen(true);
   };
 
   const handleExploreAll = () => {
@@ -60,6 +71,8 @@ const Dashboard: React.FC = () => {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-6 py-8">
+     
+        
         {/* Templates Section - Top */}
         <TemplateGrid 
           onTemplateClick={handleTemplateClick}
@@ -70,8 +83,42 @@ const Dashboard: React.FC = () => {
         <ProjectList 
           onProjectClick={handleProjectClick}
           onViewAllProjects={handleViewAllProjects}
+          onNewProject={handleNewProject}
         />
       </div>
+
+      {/* AddProjectModal with GitHub Integration */}
+      <AddProjectModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSubmit={async (projectData) => {
+          try {
+            console.log('Creating dashboard project:', projectData);
+            
+            const response = await fetch('http://localhost:3001/api/projects', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(projectData),
+            });
+
+            if (!response.ok) {
+              throw new Error('Failed to create project');
+            }
+
+            const result = await response.json();
+            console.log('✅ Dashboard: Project created successfully:', result.project);
+            
+            // Close modal and navigate to the new project
+            setIsModalOpen(false);
+            navigate(`/project/${result.project.id}`);
+          } catch (err) {
+            console.error('❌ Dashboard: Error creating project:', err);
+            alert(`Failed to create project: ${err instanceof Error ? err.message : 'Unknown error'}`);
+          }
+        }}
+      />
 
       {/* Debug Info - Remove in production */}
       {selectedTemplate && (

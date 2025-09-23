@@ -1,6 +1,6 @@
 // src/components/projects/ProjectsGridView.tsx - Projects grid view
 import React from 'react';
-import { FolderOpen, Calendar, FileText, Code, ExternalLink, MoreHorizontal, Plus } from 'lucide-react';
+import { FolderOpen, Calendar, FileText, Code, ExternalLink, MoreHorizontal } from 'lucide-react';
 import type { Project } from '../../types';
 
 interface ProjectsGridViewProps {
@@ -8,33 +8,16 @@ interface ProjectsGridViewProps {
   onProjectClick: (project: Project) => void;
   onProjectEdit: (project: Project) => void;
   onProjectDelete: (project: Project) => void;
-  onNewProject: () => void;
 }
 
 const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
   projects,
   onProjectClick,
-  onNewProject
+  onProjectEdit,
+  onProjectDelete
 }) => {
   return (
-    <div>
-      {/* Header with New Project Button */}
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Your Projects</h2>
-          <p className="text-gray-600 text-sm mt-1">Create and manage your documentation projects</p>
-        </div>
-        <button
-          onClick={onNewProject}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          New Project
-        </button>
-      </div>
-
-      {/* Projects Grid - Limited to 3 columns max */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
       {projects.map((project) => (
         <div
           key={project.id}
@@ -109,27 +92,6 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
           </div>
         </div>
       ))}
-      </div>
-
-      {/* Empty State */}
-      {projects.length === 0 && (
-        <div className="flex flex-col items-center justify-center py-16">
-          <div className="w-16 h-16 bg-gray-100 rounded-lg flex items-center justify-center mb-4">
-            <FolderOpen className="h-8 w-8 text-gray-400" />
-          </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No projects yet</h3>
-          <p className="text-gray-600 text-center mb-6 max-w-md">
-            Create your first documentation project to get started.
-          </p>
-          <button
-            onClick={onNewProject}
-            className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="h-5 w-5 mr-2" />
-            Create First Project
-          </button>
-        </div>
-      )}
     </div>
   );
 };
