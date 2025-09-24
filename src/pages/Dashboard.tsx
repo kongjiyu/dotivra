@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import TemplateGrid from '../components/dashboard/TemplateGrid';
 import ProjectList from '../components/dashboard/ProjectList';
 import AddProjectModal from '../components/modal/addProject';
+import AddDocumentFromTemplate from '../components/modal/addDocumentFromTemplate';
 import type { Template, Project } from '../types';
 
 
@@ -12,19 +13,74 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
 
   // Debug: Log the modal state
   console.log('🔍 Dashboard component rendered, isModalOpen:', isModalOpen);
 
   const handleTemplateClick = (template: Template) => {
     console.log('Template clicked:', template.name);
-    // TODO: Show project selection modal or navigate to template creation
     setSelectedTemplate(template);
+    setIsTemplateModalOpen(true);
   };
 
   const handleNewProject = () => {
     console.log('🎯 Opening modal from Dashboard...');
     setIsModalOpen(true);
+  };
+
+  const handleCreateDocumentFromTemplate = async (data: {
+    template: Template;
+    projectId?: number;
+    newProjectName?: string;
+    newProjectDescription?: string;
+    selectedRepo?: string;
+    documentName: string;
+    documentRole: string;
+  }) => {
+    try {
+      console.log('Creating document from template:', data);
+
+      let finalProjectId = data.projectId;
+
+      // If creating a new project, create it first
+      if (!finalProjectId && data.newProjectName && data.newProjectDescription) {
+        const projectResponse = await fetch('http://localhost:3001/api/projects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: data.newProjectName,
+            description: data.newProjectDescription,
+            githubLink: data.selectedRepo || null
+          }),
+        });
+
+        if (!projectResponse.ok) {
+          throw new Error('Failed to create project');
+        }
+
+        const projectResult = await projectResponse.json();
+        finalProjectId = projectResult.project.id;
+        console.log('✅ New project created:', projectResult.project);
+      }
+
+      // TODO: Create the document in the project
+      console.log(`📄 Creating document "${data.documentName}" (${data.documentRole}) in project ${finalProjectId} using template ${data.template.name}`);
+      
+      // For now, show success message and navigate to project
+      alert(`Document "${data.documentName}" will be created with ${data.template.name} template!\n\nRole: ${data.documentRole}\n\n(Document creation API coming soon)`);
+      
+      // Close modal and navigate to project
+      setIsTemplateModalOpen(false);
+      setSelectedTemplate(null);
+      
+      if (finalProjectId) {
+        navigate(`/project/${finalProjectId}`);
+      }
+    } catch (error) {
+      console.error('❌ Error creating document:', error);
+      alert(`Failed to create document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleExploreAll = () => {
@@ -120,12 +176,16 @@ const Dashboard: React.FC = () => {
         }}
       />
 
-      {/* Debug Info - Remove in production */}
-      {selectedTemplate && (
-        <div className="fixed bottom-4 right-4 bg-blue-100 p-3 rounded-lg text-sm">
-          Selected Template: {selectedTemplate.name}
-        </div>
-      )}
+      {/* AddDocumentFromTemplate Modal */}
+      <AddDocumentFromTemplate
+        isOpen={isTemplateModalOpen}
+        template={selectedTemplate}
+        onClose={() => {
+          setIsTemplateModalOpen(false);
+          setSelectedTemplate(null);
+        }}
+        onCreateDocument={handleCreateDocumentFromTemplate}
+      />
     </div>
   );
 };
