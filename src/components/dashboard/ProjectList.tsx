@@ -60,7 +60,6 @@ const ProjectList: React.FC<ProjectListProps> = ({ onProjectClick, onViewAllProj
   const handleCreateProject = (projectData: {
     name: string;
     description: string;
-    githubLink: string;
     selectedRepo?: string;
   }) => {
     console.log('Creating new project:', projectData);
