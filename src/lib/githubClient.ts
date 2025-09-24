@@ -185,7 +185,7 @@ class GitHubClient {
   }
 
   // Helper method to get common file shortcuts for a repository
-  getCommonFileShortcuts(defaultBranch: string = 'main') {
+  getCommonFileShortcuts() {
     return [
       { name: 'README.md', path: 'README.md' },
       { name: 'package.json', path: 'package.json' },

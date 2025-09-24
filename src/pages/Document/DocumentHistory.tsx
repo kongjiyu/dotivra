@@ -1,5 +1,5 @@
 import DocumentLayout from "./DocumentLayout";
-import VersionHistory from "@/components/Document/VersionHistory";
+import VersionHistory from "@/components/document/VersionHistory";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";

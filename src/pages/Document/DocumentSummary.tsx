@@ -1,8 +1,6 @@
-﻿import { useState, useEffect } from "react";
+﻿import { useEffect } from "react";
 import DocumentLayout from "./DocumentLayout";
-import ToolBar from "@/components/Document/ToolBar";
-import TipTap from "@/components/Document/TipTap";
-import { Button } from "@/components/ui/button";
+import TipTap from "@/components/document/TipTap";
 import { useDocument } from "../../context/DocumentContext";
 
 export default function DocumentSummary() {
@@ -10,9 +8,9 @@ export default function DocumentSummary() {
         documentContent,
         documentTitle,
         summaryContent,
-        setSummaryContent
+        setSummaryContent,
+        setCurrentEditor
     } = useDocument();
-    const [summaryEditor, setSummaryEditor] = useState(null);
 
     useEffect(() => {
         if (!summaryContent && documentContent) {
@@ -46,26 +44,18 @@ ${documentContent.substring(0, 300)}${documentContent.length > 300 ? "..." : ""}
     };
 
     const handleSummaryEditorReady = (editor: any) => {
-        setSummaryEditor(editor);
+        // Set the current editor in context so the toolbar can use it
+        setCurrentEditor(editor);
     };
 
     return (
         <DocumentLayout showDocumentMenu={true}>
-            {/* ToolBar for Summary Editing - only show when editor is ready */}
-            {summaryEditor && (
-                <div className="fixed left-1/2 -translate-x-1/2 top-[144px] z-20 w-[96vw] max-w-[1680px] min-w-[360px] px-3">
-                    <ToolBar editor={summaryEditor} />
-                </div>
-            )}
-
-            {/* Summary Content */}
-
+            {/* Summary Content - TipTap includes its own toolbar */}
             <TipTap
                 initialContent={summaryContent || "Click 'Generate Summary' to create a document summary."}
                 onUpdate={handleSummaryUpdate}
                 onEditorReady={handleSummaryEditorReady}
             />
-
         </DocumentLayout>
     );
 }
