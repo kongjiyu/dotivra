@@ -1,28 +1,10 @@
 import DocumentLayout from "./DocumentLayout";
-import TipTap from "@/components/Document/TipTap";
+import TipTap from "@/components/document/TipTap";
+import AIActionContainer from "@/components/document/AIActionContainer";
 import { useDocument } from "@/context/DocumentContext";
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 
-export default function DocumentEditor() {
-    const {
-        documentContent,
-        setDocumentContent,
-        setCurrentEditor
-    } = useDocument();
-    const documentContentRef = useRef<HTMLDivElement>(null);
-
-    const handleDocumentUpdate = (content: string) => {
-        setDocumentContent(content);
-    };
-
-    const handleEditorReady = (editor: any) => {
-        setCurrentEditor(editor);
-    };
-
-    // Initialize with default content if empty
-    useEffect(() => {
-        if (!documentContent) {
-            const defaultContent = `<h1>Product Strategy 2024</h1>
+const DEFAULT_DOC = `<h1>Product Strategy 2024</h1>
 
 <h3>Executive Summary</h3>
 
@@ -125,18 +107,121 @@ export default function DocumentEditor() {
 <h2>Conclusion</h2>
 
 <p>This strategy provides a clear roadmap for achieving our 2024 objectives. Success depends on execution excellence, team collaboration, and customer-centric decision making.</p>`;
-            setDocumentContent(defaultContent);
+
+export default function DocumentEditor() {
+    const {
+        documentContent,
+        setDocumentContent,
+        setCurrentEditor,
+        onOpenChat,
+        setShowAIActions,
+        chatSidebarOpen
+    } = useDocument();
+    const documentContentRef = useRef<HTMLDivElement>(null);
+    const [showAIActions, setShowAIActionsState] = useState(false);
+    const [isRegenerating, setIsRegenerating] = useState(false);
+    const [beforeAIContent, setBeforeAIContent] = useState<string>("");
+
+    const handleDocumentUpdate = (content: string) => {
+        setDocumentContent(content);
+    };
+
+    const handleEditorReady = (editor: any) => {
+        setCurrentEditor(editor);
+    };
+
+    const handleAcceptAI = () => {
+        // Remove AI preview highlighting and convert to permanent content
+        const aiContentId = (window as any).currentAIContentId;
+        if (aiContentId) {
+            const elementsToUpdate = document.querySelectorAll(`[data-ai-content-id="${aiContentId}"]`);
+            elementsToUpdate.forEach(element => {
+                element.classList.remove('ai-preview-content');
+                element.classList.add('ai-generated-content');
+                element.removeAttribute('data-ai-content-id');
+
+                // Remove the persistent highlighting after a brief moment
+                setTimeout(() => {
+                    element.classList.remove('ai-generated-content');
+                }, 2000);
+            });
+            (window as any).currentAIContentId = null;
+        }
+
+        setShowAIActionsState(false);
+        setBeforeAIContent("");
+    };
+
+    const handleRejectAI = () => {
+        // Remove AI preview highlighting and restore previous content
+        const aiContentId = (window as any).currentAIContentId;
+        if (aiContentId) {
+            const elementsToRemove = document.querySelectorAll(`[data-ai-content-id="${aiContentId}"]`);
+            elementsToRemove.forEach(element => {
+                element.classList.remove('ai-preview-content');
+                element.removeAttribute('data-ai-content-id');
+            });
+            (window as any).currentAIContentId = null;
+        }
+
+        if (beforeAIContent) {
+            setDocumentContent(beforeAIContent);
+        }
+        setShowAIActionsState(false);
+        setBeforeAIContent("");
+    };
+
+    const handleRegenerateAI = () => {
+        setIsRegenerating(true);
+        // This will be handled by the ChatSidebar when we integrate
+        setTimeout(() => {
+            setIsRegenerating(false);
+        }, 2000);
+    };
+
+    // Function to show AI actions - this will be called from ChatSidebar
+    const showAIActionsContainer = (_content: string, beforeContent: string) => {
+        setBeforeAIContent(beforeContent);
+        setShowAIActionsState(true);
+    };
+
+    // Initialize with default content if empty
+    useEffect(() => {
+        if (!documentContent) {
+            setDocumentContent(DEFAULT_DOC);
         }
     }, [documentContent, setDocumentContent]);
 
+    // Register AI actions function with context
+    useEffect(() => {
+        setShowAIActions(showAIActionsContainer);
+    }, [setShowAIActions]);
+
+    useEffect(() => {
+        console.log('DocumentEditor onOpenChat function:', onOpenChat);
+    }, [onOpenChat]);
+
+    const effectiveContent = documentContent || DEFAULT_DOC;
+
     return (
         <DocumentLayout showDocumentMenu={true}>
-            <div ref={documentContentRef} className="h-full">
+            <div ref={documentContentRef} className="h-full relative">
                 <TipTap
-                    initialContent={documentContent}
+                    initialContent={effectiveContent}
                     onUpdate={handleDocumentUpdate}
                     onEditorReady={handleEditorReady}
+                    onOpenChat={onOpenChat}
                     className=""
+                />
+
+                {/* AI Action Container */}
+                <AIActionContainer
+                    show={showAIActions}
+                    onAccept={handleAcceptAI}
+                    onReject={handleRejectAI}
+                    onRegenerate={handleRegenerateAI}
+                    isRegenerating={isRegenerating}
+                    chatSidebarOpen={chatSidebarOpen}
                 />
             </div>
         </DocumentLayout>

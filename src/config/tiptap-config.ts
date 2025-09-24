@@ -1,6 +1,5 @@
 import { Editor } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
-import Heading from "@tiptap/extension-heading";
 import Highlight from "@tiptap/extension-highlight";
 import Color from "@tiptap/extension-color";
 import { Table } from "@tiptap/extension-table";
@@ -8,22 +7,38 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
 import TableRow from "@tiptap/extension-table-row";
 import TableHeader from "@tiptap/extension-table-header";
 import TableCell from "@tiptap/extension-table-cell";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import CharacterCount from "@tiptap/extension-character-count";
+import FontFamily from "@tiptap/extension-font-family"; // ADD THIS
+import FontSize from "@/types/fontSize"; // Adjusted import path
+import { cn } from "@/lib/utils";
+import Paragraph from "@/lib/extensions/Paragraph"; // Import our custom paragraph extension
+import Heading from "@/lib/extensions/Heading"; // Import our custom heading extension
+import Mermaid from "@/lib/extensions/Mermaid"; // Import Mermaid extension
+import { CodeBlockWithHighlight } from "@/lib/extensions/CodeBlockWithHighlight"; // Import highlight.js CodeBlock extension
 
 // TipTap Editor Configuration
 export const getTipTapExtensions = () => [
     StarterKit.configure({
         heading: false, // we'll add Heading explicitly below
+        paragraph: false, // we'll use our custom paragraph extension
+        codeBlock: false, // we'll use our custom code block extension
     }),
+    // Custom paragraph extension with limited indent support to prevent overflow
+    Paragraph.configure({
+        maxIndent: 21, // Maximum 21 levels (42rem = ~336px) to prevent content overflow
+    }),
+    // Custom heading extension with limited indent support to prevent overflow
     Heading.configure({
         levels: [1, 2, 3, 4, 5],
+        maxIndent: 21, // Maximum 21 levels (42rem = ~336px) to prevent content overflow
     }),
+    // Custom code block extension with highlight.js support
+    CodeBlockWithHighlight,
     // Text formatting extensions
     Highlight.configure({
         multicolor: true,
@@ -32,22 +47,28 @@ export const getTipTapExtensions = () => [
         types: ['textStyle'],
     }),
     TextStyle,
+    // ADD THESE TWO EXTENSIONS
+    FontFamily.configure({
+        types: ['textStyle'],
+    }),
+    FontSize,
+    // END NEW EXTENSIONS
     TextAlign.configure({
         types: ['heading', 'paragraph'],
     }),
     Underline,
-    // Link extension
+    // Link extension with enhanced features
     Link.configure({
         openOnClick: false,
+        linkOnPaste: true,
+        autolink: true,
+        protocols: ['http', 'https', 'mailto', 'tel'],
         HTMLAttributes: {
-            class: 'text-blue-600 underline cursor-pointer hover:text-blue-800',
+            class: 'tiptap-link',
+            rel: 'noopener noreferrer',
+            target: '_blank',
         },
-    }),
-    // Image extension
-    Image.configure({
-        HTMLAttributes: {
-            class: 'max-w-full h-auto rounded-lg',
-        },
+        validate: href => /^https?:\/\//.test(href) || /^mailto:/.test(href) || /^tel:/.test(href),
     }),
     // Table extensions
     Table.configure({
@@ -55,25 +76,40 @@ export const getTipTapExtensions = () => [
     }),
     TableRow,
     TableHeader,
-    TableCell,
+    TableCell.configure({
+        HTMLAttributes: {
+            class: 'table-cell',
+        },
+    }),
     // Task list extensions
-    TaskList,
+    TaskList.configure({
+        itemTypeName: 'taskItem',
+        HTMLAttributes: {
+            class: 'task-list',
+        },
+    }),
     TaskItem.configure({
         nested: true,
+        HTMLAttributes: {
+            class: 'task-item',
+        },
     }),
     // Character count for status bar
     CharacterCount,
+    // Mermaid diagram support
+    Mermaid,
 ];
 
 // Editor Props Configuration
 export const getTipTapEditorProps = (extraClasses: string = '') => ({
     attributes: {
-        class: `document-content prose prose-lg max-w-none focus:outline-none ${extraClasses}`.trim(),
+        class: cn(`document-content prose prose-lg max-w-none [&_ol]:list-decimal [&_ul]:list-disc focus:outline-none`, extraClasses),
         spellcheck: 'true',
     },
 });
 
 // Complete Editor Configuration Factory
+//FIXME: adjust default content
 export const createTipTapConfig = (options: {
     content?: string;
     editable?: boolean;
@@ -82,7 +118,7 @@ export const createTipTapConfig = (options: {
     extraClasses?: string; // allow callers to add more utility classes
 }) => ({
     extensions: getTipTapExtensions(),
-    content: options.content || "<p>Start writing your document...</p>",
+    content: options.content || "<p>123 Start writing your document...</p>",
     editable: options.editable !== false,
     // Performance optimizations
     enableInputRules: true,

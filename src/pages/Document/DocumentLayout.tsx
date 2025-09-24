@@ -1,19 +1,19 @@
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     History,
-    Home,
     Cloud,
     MessageCircle,
     FileText,
     FolderOpen,
-    Dock
+    Dock,
+    Folder
 } from "lucide-react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
-import DocumentMenu from "@/components/Document/DocumentMenu";
-import ChatSidebar from "@/components/Document/ChatSidebar";
-import SimpleShare from "@/components/Document/SimpleShare";
+import { Link, useNavigate } from "react-router-dom";
+import DocumentMenu from "@/components/document/DocumentMenu";
+import ChatSidebar from "@/components/document/ChatSidebar";
+import SimpleShare from "@/components/document/SimpleShare";
 import { useDocument } from "@/context/DocumentContext";
 
 interface DocumentLayoutProps {
@@ -30,23 +30,31 @@ export default function DocumentLayout({
         setDocumentTitle,
         documentContent,
         setDocumentContent,
-        currentEditor
+        currentEditor,
+        setOnOpenChat,
+        chatSidebarOpen,
+        setChatSidebarOpen
     } = useDocument();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
-    const [chatOpen, setChatOpen] = useState(false);
     const [isAIGenerating, setIsAIGenerating] = useState(false);
+    const [initialChatMessage, setInitialChatMessage] = useState<string>('');
     const navigate = useNavigate();
-    const location = useLocation();
 
-    // Determine active tab from current pathname
-    const getActiveTab = () => {
-        const path = location.pathname;
-        if (path.includes('/summary')) return 'summary';
-        if (path.includes('/project')) return 'project';
-        if (path.includes('/history')) return 'history';
-        if (path.includes('/share')) return 'share';
-        return 'editor';
-    };
+    // Remove the local chatOpen state and use context instead
+
+    useEffect(() => {
+        const chatFunction = (message?: string) => {
+            console.log('DocumentLayout onOpenChat called with:', message);
+            if (message) {
+                setInitialChatMessage(message);
+            }
+            setChatSidebarOpen(true);
+            console.log('Chat should now be open, chatSidebarOpen state:', true);
+        };
+
+        console.log('Setting up onOpenChat function in DocumentLayout');
+        setOnOpenChat(chatFunction);
+    }, [setOnOpenChat, setChatSidebarOpen]);
 
     const handleTabChange = (tab: string) => {
         const basePath = '/document';
@@ -76,7 +84,7 @@ export default function DocumentLayout({
     };
 
     const handleAIGenerate = () => {
-        setChatOpen(!chatOpen);
+        setChatSidebarOpen(!chatSidebarOpen);
         setIsAIGenerating(true);
         setTimeout(() => setIsAIGenerating(false), 600);
     };
@@ -95,7 +103,7 @@ export default function DocumentLayout({
                             {/* Home button */}
                             <Button asChild variant="ghost" size="icon" className="h-12 w-12">
                                 <Link to="/dashboard">
-                                    <Home className="w-6 h-6" />
+                                    <FolderOpen className="h-9 w-9 text-blue-600" />
                                 </Link>
                             </Button>
 
@@ -155,7 +163,7 @@ export default function DocumentLayout({
                             className="text-gray-900"
                             onClick={() => handleTabChange("project")}
                         >
-                            <FolderOpen className="w-4 h-4 mr-2" />
+                            <Folder className="w-4 h-4 mr-2" />
                             Projects
                         </Button>
                         <div className="w-px h-5 bg-gray-300 mx-1 border-b"></div>
@@ -207,11 +215,16 @@ export default function DocumentLayout({
             </div>
 
             {/* Fixed Chat Sidebar overlay */}
-            <div className={`fixed top-[136px] right-0 h-[calc(100vh-136px)] w-[28rem] border-l border-gray-200 bg-white shadow-xl transition-transform duration-200 z-20 ${chatOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className={`fixed top-[136px] right-0 h-[calc(100vh-136px)] w-[28rem] border-l border-gray-200 bg-white shadow-xl transition-transform duration-200 z-20 ${chatSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
                 <div className="h-full p-4">
                     <ChatSidebar
-                        open={chatOpen}
-                        onClose={() => setChatOpen(false)}
+                        open={chatSidebarOpen}
+                        onClose={() => {
+                            setChatSidebarOpen(false);
+                            setInitialChatMessage('');
+                        }}
+                        editor={currentEditor}
+                        initialMessage={initialChatMessage}
                         suggestions={[
                             "Strengthen success metrics",
                             "Review executive summary",
@@ -223,7 +236,7 @@ export default function DocumentLayout({
             </div>
 
             {/* Fixed AI Chat Icon */}
-            {!chatOpen && (
+            {!chatSidebarOpen && (
                 <Button
                     onClick={handleAIGenerate}
                     disabled={isAIGenerating}

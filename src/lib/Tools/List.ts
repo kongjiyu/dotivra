@@ -27,42 +27,20 @@ const list: List = {
     editor: null,
     bullet: function (): boolean {
         if (this.editor) {
-            const chain = this.editor.chain().focus().toggleBulletList();
-            // After toggling list, indent first level by one to highlight item
-            // Only when selection is within a listItem
-            try {
-                const isList = this.editor.isActive('bulletList') || this.editor.isActive('listItem');
-                if (isList) {
-                    chain.sinkListItem('listItem');
-                }
-            } catch { /* no-op if command invalid in context */ }
-            return chain.run();
+            return this.editor.chain().focus().toggleBulletList().run();
         }
         return false;
     },
     ordered: function (): boolean {
         if (this.editor) {
-            const chain = this.editor.chain().focus().toggleOrderedList();
-            try {
-                const isList = this.editor.isActive('orderedList') || this.editor.isActive('listItem');
-                if (isList) {
-                    chain.sinkListItem('listItem');
-                }
-            } catch { /* no-op */ }
-            return chain.run();
+            return this.editor.chain().focus().toggleOrderedList().run();
         }
         return false;
     },
     task: function (): boolean {
         if (this.editor) {
-            const chain = this.editor.chain().focus().toggleTaskList();
-            try {
-                const isList = this.editor.isActive('taskList') || this.editor.isActive('taskItem');
-                if (isList) {
-                    chain.sinkListItem('taskItem' as any);
-                }
-            } catch { /* no-op */ }
-            return chain.run();
+            // Simply toggle task list without additional logic that might fail
+            return this.editor.chain().focus().toggleTaskList().run();
         }
         return false;
     },

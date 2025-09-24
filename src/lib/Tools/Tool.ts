@@ -13,8 +13,6 @@ interface Tool {
 
     table: Table | null;
 
-    image: (src: string, alt?: string, title?: string) => boolean;
-
     undo: () => boolean;
 
     redo: () => boolean;
@@ -36,12 +34,6 @@ const Tool: Tool = {
     redo: function (): boolean {
         if (this.editor) {
             return this.editor.chain().focus().redo().run();
-        }
-        return false;
-    },
-    image: function (src: string, alt = "", title = ""): boolean {
-        if (this.editor) {
-            return this.editor.chain().focus().setImage({ src, alt, title }).run();
         }
         return false;
     },
@@ -71,7 +63,6 @@ function useTool(editor: Editor, font?: Font, list?: List, table?: Table): Tool 
         table,
         undo: Tool.undo,
         redo: Tool.redo,
-        image: Tool.image,
         search: Tool.search,
     };
 }
