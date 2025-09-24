@@ -1,11 +1,12 @@
 // src/components/profile/ProfileInfoCard.tsx - Profile information card
 import React, { useState } from 'react';
-import { User, Mail, Lock, Eye, EyeOff, Save } from 'lucide-react';
+import { User, Mail, Lock, Eye, EyeOff, Save, Github } from 'lucide-react';
 
 interface UserInfo {
   id: string;
   name: string;
   email: string;
+  githubUsername: string;
   joinedDate: string;
   avatar?: string;
 }
@@ -83,6 +84,27 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
               id="email"
               type="email"
               defaultValue={user.email}
+              disabled={!isEditing}
+              className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                !isEditing ? 'bg-gray-50 text-gray-600' : 'bg-white'
+              }`}
+            />
+          </div>
+        </div>
+
+        {/* GitHub Username Field */}
+        <div>
+          <label htmlFor="githubUsername" className="block text-sm font-medium text-gray-700 mb-2">
+            GitHub Username
+          </label>
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <Github className="h-5 w-5 text-gray-400" />
+            </div>
+            <input
+              id="githubUsername"
+              type="text"
+              defaultValue={user.githubUsername}
               disabled={!isEditing}
               className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                 !isEditing ? 'bg-gray-50 text-gray-600' : 'bg-white'

@@ -9,6 +9,7 @@ const Profile: React.FC = () => {
     id: '1',
     name: 'John Doe',
     email: 'john.doe@company.com',
+    githubUsername: 'johndoe',
     joinedDate: 'January 2024',
     avatar: undefined
   };
