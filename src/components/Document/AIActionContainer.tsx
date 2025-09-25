@@ -9,6 +9,8 @@ interface AIActionContainerProps {
     onRegenerate?: () => void;
     isRegenerating?: boolean;
     chatSidebarOpen?: boolean;
+    operationType?: 'addition' | 'editing' | 'removal' | 'replacement';
+    affectedContentSummary?: string;
 }
 
 export default function AIActionContainer({
@@ -17,7 +19,9 @@ export default function AIActionContainer({
     onReject,
     onRegenerate,
     isRegenerating = false,
-    chatSidebarOpen = false
+    chatSidebarOpen = false,
+    operationType = 'addition',
+    affectedContentSummary
 }: AIActionContainerProps) {
     const [isVisible, setIsVisible] = useState(false);
 
@@ -59,13 +63,28 @@ export default function AIActionContainer({
             }`}>
             <div className="bg-white border border-gray-200 rounded-xl shadow-2xl p-4 min-w-[320px] backdrop-blur-sm bg-white/95">
                 {/* Header */}
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="p-2 bg-gradient-to-br from-purple-500 to-blue-600 rounded-lg">
+                <div className="flex items-start gap-3 mb-4">
+                    <div className={`p-2 rounded-lg ${operationType === 'removal' ? 'bg-gradient-to-br from-red-500 to-red-600' :
+                            operationType === 'editing' ? 'bg-gradient-to-br from-blue-500 to-blue-600' :
+                                operationType === 'replacement' ? 'bg-gradient-to-br from-orange-500 to-orange-600' :
+                                    'bg-gradient-to-br from-green-500 to-green-600'
+                        }`}>
                         <Sparkles className="w-5 h-5 text-white" />
                     </div>
                     <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 text-sm">AI Content Preview</h3>
-                        <p className="text-xs text-gray-500">Review the highlighted content and choose your action</p>
+                        <h3 className="font-semibold text-gray-900 text-sm">
+                            {operationType === 'removal' ? 'AI Content Removal' :
+                                operationType === 'editing' ? 'AI Content Edit' :
+                                    operationType === 'replacement' ? 'AI Content Replacement' :
+                                        'AI Content Addition'}
+                        </h3>
+                        <p className="text-xs text-gray-500">
+                            {operationType === 'removal' ? 'Content marked for removal (highlighted in red)' :
+                                operationType === 'editing' ? 'Content has been modified (highlighted in blue)' :
+                                    operationType === 'replacement' ? 'Content has been replaced (highlighted in orange)' :
+                                        'New content added (highlighted in green)'}
+                            {affectedContentSummary && ` • ${affectedContentSummary}`}
+                        </p>
                     </div>
                 </div>
 

@@ -326,7 +326,7 @@ button:focus-visible {
   animation: ai-content-pulse 2s ease-in-out infinite;
 }
 
-/* AI Preview Content - more prominent highlighting */
+/* AI Preview Content - Default addition highlighting */
 .ai-preview-content {
   position: relative;
   background: linear-gradient(135deg, rgba(34, 197, 94, 0.15) 0%, rgba(16, 185, 129, 0.15) 100%);
@@ -343,6 +343,113 @@ button:focus-visible {
   top: -12px;
   left: 12px;
   background: #10b981;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  z-index: 10;
+}
+
+/* AI Editing Content - Blue highlighting for edited content */
+.ProseMirror .ai-editing-content,
+.ai-editing-content {
+  position: relative !important;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.25) 0%, rgba(37, 99, 235, 0.25) 100%) !important;
+  border: 2px solid #3b82f6 !important;
+  border-radius: 6px !important;
+  padding: 0.5rem !important;
+  margin: 0.5rem 0 !important;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3) !important;
+}
+
+.ai-editing-content::before {
+  content: 'AI Edited Content - Preview';
+  position: absolute;
+  top: -12px;
+  left: 12px;
+  background: #3b82f6;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  z-index: 10;
+}
+
+/* AI Removal Content - Red highlighting for content to be removed */
+.ProseMirror .ai-removal-content,
+.ai-removal-content {
+  position: relative !important;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.25) 0%, rgba(220, 38, 38, 0.25) 100%) !important;
+  border: 2px solid #ef4444 !important;
+  border-radius: 6px !important;
+  padding: 0.5rem !important;
+  margin: 0.5rem 0 !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3) !important;
+  text-decoration: line-through !important;
+  opacity: 0.8 !important;
+}
+
+.ai-removal-content::before {
+  content: 'AI Marked for Removal - Preview';
+  position: absolute;
+  top: -12px;
+  left: 12px;
+  background: #ef4444;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  z-index: 10;
+}
+
+/* AI Addition Content - Green highlighting (same as preview but with different label) */
+/* Make AI highlighting more visible in TipTap editor */
+.ProseMirror .ai-addition-content,
+.ai-addition-content {
+  position: relative !important;
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.25) 0%, rgba(16, 185, 129, 0.25) 100%) !important;
+  border: 2px solid #10b981 !important;
+  border-radius: 6px !important;
+  padding: 0.5rem !important;
+  margin: 0.5rem 0 !important;
+  box-shadow: 0 2px 8px rgba(34, 197, 94, 0.3) !important;
+}
+
+.ai-addition-content::before {
+  content: 'AI Added Content - Preview';
+  position: absolute;
+  top: -12px;
+  left: 12px;
+  background: #10b981;
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  z-index: 10;
+}
+
+/* AI Replacement Content - Orange highlighting */
+.ProseMirror .ai-replacement-content,
+.ai-replacement-content {
+  position: relative !important;
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.25) 0%, rgba(234, 88, 12, 0.25) 100%) !important;
+  border: 2px solid #f97316 !important;
+  border-radius: 6px !important;
+  padding: 0.5rem !important;
+  margin: 0.5rem 0 !important;
+  box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3) !important;
+}
+
+.ai-replacement-content::before {
+  content: 'AI Replaced Content - Preview';
+  position: absolute;
+  top: -12px;
+  left: 12px;
+  background: #f97316;
   color: white;
   font-size: 0.75rem;
   font-weight: 600;
@@ -400,6 +507,135 @@ button:focus-visible {
     opacity: 0;
     transform: scale(1);
   }
+}
+
+/* Enhanced AI Overlay System */
+@keyframes ai-overlay-appear {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.9);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ai-overlay-disappear {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.9);
+  }
+}
+
+/* AI Overlay Base Styles */
+.ai-overlay {
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  user-select: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ai-overlay:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+}
+
+/* Position-based highlighting for precise content targeting - More transparent */
+.ai-addition-highlight {
+  background: rgba(34, 197, 94, 0.15) !important;
+  border-radius: 3px;
+  padding: 2px 4px;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: #059669 !important;
+  transition: all 0.3s ease;
+}
+
+.ai-addition-highlight:hover {
+  background: rgba(34, 197, 94, 0.25) !important;
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+.ai-editing-highlight {
+  background: rgba(59, 130, 246, 0.15) !important;
+  border-radius: 3px;
+  padding: 2px 4px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #2563eb !important;
+  transition: all 0.3s ease;
+}
+
+.ai-editing-highlight:hover {
+  background: rgba(59, 130, 246, 0.25) !important;
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+.ai-removal-highlight {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-radius: 3px;
+  padding: 2px 4px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #dc2626 !important;
+  text-decoration: line-through !important;
+  opacity: 0.8;
+  transition: all 0.3s ease;
+}
+
+.ai-removal-highlight:hover {
+  background: rgba(239, 68, 68, 0.25) !important;
+  border-color: rgba(239, 68, 68, 0.5);
+  opacity: 1;
+}
+
+.ai-replacement-highlight {
+  background: rgba(249, 115, 22, 0.15) !important;
+  border-radius: 3px;
+  padding: 2px 4px;
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  color: #ea580c !important;
+  transition: all 0.3s ease;
+}
+
+.ai-replacement-highlight:hover {
+  background: rgba(249, 115, 22, 0.25) !important;
+  border-color: rgba(249, 115, 22, 0.5);
+}
+
+/* Ensure content remains editable during preview */
+.ai-addition-highlight,
+.ai-editing-highlight,
+.ai-removal-highlight,
+.ai-replacement-highlight {
+  cursor: text;
+  user-select: text;
+  position: relative;
+  display: inline;
+}
+
+/* Add subtle animation for new highlights */
+@keyframes ai-highlight-appear {
+  0% {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.ai-addition-highlight,
+.ai-editing-highlight,
+.ai-removal-highlight,
+.ai-replacement-highlight {
+  animation: ai-highlight-appear 0.4s ease-out;
 }
 
 /* AI Content highlighting for specific elements */

@@ -222,6 +222,8 @@ export default function DocumentEditor() {
                     onRegenerate={handleRegenerateAI}
                     isRegenerating={isRegenerating}
                     chatSidebarOpen={chatSidebarOpen}
+                    operationType={(window as any).currentAIOperationType || 'addition'}
+                    affectedContentSummary={(window as any).currentAIContentSummary}
                 />
             </div>
         </DocumentLayout>
