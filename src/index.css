@@ -509,44 +509,7 @@ button:focus-visible {
   }
 }
 
-/* Enhanced AI Overlay System */
-@keyframes ai-overlay-appear {
-  0% {
-    opacity: 0;
-    transform: translateY(-10px) scale(0.9);
-  }
-  100% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes ai-overlay-disappear {
-  0% {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-  100% {
-    opacity: 0;
-    transform: translateY(-10px) scale(0.9);
-  }
-}
-
-/* AI Overlay Base Styles */
-.ai-overlay {
-  font-family: system-ui, -apple-system, sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  user-select: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.ai-overlay:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
-}
+/* Simplified AI Editing Styles */
 
 /* Position-based highlighting for precise content targeting - More transparent */
 .ai-addition-highlight {
