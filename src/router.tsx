@@ -13,13 +13,7 @@ import DocumentHistory from "@/pages/Document/DocumentHistory";
 import { DocumentProvider } from "./context/DocumentContext";
 import Profile from "./pages/Profile";
 import Projects from "./pages/Projects"; // NEW: All projects page
-import AIEditingDemo from "./components/AIEditingDemo";
-import ChatEditingSimulator from "./components/ChatEditingSimulator";
-import AIEditingHub from "./components/AIEditingHub";
-import IntegratedAIEditingDemo from "./components/IntegratedAIEditingDemo";
-import PositionBasedAIDemo from "./components/PositionBasedAIDemo";
 import ComprehensiveAIDemo from "./components/ComprehensiveAIDemo";
-import SimpleAIDemo from "./components/SimpleAIDemo";
 
 // Wrapper component for document pages that need context
 const DocumentPageWrapper = ({ children }: { children: React.ReactNode }) => (
@@ -79,32 +73,8 @@ const router = createBrowserRouter([
     element: <Projects />,
   },
   {
-    path: "/ai-editing-demo", // AI Editing Demo
-    element: <AIEditingDemo />,
-  },
-  {
-    path: "/chat-simulator", // Chat Editing Simulator
-    element: <ChatEditingSimulator />,
-  },
-  {
-    path: "/ai-hub", // AI Editing Hub
-    element: <AIEditingHub />,
-  },
-  {
-    path: "/integrated-demo", // Integrated AI Editing Demo
-    element: <IntegratedAIEditingDemo />,
-  },
-  {
-    path: "/position-demo", // Position-Based AI Editing Demo
-    element: <PositionBasedAIDemo />,
-  },
-  {
     path: "/comprehensive-demo", // Comprehensive AI Editing Demo (All Features Combined)
     element: <ComprehensiveAIDemo />,
-  },
-  {
-    path: "/simple-demo", // Simple Clean AI Editor
-    element: <SimpleAIDemo />,
   }
 ]);
 

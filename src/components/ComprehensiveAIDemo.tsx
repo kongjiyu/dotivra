@@ -3,10 +3,10 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Highlight from '@tiptap/extension-highlight';
 import { Plus, Trash2, RotateCw, XCircle, Sparkles, Wand2 } from 'lucide-react';
-import { EnhancedAIContentWriter } from '../utils/modernAIContentWriter';
+import { EnhancedAIContentWriter } from '../utils/enhancedAIContentWriter';
 import AIActionContainer from '@/components/document/AIActionContainer';
 import ToolBar from '@/components/document/ToolBar';
-import type { ContentPosition } from '../utils/modernAIContentWriter';
+import type { ContentPosition } from '../utils/enhancedAIContentWriter';
 
 interface AIOperation {
     type: 'addition' | 'removal' | 'replacement';
