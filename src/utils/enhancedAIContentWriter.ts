@@ -46,8 +46,7 @@ export class EnhancedAIContentWriter {
    */
   public async addContentAtPosition(
     position: ContentPosition,
-    newContent: string,
-    options: { animate?: boolean; label?: string } = {}
+    newContent: string
   ): Promise<string> {
     const changeId = `add-${Date.now()}`;
     
@@ -85,8 +84,7 @@ export class EnhancedAIContentWriter {
    * Mark content for removal with highlight
    */
   public async markContentForRemoval(
-    position: ContentPosition,
-    options: { label?: string } = {}
+    position: ContentPosition
   ): Promise<string> {
     const changeId = `remove-${Date.now()}`;
     
@@ -116,8 +114,7 @@ export class EnhancedAIContentWriter {
    */
   public async replaceContentWithHighlights(
     position: ContentPosition,
-    newContent: string,
-    options: { label?: string } = {}
+    newContent: string
   ): Promise<string> {
     const changeId = `replace-${Date.now()}`;
     

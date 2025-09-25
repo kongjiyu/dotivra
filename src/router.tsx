@@ -13,7 +13,6 @@ import DocumentHistory from "@/pages/Document/DocumentHistory";
 import { DocumentProvider } from "./context/DocumentContext";
 import Profile from "./pages/Profile";
 import Projects from "./pages/Projects"; // NEW: All projects page
-import ComprehensiveAIDemo from "./components/ComprehensiveAIDemo";
 
 // Wrapper component for document pages that need context
 const DocumentPageWrapper = ({ children }: { children: React.ReactNode }) => (
@@ -71,10 +70,6 @@ const router = createBrowserRouter([
   {
     path: "/projects", // NEW: All projects page
     element: <Projects />,
-  },
-  {
-    path: "/comprehensive-demo", // Comprehensive AI Editing Demo (All Features Combined)
-    element: <ComprehensiveAIDemo />,
   }
 ]);
 

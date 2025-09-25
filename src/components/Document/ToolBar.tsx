@@ -1,5 +1,5 @@
 import type { Editor } from "@tiptap/react";
-import { type Tool, useTool } from "../../lib/Tools/Tool";
+
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import LinkTooltip from "./LinkTooltip";
@@ -55,7 +55,7 @@ const FONT_FAMILIES = [
 
 
 const ToolBar = ({ editor }: { editor: Editor | null }) => {
-    const tool: Tool | null = editor ? useTool(editor) : null;
+
     const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [currentFontSize, setCurrentFontSize] = useState<string>('16px');
     const [currentFontFamily, setCurrentFontFamily] = useState<string>("Inter");
@@ -110,7 +110,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
         };
     }, [editor]);
 
-    if (!tool || !editor) return <div>No editor available</div>;
+    if (!editor) return <div>No editor available</div>;
 
     // Helper for active state
     const isActive = (name: string, attrs?: any) => editor.isActive(name, attrs);
@@ -152,7 +152,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
             <div className="flex items-center gap-1 flex-shrink-0 overflow-hidden">
                 {/* Basic Text Formatting */}
                 <Button variant="outline" size="sm"
-                    onClick={() => tool.font?.bold()}
+                    onClick={() => editor.chain().focus().toggleBold().run()}
                     className={`h-8 w-8 p-0 ${isActive('bold') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                         }`}
                     title="Bold"
@@ -161,7 +161,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                 </Button>
 
                 <Button variant="outline" size="sm"
-                    onClick={() => tool.font?.italic()}
+                    onClick={() => editor.chain().focus().toggleItalic().run()}
                     className={`h-8 w-8 p-0 ${isActive('italic') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                         }`}
                     title="Italic"
@@ -170,7 +170,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                 </Button>
 
                 <Button variant="outline" size="sm"
-                    onClick={() => tool.font?.underline()}
+                    onClick={() => editor.chain().focus().toggleUnderline().run()}
                     className={`h-8 w-8 p-0 ${isActive('underline') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                         }`}
                     title="Underline"
@@ -179,7 +179,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                 </Button>
 
                 <Button variant="outline" size="sm"
-                    onClick={() => tool.font?.strikethrough()}
+                    onClick={() => editor.chain().focus().toggleStrike().run()}
                     className={`h-8 w-8 p-0 ${isActive('strike') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                         }`}
                     title="Strikethrough"
@@ -448,7 +448,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                 <div className="flex items-center gap-2">
                                     <button
                                         className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
-                                        onClick={() => tool.font?.clearColor()}
+                                        onClick={() => editor.chain().focus().unsetColor().run()}
                                         title="Default (Auto)"
                                     >
                                         A
@@ -477,7 +477,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                                     backgroundColor: `${color}20`, // 20 = ~12% opacity
                                                     borderColor: color
                                                 }}
-                                                onClick={() => tool.font?.color(color)}
+                                                onClick={() => editor.chain().focus().setColor(color).run()}
                                                 title={name}
                                             />
                                         ))}
@@ -657,7 +657,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
 
                     {/* Essential Lists */}
                     <Button variant="outline" size="sm"
-                        onClick={() => tool.list?.bullet()}
+                        onClick={() => editor.chain().focus().toggleBulletList().run()}
                         className={`h-8 w-8 p-0 ${isActive('bulletList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                             }`}
                         title="Bullet List"
@@ -666,7 +666,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                     </Button>
 
                     <Button variant="outline" size="sm"
-                        onClick={() => tool.list?.ordered()}
+                        onClick={() => editor.chain().focus().toggleOrderedList().run()}
                         className={`h-8 w-8 p-0 ${isActive('orderedList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                             }`}
                         title="Numbered List"
@@ -674,7 +674,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                         <ListOrdered className="w-4 h-4" />
                     </Button>
                     <Button variant="outline"
-                        onClick={() => tool.list?.task()}
+                        onClick={() => editor.chain().focus().toggleTaskList().run()}
                         className={`h-8 w-8 p-0 ${isActive('taskList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                             }`}
                         title="Task List"
@@ -721,7 +721,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                         <IndentDecrease />
                     </Button>
                     <Button variant="outline" size="sm"
-                        onClick={() => tool.font?.clearMarks()}
+                        onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}
                         className="h-8 w-8 p-0 bg-white hover:bg-gray-50"
                         title="Clear All Formatting"
                     >
@@ -739,7 +739,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                 const rows = rowsInput ? Number(rowsInput) : NaN;
                                 const cols = colsInput ? Number(colsInput) : NaN;
                                 if (Number.isFinite(rows) && Number.isFinite(cols) && rows > 0 && cols > 0) {
-                                    tool.table?.create(rows, cols);
+                                    editor.chain().focus().insertTable({ rows, cols, withHeaderRow: false }).run();
                                 }
                             }}
                             className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
@@ -875,7 +875,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                             <DropdownMenuSeparator />
 
                             {/* Lists */}
-                            <DropdownMenuItem onClick={() => tool.list?.task()}>
+                            <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
                                 <CheckSquare className="w-4 h-4 mr-2" />
                                 <span>Task List</span>
                             </DropdownMenuItem>
