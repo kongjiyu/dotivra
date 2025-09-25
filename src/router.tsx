@@ -11,7 +11,8 @@ import DocumentSummary from "@/pages/Document/DocumentSummary";
 import DocumentProject from "@/pages/Document/DocumentProject";
 import DocumentHistory from "@/pages/Document/DocumentHistory";
 import { DocumentProvider } from "./context/DocumentContext";
-        import Profile from "./pages/Profile";
+import Profile from "./pages/Profile";
+import FeedbackForm from "./pages/FeedbackForm";
 import Projects from "./pages/Projects"; // NEW: All projects page
 
 // Wrapper component for document pages that need context
@@ -70,6 +71,10 @@ const router = createBrowserRouter([
   {
     path: "/projects", // NEW: All projects page
     element: <Projects />,
+  },
+  {
+    path: "/feedback",
+    element: <FeedbackForm />,
   }
   ]);
 
