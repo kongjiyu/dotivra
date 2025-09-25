@@ -8,7 +8,22 @@ export interface AIContentOptions {
   position?: 'current' | 'end' | 'start' | { line: number; ch: number };
   /** Whether to animate the content insertion */
   animate?: boolean;
-  /** Animation speed in milliseconds per character */
+  /** Animation    // Generate unique preview ID
+    this.previewContentId = `ai-remove-${Date.now()}`;
+    
+    const { from, to } = this.editor.state.selection;
+    
+    if (from !== to) {
+      // Use current selection
+      this.affectedRange = { from, to };
+      
+      // Set global variables for UI integration
+      (window as any).currentAIContentId = this.previewContentId;
+      (window as any).currentAIOperationType = 'removal';
+      (window as any).currentAIContentSummary = `Removing: "${contentToRemove.substring(0, 50)}${contentToRemove.length > 50 ? '...' : ''}"`;
+      
+      // Mark selected content for removal (red highlighting)
+      this.markContentForRemoval(from, to, this.previewContentId);illiseconds per character */
   animationSpeed?: number;
   /** Whether to focus the editor after insertion */
   focus?: boolean;
@@ -20,6 +35,10 @@ export interface AIContentOptions {
   isPreview?: boolean;
   /** Unique ID for preview content tracking */
   previewId?: string;
+  /** Type of AI operation being performed */
+  operationType?: 'addition' | 'editing' | 'removal' | 'replacement';
+  /** Original content being modified (for editing/removal operations) */
+  originalContent?: string;
 }
 
 export interface StreamingOptions extends AIContentOptions {
@@ -47,6 +66,8 @@ export class AIContentWriter {
   private animationController?: AbortController;
   private originalContent: string = '';
   private previewContentId: string | null = null;
+  private operationType: 'addition' | 'editing' | 'removal' | 'replacement' = 'addition';
+  private affectedRange: { from: number; to: number } | null = null;
 
   constructor(editor: Editor) {
     this.editor = editor;
@@ -311,11 +332,208 @@ export class AIContentWriter {
       });
     }
 
-    // Restore original content
-    this.editor.commands.setContent(this.originalContent, { emitUpdate: false });
+    // Restore original content based on operation type
+    if (this.operationType === 'removal' && this.affectedRange) {
+      // For removal operations, we need to restore the removed content
+      this.editor.commands.focus();
+      this.editor.commands.setTextSelection(this.affectedRange.from);
+      this.insertContent(this.originalContent, true);
+    } else {
+      // For other operations, restore full content
+      this.editor.commands.setContent(this.originalContent, { emitUpdate: false });
+    }
     
     this.originalContent = '';
     this.previewContentId = null;
+    this.operationType = 'addition';
+    this.affectedRange = null;
+  }
+
+  /**
+   * AI Edit Content - Modify existing content with highlighting
+   */
+  async editContent(
+    originalText: string,
+    newText: string,
+    options: AIContentOptions & ContentParseOptions = {}
+  ): Promise<{ originalContent: string; previewId: string }> {
+    this.operationType = 'editing';
+    
+    // Store the full document content before editing
+    this.originalContent = this.editor.getHTML();
+    
+    // Find and replace the original text with highlighted new text
+    const { from, to } = this.editor.state.selection;
+    
+    if (from !== to) {
+      // Use selection if available
+      this.affectedRange = { from, to };
+      this.editor.commands.deleteRange({ from, to });
+    } else {
+      // Try to find the original text in the document
+      const doc = this.editor.state.doc;
+      const foundPos = this.findTextInDocument(doc, originalText);
+      if (foundPos) {
+        this.affectedRange = foundPos;
+        this.editor.commands.deleteRange(foundPos);
+      }
+    }
+
+    // Generate unique preview ID
+    this.previewContentId = `ai-edit-${Date.now()}`;
+    
+    // Set global variables for UI integration
+    (window as any).currentAIContentId = this.previewContentId;
+    (window as any).currentAIOperationType = 'editing';
+    (window as any).currentAIContentSummary = `Edited: "${originalText.substring(0, 50)}${originalText.length > 50 ? '...' : ''}"`;
+    
+    // Insert the new content with editing highlighting
+    await this.writeContent(newText, {
+      ...options,
+      isPreview: true,
+      previewId: this.previewContentId,
+      operationType: 'editing',
+      parseMarkdown: true,
+      animate: true
+    });
+
+    return {
+      originalContent: this.originalContent,
+      previewId: this.previewContentId
+    };
+  }
+
+  /**
+   * AI Remove Content - Mark content for removal with highlighting
+   */
+  async removeContent(
+    contentToRemove: string,
+    _options: AIContentOptions & ContentParseOptions = {}
+  ): Promise<{ originalContent: string; previewId: string }> {
+    this.operationType = 'removal';
+    
+    // Store the full document content before removal
+    this.originalContent = this.editor.getHTML();
+    
+    // Generate unique preview ID
+    this.previewContentId = `ai-remove-${Date.now()}`;
+    
+    const { from, to } = this.editor.state.selection;
+    
+    if (from !== to) {
+      // Use selection if available
+      this.affectedRange = { from, to };
+      
+      // Mark selected content for removal (red highlighting)
+      this.markContentForRemoval(from, to, this.previewContentId);
+    } else {
+      // Try to find the content to remove in the document
+      const doc = this.editor.state.doc;
+      const foundPos = this.findTextInDocument(doc, contentToRemove);
+      if (foundPos) {
+        this.affectedRange = foundPos;
+        this.markContentForRemoval(foundPos.from, foundPos.to, this.previewContentId);
+      }
+    }
+
+    return {
+      originalContent: this.originalContent,
+      previewId: this.previewContentId
+    };
+  }
+
+  /**
+   * AI Add Content - Insert new content with highlighting
+   */
+  async addContent(
+    newContent: string,
+    options: AIContentOptions & ContentParseOptions = {}
+  ): Promise<{ originalContent: string; previewId: string }> {
+    this.operationType = 'addition';
+    
+    // Store the full document content before addition
+    this.originalContent = this.editor.getHTML();
+    
+    // Generate unique preview ID
+    this.previewContentId = `ai-add-${Date.now()}`;
+    
+    // Set global variables for UI integration
+    (window as any).currentAIContentId = this.previewContentId;
+    (window as any).currentAIOperationType = 'addition';
+    (window as any).currentAIContentSummary = `Adding: "${newContent.substring(0, 50)}${newContent.length > 50 ? '...' : ''}"`;
+    
+    // Insert the new content with addition highlighting
+    await this.writeContent(newContent, {
+      ...options,
+      isPreview: true,
+      previewId: this.previewContentId,
+      operationType: 'addition',
+      parseMarkdown: true,
+      animate: true
+    });
+
+    return {
+      originalContent: this.originalContent,
+      previewId: this.previewContentId
+    };
+  }
+
+  /**
+   * Find text in document and return its position
+   */
+  private findTextInDocument(doc: any, text: string): { from: number; to: number } | null {
+    const docText = doc.textBetween(0, doc.content.size, ' ');
+    const index = docText.indexOf(text);
+    
+    if (index !== -1) {
+      return {
+        from: index,
+        to: index + text.length
+      };
+    }
+    
+    return null;
+  }
+
+  /**
+   * Mark content for removal with red highlighting
+   */
+  private markContentForRemoval(from: number, to: number, previewId: string): void {
+    // Add removal highlighting to the selected range
+    setTimeout(() => {
+      const proseMirrorElement = this.editor.options.element?.querySelector('.ProseMirror');
+      if (!proseMirrorElement) return;
+
+      // Find elements in the range and mark them for removal
+      const walker = document.createTreeWalker(
+        proseMirrorElement,
+        NodeFilter.SHOW_ELEMENT,
+        null
+      );
+
+      let node;
+      while (node = walker.nextNode()) {
+        const element = node as HTMLElement;
+        if (element.tagName && (
+          element.tagName.match(/^H[1-6]$/) ||
+          element.tagName === 'P' ||
+          element.tagName === 'LI' ||
+          element.tagName === 'UL' ||
+          element.tagName === 'OL' ||
+          element.tagName === 'BLOCKQUOTE'
+        )) {
+          try {
+            const elementPos = this.editor.view.posAtDOM(element, 0);
+            if (elementPos >= from && elementPos <= to) {
+              element.classList.add('ai-removal-content');
+              element.setAttribute('data-ai-content-id', previewId);
+            }
+          } catch (e) {
+            // Ignore positioning errors
+          }
+        }
+      }
+    }, 100);
   }
 
   /**
@@ -352,20 +570,70 @@ export class AIContentWriter {
   }
 
   /**
+   * Get CSS class based on operation type
+   */
+  private getOperationCSSClass(): string {
+    switch (this.operationType) {
+      case 'editing':
+        return 'ai-editing-content';
+      case 'removal':
+        return 'ai-removal-content';
+      case 'addition':
+        return 'ai-addition-content';
+      case 'replacement':
+        return 'ai-replacement-content';
+      default:
+        return 'ai-preview-content';
+    }
+  }
+
+  /**
    * Apply preview highlighting to recently inserted content
    */
   private applyPreviewHighlighting(): void {
-    if (!this.previewContentId) return;
+    if (!this.previewContentId) {
+      console.error('No preview content ID available for highlighting');
+      return;
+    }
+
+    console.log('🎨 Applying preview highlighting:', {
+      operation: this.operationType,
+      contentId: this.previewContentId
+    });
 
     // Find recently inserted elements and apply highlighting
     setTimeout(() => {
-      const proseMirrorElement = this.editor.options.element?.querySelector('.ProseMirror');
-      if (!proseMirrorElement) return;
+      // Try multiple selectors to find the editor DOM
+      let editorElement = this.editor.options.element?.querySelector('.ProseMirror') ||
+                         this.editor.view?.dom ||
+                         this.editor.options.element;
+
+      if (!editorElement) {
+        console.error('❌ Could not find editor DOM element');
+        return;
+      }
+
+      console.log('✅ Found editor element:', editorElement.tagName, editorElement.className);
 
       const walker = document.createTreeWalker(
-        proseMirrorElement,
+        editorElement,
         NodeFilter.SHOW_ELEMENT,
-        null
+        {
+          acceptNode: (node: Node) => {
+            const element = node as HTMLElement;
+            if (element.tagName && (
+              element.tagName.match(/^H[1-6]$/) ||
+              element.tagName === 'P' ||
+              element.tagName === 'LI' ||
+              element.tagName === 'UL' ||
+              element.tagName === 'OL' ||
+              element.tagName === 'BLOCKQUOTE'
+            ) && !element.hasAttribute('data-ai-content-id')) {
+              return NodeFilter.FILTER_ACCEPT;
+            }
+            return NodeFilter.FILTER_SKIP;
+          }
+        }
       );
 
       let node;
@@ -373,24 +641,46 @@ export class AIContentWriter {
 
       while (node = walker.nextNode()) {
         const element = node as HTMLElement;
-        if (element.tagName && (
-          element.tagName.match(/^H[1-6]$/) ||
-          element.tagName === 'P' ||
-          element.tagName === 'LI' ||
-          element.tagName === 'UL' ||
-          element.tagName === 'OL' ||
-          element.tagName === 'BLOCKQUOTE'
-        ) && !element.hasAttribute('data-ai-content-id')) {
-          elementsToHighlight.push(element);
-        }
+        elementsToHighlight.push(element);
+        console.log('🔍 Found element to highlight:', {
+          tag: element.tagName,
+          text: element.textContent?.substring(0, 50) + '...',
+          classes: Array.from(element.classList)
+        });
       }
 
-      // Apply highlighting to new elements
-      elementsToHighlight.forEach(element => {
-        element.classList.add('ai-preview-content');
+      console.log(`📝 Found ${elementsToHighlight.length} elements to highlight`);
+
+      if (elementsToHighlight.length === 0) {
+        console.warn('⚠️ No new elements found to highlight - content may have been processed already');
+        return;
+      }
+
+      // Apply highlighting to new elements based on operation type
+      const cssClass = this.getOperationCSSClass();
+      console.log('🎯 Applying CSS class:', cssClass);
+      
+      elementsToHighlight.forEach((element, index) => {
+        // Add operation-specific CSS class
+        element.classList.add(cssClass);
+        element.classList.add('ai-preview-content'); // Generic preview class
         element.setAttribute('data-ai-content-id', this.previewContentId!);
+        element.setAttribute('data-ai-operation', this.operationType || 'unknown');
+        
+        console.log(`✨ Applied highlighting ${index + 1}:`, {
+          element: element.tagName,
+          classes: Array.from(element.classList),
+          contentId: element.getAttribute('data-ai-content-id'),
+          operation: element.getAttribute('data-ai-operation')
+        });
       });
-    }, 100);
+
+      // Force style recalculation to ensure highlighting appears
+      if (elementsToHighlight.length > 0) {
+        elementsToHighlight.forEach(el => el.offsetHeight); // Trigger reflow
+        console.log('🔄 Forced style recalculation for highlighting');
+      }
+    }, 150); // Increased timeout for DOM stability
   }
 
   /**
