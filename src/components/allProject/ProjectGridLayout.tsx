@@ -13,8 +13,8 @@ interface ProjectsGridViewProps {
 const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
   projects,
   onProjectClick,
-  onProjectEdit,
-  onProjectDelete
+  onProjectEdit: _onProjectEdit,
+  onProjectDelete: _onProjectDelete
 }) => {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -40,7 +40,7 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
                 </div>
               </div>
             </div>
-            
+
             {/* Actions Menu */}
             <div className="relative opacity-0 group-hover:opacity-100 transition-opacity">
               <button
