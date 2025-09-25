@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "firebase": "^12.3.0",
     "@digivorefr/html2pdf.js": "^0.11.1",
     "@google/generative-ai": "^0.24.1",
     "@microlink/react": "^5.5.23",
