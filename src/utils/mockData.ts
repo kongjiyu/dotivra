@@ -45,6 +45,13 @@ export const templates: Template[] = [
     description: "User story and acceptance criteria template",
     icon: Users,
     category: 'general'
+  },
+  {
+    id: 7,
+    name: "Commit Log",
+    description: "A commit Log template to track changes and updates",
+    icon: BookOpen,
+    category: 'developer'
   }
 ];
 
