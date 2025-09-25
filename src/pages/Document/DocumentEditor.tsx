@@ -261,8 +261,7 @@ export default function DocumentEditor() {
 
                             operationId = await aiWriter.addContentAtPosition(
                                 addPosition,
-                                operationToRetry.newContent || '',
-                                { label: '✨ AI Added Content - Click to Review', animate: true }
+                                operationToRetry.newContent || ''
                             );
                             break;
 
@@ -280,8 +279,7 @@ export default function DocumentEditor() {
                             };
 
                             operationId = await aiWriter.markContentForRemoval(
-                                removePosition,
-                                { label: '🗑️ AI Marked for Removal - Click to Review' }
+                                removePosition
                             );
                             break;
 
@@ -300,8 +298,7 @@ export default function DocumentEditor() {
 
                             operationId = await aiWriter.replaceContentWithHighlights(
                                 replacePosition,
-                                operationToRetry.newContent || '',
-                                { label: '🔄 AI Replacement - Click to Review' }
+                                operationToRetry.newContent || ''
                             );
                             break;
                     }

@@ -1,7 +1,6 @@
 import { EditorContext, useEditor } from "@tiptap/react";
 import DocumentContext from "./DocumentContext";
 import ToolBar from "./ToolBar";
-// import LinkPreview from "./LinkPreview"; // Temporarily disabled
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { createTipTapConfig } from "../../config/tiptap-config";
 
@@ -23,7 +22,6 @@ const Tiptap = ({
     onOpenChat
 }: TiptapProps) => {
     const [isReady, setIsReady] = useState(false);
-    // const [linkPreview, setLinkPreview] = useState... // Temporarily disabled
     const initialAppliedRef = useRef(false); // NEW
     // Create editor configuration using the config file
     const editorConfig = useMemo(() =>
@@ -51,59 +49,7 @@ const Tiptap = ({
         console.log('TipTap onOpenChat prop:', onOpenChat);
     }, [onOpenChat]);
 
-    // Temporarily disable hover event listeners to prevent corruption
-    // TODO: Re-implement with safer event handling
-    /*
-    // Add hover event listeners for link preview
-    useEffect(() => {
-        if (!editor) return;
 
-        const handleLinkHover = (event: MouseEvent) => {
-            const target = event.target as HTMLElement;
-            const linkElement = target.closest('a');
-            
-            if (linkElement && linkElement.getAttribute('href')) {
-                const url = linkElement.getAttribute('href');
-                if (url) {
-                    const rect = linkElement.getBoundingClientRect();
-                    setLinkPreview({
-                        isVisible: true,
-                        url: url,
-                        position: {
-                            x: rect.left + rect.width / 2,
-                            y: rect.bottom + 8
-                        }
-                    });
-                }
-            }
-        };
-
-        const handleLinkLeave = (event: MouseEvent) => {
-            const target = event.target as HTMLElement;
-            const linkElement = target.closest('a');
-            
-            if (linkElement) {
-                setLinkPreview(prev => ({ ...prev, isVisible: false }));
-            }
-        };
-
-        const editorElement = editor.view.dom;
-        if (editorElement) {
-            editorElement.addEventListener('mouseover', handleLinkHover);
-            editorElement.addEventListener('mouseout', handleLinkLeave);
-        }
-
-        return () => {
-            if (editorElement) {
-                editorElement.removeEventListener('mouseover', handleLinkHover);
-                editorElement.removeEventListener('mouseout', handleLinkLeave);
-            }
-        };
-    }, [editor]);
-    */
-
-    // Temporarily disable link preview to debug corruption
-    // TODO: Re-enable once issue is resolved
 
     // Memoize the context value to prevent unnecessary re-renders
     const contextValue = useMemo(() => ({ editor }), [editor]);
@@ -191,12 +137,7 @@ const Tiptap = ({
                     </div>
                 </div>
 
-                {/* Link Preview - Temporarily disabled */}
-                {/* <LinkPreview
-                    url={linkPreview.url}
-                    isVisible={linkPreview.isVisible}
-                    position={linkPreview.position}
-                /> */}
+
             </div>
         </EditorContext.Provider>
 

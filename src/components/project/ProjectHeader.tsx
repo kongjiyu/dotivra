@@ -16,7 +16,7 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
   onAddDocument,
   onEditProject
 }) => {
-  const totalDocuments = (project.userDocsCount || 0) + (project.devDocsCount || 0);
+
 
   return (
     <div className="bg-white border-b border-gray-200">
@@ -58,7 +58,7 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
           </div>
 
           <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-            
+
             <button
               onClick={onAddDocument}
               className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
