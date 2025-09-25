@@ -1,15 +1,37 @@
-// src/components/auth/AuthPage.tsx - Static design only
+// src/pages/Login.tsx - Login page with authentication redirect
 import React, { useState } from 'react';
 import { BookOpen, Zap, Users, Shield } from 'lucide-react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import LoginForm from '../components/auth/LoginForm';
 import RegisterForm from '../components/auth/RegisterForm';
 
 const Login: React.FC = () => {
   const [isLoginMode, setIsLoginMode] = useState(true);
-
+  const { user, loading } = useAuth();
+  const location = useLocation();
+  
   const toggleMode = () => {
     setIsLoginMode(!isLoginMode);
   };
+
+  // Show loading spinner while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect to dashboard if already authenticated
+  if (user) {
+    const from = (location.state as any)?.from?.pathname || '/dashboard';
+    return <Navigate to={from} replace />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">

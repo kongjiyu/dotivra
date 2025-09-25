@@ -9,10 +9,14 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run server\"",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:frontend": "npm run build && firebase deploy --only hosting",
+    "deploy:functions": "firebase deploy --only functions",
+    "deploy": "npm run build && firebase deploy",
+    "firebase:init": "firebase init functions",
+    "firebase:serve": "firebase serve"
   },
   "dependencies": {
-    "firebase": "^12.3.0",
     "@digivorefr/html2pdf.js": "^0.11.1",
     "@google/generative-ai": "^0.24.1",
     "@microlink/react": "^5.5.23",

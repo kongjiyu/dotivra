@@ -1,9 +1,14 @@
 // src/components/dashboard/ProjectList.tsx
 import React, { useState, useEffect } from 'react';
 
-import { Plus, FolderOpen, ExternalLink, Clock, FileText, Code, ChevronRight } from 'lucide-react';
-import type { Project } from '../../types';
-import AddProjectModal from '../modal/addProject';
+// For now, let's define a simple Project interface here to avoid import issues
+interface Project {
+  Project_Id?: string;
+  ProjectName: string;
+  Description: string;
+  GitHubRepo: string;
+  Created_Time: any;
+}
 
 interface ProjectListProps {
   onProjectClick: (projectId: string) => void;
@@ -27,11 +32,16 @@ const ProjectList: React.FC<ProjectListProps> = ({
       setLoading(true);
       setError(null);
       
-      // Use FirestoreService directly instead of API call
-      const projectsData = await FirestoreService.getProjects();
-      console.log('📋 ProjectList received projects:', projectsData);
+      // Use API call instead of FirestoreService (since frontend will call backend API)
+      const response = await fetch('/api/projects');
+      const data = await response.json();
+      console.log('📋 ProjectList received projects:', data);
       
-      setProjects(projectsData);
+      if (data.success) {
+        setProjects(data.projects);
+      } else {
+        throw new Error(data.error || 'Failed to load projects');
+      }
     } catch (err) {
       console.error('❌ ProjectList error loading projects:', err);
       setError(err instanceof Error ? err.message : 'Failed to load projects');
@@ -44,15 +54,6 @@ const ProjectList: React.FC<ProjectListProps> = ({
   useEffect(() => {
     loadProjects();
   }, []);
-
-  const handleCreateProject = (projectData: {
-    name: string;
-    description: string;
-    selectedRepo?: string;
-  }) => {
-    console.log('Creating new project:', projectData);
-    // TODO: Implement actual project creation
-  }; 
   
   if (loading) {
     return (
@@ -117,7 +118,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
               <div
                 key={project.Project_Id}
                 className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                onClick={() => onProjectClick(project.Project_Id)}
+                onClick={() => onProjectClick(project.Project_Id || '')}
               >
                 <div>
                   <h3 className="font-medium text-gray-900">{project.ProjectName}</h3>
@@ -132,9 +133,9 @@ const ProjectList: React.FC<ProjectListProps> = ({
                 </div>
                 <div className="text-right text-sm text-gray-500">
                   <p>
-                    {project.Created_Time?.toDate ? 
-                      project.Created_Time.toDate().toLocaleDateString() :
-                      new Date(project.Created_Time).toLocaleDateString()
+                    {typeof project.Created_Time === 'string' 
+                      ? new Date(project.Created_Time).toLocaleDateString()
+                      : project.Created_Time?.toDate?.().toLocaleDateString() || 'N/A'
                     }
                   </p>
                 </div>
