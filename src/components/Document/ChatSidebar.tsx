@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Sparkles, SendHorizonal, Wand2 } from "lucide-react";
 import type { Editor } from "@tiptap/react";
-import { writeAIContent, streamAIContent } from "@/utils/aiContentWriter";
 import { useDocument } from "@/context/DocumentContext";
+import { EnhancedAIContentWriter } from "@/utils/enhancedAIContentWriter";
+import type { ContentPosition } from "@/utils/enhancedAIContentWriter";
 
 export type ChatMessage = {
     id: string;
@@ -39,9 +40,18 @@ export default function ChatSidebar({
     const [isGenerating, setIsGenerating] = useState(false);
     const listRef = useRef<HTMLDivElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [aiWriter, setAIWriter] = useState<EnhancedAIContentWriter | null>(null);
 
     // Get AI actions function from document context
     const { showAIActions, documentContent } = useDocument();
+
+    // Note: Current operation ID is stored globally for DocumentEditor access
+
+    // Debug context values
+    useEffect(() => {
+        console.log('🔍 ChatSidebar: showAIActions changed to:', !!showAIActions, 'function:', showAIActions);
+        console.log('🔍 ChatSidebar: documentContent available:', !!documentContent);
+    }, [showAIActions, documentContent]);
 
     // Combine external messages (if any) with internal state
     const messages = useMemo(() => externalMessages ?? internalMessages, [externalMessages, internalMessages]);
@@ -52,12 +62,19 @@ export default function ChatSidebar({
             const helloMsg: ChatMessage = {
                 id: 'hello-msg',
                 role: 'assistant',
-                content: 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content. When I generate content, it will appear directly in your document for you to review and accept. How can I assist you today?',
+                content: 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content.\n\n**Special AI Operations:**\n• Type `*add` to add new content\n• Type `*remove` to mark content for removal\n• Type `*edit` to replace existing content\n\nThese operations will show highlighted changes in your document with accept/reject options. How can I assist you today?',
                 timestamp: Date.now(),
             };
             setInternalMessages([helloMsg]);
         }
     }, [open, externalMessages, internalMessages.length]);
+
+    // Initialize AI Writer when editor is available
+    useEffect(() => {
+        if (editor && !aiWriter) {
+            setAIWriter(new EnhancedAIContentWriter(editor));
+        }
+    }, [editor, aiWriter]);
 
     // Handle initial message from context menu
     useEffect(() => {
@@ -82,144 +99,230 @@ export default function ChatSidebar({
         return () => clearTimeout(timeoutId);
     }, [messages.length, messages, open]);
 
+    // AI Operations Functions
+    const executeAIAddOperation = async (): Promise<string> => {
+        if (!aiWriter || !editor) throw new Error('Editor not available');
+
+        // Get current cursor position
+        const { from } = editor.state.selection;
+        const position: ContentPosition = {
+            from,
+            to: from,
+            length: 0
+        };
+
+        // Generate content to add
+        const newContent = `\n\n### New AI-Generated Section\n\nThis section was added through AI operations. It demonstrates how content can be intelligently inserted at specific positions within your document.\n\n**Key Features:**\n- Smart positioning\n- Context awareness\n- Interactive review process\n\n`;
+
+        // Execute the add operation
+        const changeId = await aiWriter.addContentAtPosition(position, newContent);
+        return changeId;
+    };
+
+    const executeAIRemoveOperation = async (): Promise<string> => {
+        if (!aiWriter || !editor) throw new Error('Editor not available');
+
+        // Try to find content to remove - look for a heading or paragraph
+        const doc = editor.state.doc;
+        let targetPosition: ContentPosition | null = null;
+
+        // Find the first non-empty paragraph or heading to remove
+        doc.descendants((node, pos) => {
+            if (!targetPosition && node.type.name === 'paragraph' && node.textContent.trim().length > 50) {
+                targetPosition = {
+                    from: pos,
+                    to: pos + node.nodeSize,
+                    length: node.nodeSize,
+                    text: node.textContent
+                };
+                return false; // Stop iteration
+            }
+            return true;
+        });
+
+        if (!targetPosition) {
+            // Fallback: mark current selection or cursor line
+            const { from, to } = editor.state.selection;
+            targetPosition = { from, to: to || from + 10, length: (to || from + 10) - from };
+        }
+
+        // Execute the remove operation
+        const changeId = await aiWriter.markContentForRemoval(targetPosition);
+        return changeId;
+    };
+
+    const executeAIEditOperation = async (): Promise<string> => {
+        if (!aiWriter || !editor) throw new Error('Editor not available');
+
+        // Find content to edit - look for the first paragraph
+        const doc = editor.state.doc;
+        let foundPosition: ContentPosition | null = null;
+
+        doc.descendants((node, pos) => {
+            if (!foundPosition && node.type.name === 'paragraph' && node.textContent.trim().length > 20) {
+                foundPosition = {
+                    from: pos,
+                    to: pos + node.nodeSize,
+                    length: node.nodeSize
+                };
+                return false; // Stop iteration
+            }
+            return true;
+        });
+
+        if (!foundPosition) {
+            throw new Error('No suitable content found to edit');
+        }
+
+        // Type assertion to help TypeScript understand the type
+        const position = foundPosition as ContentPosition;
+
+        // Generate improved content
+        const originalText = editor.state.doc.textBetween(position.from, position.to);
+        const improvedContent = `${originalText.trim()} Additionally, this content has been enhanced with AI-powered improvements, including better structure, clarity, and comprehensive details.`;
+
+        // Execute the replace operation
+        const changeId = await aiWriter.replaceContentWithHighlights(position, improvedContent);
+        return changeId;
+    };
+
     // AI Content Generation Functions
     const generateAIContent = async (prompt: string): Promise<string> => {
-        // Simulate AI response for now - replace with actual AI API call
+        // Enhanced AI content generation based on user input
         return new Promise((resolve) => {
             setTimeout(() => {
-                const responses = {
-                    'summary': `## Summary\n\nThis document provides a comprehensive overview of the key points discussed. The main themes include strategic planning, implementation guidelines, and success metrics.\n\n### Key Points:\n- Strategic alignment with business objectives\n- Clear implementation roadmap\n- Measurable success criteria\n- Risk mitigation strategies`,
-                    'improve': `**Enhanced Structure:**\n1. **Clear Introduction** - Set the context and objectives\n2. **Main Content** - Develop your ideas with supporting evidence\n3. **Actionable Conclusion** - Provide clear next steps\n\n**Writing Improvements:**\n- Use active voice for clarity\n- Include specific examples\n- Add transition sentences between sections\n- Strengthen your conclusion with concrete recommendations`,
-                    'outline': `# Document Outline\n\n## I. Executive Summary\n   - Key objectives\n   - Main recommendations\n   - Expected outcomes\n\n## II. Background & Context\n   - Current situation analysis\n   - Problem statement\n   - Scope and limitations\n\n## III. Main Content\n   A. Analysis and findings\n   B. Proposed solutions\n   C. Implementation plan\n\n## IV. Conclusion & Next Steps\n   - Summary of recommendations\n   - Action items\n   - Timeline and milestones`,
-                    'default': `**Content Enhancement:**\n- Add more specific examples to support your points\n- Include relevant data or statistics\n- Consider adding visual elements like charts or diagrams\n\n**Structure Improvements:**\n- Use clear headings to organize content\n- Add transition sentences between sections\n- Include a strong conclusion\n\n**Style Suggestions:**\n- Write in active voice\n- Use concise, clear language\n- Vary sentence length for better flow`
-                };
+                const lowerPrompt = prompt.toLowerCase();
+                let content = '';
 
-                const key = Object.keys(responses).find(k => prompt.toLowerCase().includes(k)) || 'default';
-                resolve(responses[key as keyof typeof responses]);
+                // Generate contextual content based on keywords in the prompt
+                if (lowerPrompt.includes('summary') || lowerPrompt.includes('summarize')) {
+                    content = `## Document Summary\n\nThis comprehensive document outlines our strategic approach and key initiatives. The main focus areas include:\n\n### Key Highlights:\n- **Strategic Vision**: Clear direction for 2024 and beyond\n- **Implementation Framework**: Structured approach to execution\n- **Success Metrics**: Measurable outcomes and KPIs\n- **Risk Management**: Proactive mitigation strategies\n\n### Recommendations:\n1. Proceed with implementation as outlined\n2. Monitor progress against defined metrics\n3. Adjust strategies based on market feedback`;
+
+                } else if (lowerPrompt.includes('conclusion') || lowerPrompt.includes('ending') || lowerPrompt.includes('wrap up')) {
+                    content = `## Final Thoughts\n\nAs we move forward with this strategic initiative, it's essential to maintain focus on our core objectives while remaining agile enough to adapt to changing circumstances.\n\n### Next Steps:\n- **Immediate Actions**: Begin implementation of Phase 1 initiatives\n- **Short-term Goals**: Establish baseline metrics and monitoring systems\n- **Long-term Vision**: Position for sustained growth and market leadership\n\n### Call to Action:\nThe success of this strategy depends on coordinated effort across all teams. We encourage active participation and continuous feedback to ensure optimal outcomes.\n\n*"Strategy without execution is hallucination. Execution without strategy is chaos."* - Let's ensure we have both.`;
+
+                } else if (lowerPrompt.includes('next steps') || lowerPrompt.includes('action') || lowerPrompt.includes('todo')) {
+                    content = `## Action Items & Next Steps\n\n### Immediate Actions (Next 30 Days):\n- [ ] Finalize resource allocation and team assignments\n- [ ] Establish communication protocols and reporting structure\n- [ ] Set up monitoring dashboards and success metrics\n- [ ] Conduct stakeholder alignment sessions\n\n### Short-term Goals (Next 90 Days):\n- [ ] Launch pilot programs in selected markets\n- [ ] Implement feedback collection mechanisms\n- [ ] Optimize processes based on initial results\n- [ ] Prepare for full-scale rollout\n\n### Long-term Milestones (6-12 Months):\n- [ ] Achieve target performance metrics\n- [ ] Expand to additional markets or segments\n- [ ] Conduct comprehensive strategy review\n- [ ] Plan for next strategic cycle`;
+
+                } else if (lowerPrompt.includes('improve') || lowerPrompt.includes('enhance') || lowerPrompt.includes('better')) {
+                    content = `## Enhancement Recommendations
+
+### Content Improvements:
+- **Add Supporting Data**: Include relevant statistics and benchmarks
+- **Visual Elements**: Consider adding charts, graphs, or infographics  
+- **Case Studies**: Include real-world examples and success stories
+- **Expert Quotes**: Add insights from industry leaders or stakeholders
+
+### Structure Enhancements:
+1. **Executive Summary**: Add a concise overview at the beginning
+2. **Appendices**: Include detailed data and supporting materials
+3. **Glossary**: Define technical terms and acronyms
+4. **Reference Section**: Add citations and further reading
+
+### Code Examples:
+Here's how to implement \`structured data\`:
+
+\`\`\`javascript
+const enhancedData = {
+  title: "Document Enhancement",
+  methods: ["analysis", "optimization", "validation"]
+};
+\`\`\`
+
+### Style Recommendations:
+- Use *active voice* for clarity and impact
+- Vary **sentence length** for better readability
+- Include ***transition sentences*** between sections
+- Strengthen conclusions with specific recommendations
+
+> "The best way to improve documentation is through continuous iteration and user feedback."
+
+### Reference Table:
+| Aspect | Current | Enhanced | Impact |
+|--------|---------|----------|--------|
+| Structure | Basic | Advanced | High |
+| Content | Good | Excellent | Medium |
+| Style | Standard | Professional | High |`;
+
+                } else if (lowerPrompt.includes('risk') || lowerPrompt.includes('challenge') || lowerPrompt.includes('mitigation')) {
+                    content = `## Risk Assessment & Mitigation\n\n### Identified Risks:\n\n#### High Priority:\n1. **Market Volatility**: Economic uncertainties may impact demand\n   - *Mitigation*: Diversify market exposure and maintain flexible pricing\n\n2. **Resource Constraints**: Limited availability of skilled personnel\n   - *Mitigation*: Invest in training programs and strategic partnerships\n\n3. **Technology Disruption**: Rapid pace of technological change\n   - *Mitigation*: Continuous innovation and agile development practices\n\n#### Medium Priority:\n- Regulatory changes in target markets\n- Competitive response to our initiatives\n- Supply chain disruptions\n\n### Monitoring Framework:\n- Monthly risk assessment reviews\n- Quarterly strategy adjustments\n- Annual comprehensive risk audit`;
+
+                } else if (lowerPrompt.includes('metric') || lowerPrompt.includes('kpi') || lowerPrompt.includes('measure')) {
+                    content = `## Key Performance Indicators\n\n### Primary Success Metrics:\n\n#### Financial Performance:\n- **Revenue Growth**: 25% year-over-year increase\n- **Profit Margins**: Maintain or improve current levels\n- **ROI**: Achieve minimum 20% return on strategic investments\n- **Cost Efficiency**: Reduce operational costs by 15%\n\n#### Operational Excellence:\n- **Customer Satisfaction**: 95% satisfaction score\n- **Quality Metrics**: <2% defect rate\n- **Delivery Performance**: 98% on-time delivery\n- **Process Efficiency**: 30% reduction in cycle time\n\n#### Growth Indicators:\n- **Market Share**: Increase by 5 percentage points\n- **Customer Acquisition**: 40% increase in new customers\n- **Employee Engagement**: 90% satisfaction score\n- **Innovation Pipeline**: 5 new products/services launched\n\n### Reporting Schedule:\n- Daily operational dashboards\n- Weekly performance reviews\n- Monthly executive summaries\n- Quarterly strategic assessments`;
+
+                } else {
+                    // Generate contextual content based on the user's specific request
+                    const topics = [
+                        'implementation strategy',
+                        'market analysis',
+                        'competitive positioning',
+                        'resource planning',
+                        'stakeholder engagement',
+                        'technology roadmap',
+                        'performance optimization'
+                    ];
+
+                    const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+
+                    content = `# Additional Insights: ${prompt}
+
+## Context:
+Based on your request **"${prompt}"**, here are some relevant considerations and recommendations with mixed *markdown* and <strong>HTML</strong> formatting:
+
+### Key Points:
+- **Strategic Alignment**: Ensure this initiative aligns with overall business objectives
+- ***Resource Requirements***: Consider the necessary personnel, budget, and timeline  
+- **Success Criteria**: Define clear, measurable outcomes and milestones
+- <em>Risk Factors</em>: Identify potential challenges and mitigation strategies
+
+### Code Implementation:
+\`\`\`typescript
+interface ProjectInsights {
+  topic: string;
+  priority: "high" | "medium" | "low";
+  timeline: number;
+}
+
+const insight: ProjectInsights = {
+  topic: "${randomTopic}",
+  priority: "high", 
+  timeline: 30
+};
+\`\`\`
+
+### Detailed Analysis:
+This topic relates to our broader **${randomTopic}** and should be integrated into our comprehensive approach. Consider the following:
+
+1. **Current State Assessment**: Where are we today?
+2. **Desired Outcomes**: What specific results are we targeting?  
+3. **Action Steps**: What concrete steps will move us forward?
+4. **Success Metrics**: How will we measure progress and success?
+
+> "Success is not final, failure is not fatal: it is the courage to continue that counts." - Winston Churchill
+
+### Comparison Matrix:
+| Aspect | Before | After | Impact Level |
+|--------|--------|--------|--------------|
+| Efficiency | 60% | 85% | <strong>High</strong> |
+| Quality | Good | *Excellent* | Medium |  
+| Speed | Standard | **Fast** | High |
+
+### Recommendations:
+- Conduct stakeholder consultation to validate approach
+- Develop detailed implementation timeline
+- Establish clear accountability and governance structure  
+- Create feedback loops for continuous improvement
+
+### Links and References:
+Check out [our methodology](https://example.com/methodology) and \`inline code examples\` for more details.`;
+                }
+
+                resolve(content);
             }, 1500);
         });
     };
 
-    const showPreviewInEditor = async (content: string) => {
-        if (!editor) return;
-
-        try {
-            // Store the content before AI insertion for potential undo
-            const beforeContent = documentContent;
-
-            // Insert the content as a preview with highlighting
-            await insertPreviewContentToEditor(content, {
-                animate: true,
-                parseMarkdown: true,
-                position: 'current'
-            });
-
-            // Show the AI action container after content insertion is complete
-            // Adding a small delay to ensure highlighting is applied first
-            setTimeout(() => {
-                if (showAIActions) {
-                    showAIActions(content, beforeContent);
-                }
-            }, 200);
-        } catch (error) {
-            console.error('Error showing preview in editor:', error);
-        }
-    };
-
-    const insertPreviewContentToEditor = async (content: string, options: {
-        animate?: boolean;
-        position?: 'current' | 'end' | 'start';
-        parseMarkdown?: boolean;
-    } = {}) => {
-        if (!editor) return;
-
-        const { animate = true, position = 'current', parseMarkdown = true } = options;
-
-        try {
-            // Mark the current position before inserting content
-            const startPos = editor.state.selection.from;
-
-            // Insert the content normally first
-            if (animate) {
-                await streamAIContent(editor, content, {
-                    position,
-                    parseMarkdown,
-                    streamDelay: 20,
-                    focus: true
-                });
-            } else {
-                await writeAIContent(editor, content, {
-                    position,
-                    parseMarkdown,
-                    focus: true
-                });
-            }
-
-            // After content insertion, add persistent green highlighting
-            setTimeout(() => {
-                const endPos = editor.state.selection.from;
-
-                // Select the inserted content range
-                if (endPos > startPos) {
-                    editor.commands.setTextSelection({ from: startPos, to: endPos });
-
-                    // Apply preview highlighting using CSS class
-                    const editorElement = editor.options.element;
-                    if (editorElement) {
-                        const proseMirrorElement = editorElement.querySelector('.ProseMirror');
-                        if (proseMirrorElement) {
-                            // Create a unique identifier for this AI content
-                            const aiContentId = `ai-content-${Date.now()}`;
-
-                            // Get all text nodes in the selection
-                            const walker = document.createTreeWalker(
-                                proseMirrorElement,
-                                NodeFilter.SHOW_ELEMENT,
-                                null
-                            );
-
-                            let node;
-                            const elementsToHighlight: HTMLElement[] = [];
-
-                            // Find elements that contain the cursor position
-                            while (node = walker.nextNode()) {
-                                const element = node as HTMLElement;
-                                if (element.tagName && (
-                                    element.tagName.match(/^H[1-6]$/) ||
-                                    element.tagName === 'P' ||
-                                    element.tagName === 'LI' ||
-                                    element.tagName === 'UL' ||
-                                    element.tagName === 'OL' ||
-                                    element.tagName === 'BLOCKQUOTE'
-                                )) {
-                                    // Check if this element was just inserted
-                                    const elementPos = editor.view.posAtDOM(element, 0);
-                                    if (elementPos >= startPos && elementPos <= endPos) {
-                                        elementsToHighlight.push(element);
-                                    }
-                                }
-                            }
-
-                            // Apply highlighting to found elements
-                            elementsToHighlight.forEach(element => {
-                                element.classList.add('ai-preview-content');
-                                element.setAttribute('data-ai-content-id', aiContentId);
-                            });
-
-                            // Store the AI content ID globally for later cleanup
-                            (window as any).currentAIContentId = aiContentId;
-                        }
-                    }
-
-                    // Position cursor at the end of inserted content
-                    editor.commands.setTextSelection(endPos);
-                }
-            }, 100);
-
-        } catch (error) {
-            console.error('Error inserting preview content to editor:', error);
-        }
-    };
+    // Regular AI content generation now uses EnhancedAIContentWriter for consistency
 
     const handleSend = async () => {
         const text = input.trim();
@@ -240,29 +343,204 @@ export default function ChatSidebar({
             setIsGenerating(true);
 
             try {
-                // Generate AI response
-                const aiResponse = await generateAIContent(text);
+                // Check for special AI operation commands
+                if (text.toLowerCase() === '*add') {
+                    const operationId = await executeAIAddOperation();
 
-                // Trigger preview in the document editor instead of showing in chat
-                if (editor && aiResponse) {
-                    await showPreviewInEditor(aiResponse);
+                    // Store operation ID globally so DocumentEditor can access it
+                    (window as any).currentChatOperationId = operationId;
+                    (window as any).currentChatAIWriter = aiWriter;
+
+                    // Show AI actions for the operation with a slight delay to ensure content is rendered
+                    console.log('🎯 About to show AI actions. showAIActions:', showAIActions, 'type:', typeof showAIActions, 'documentContent:', documentContent);
+                    setTimeout(() => {
+                        let actionFunction = showAIActions;
+
+                        // Fallback to global function if context function is not available
+                        if (!actionFunction && (window as any).currentShowAIActionsFunction) {
+                            console.log('🔧 Using fallback global showAIActions function');
+                            actionFunction = (window as any).currentShowAIActionsFunction;
+                        }
+
+                        if (actionFunction && typeof actionFunction === 'function') {
+                            console.log('✅ Calling showAIActions for *add operation');
+                            try {
+                                console.log('🚀 Calling actionFunction with params:', {
+                                    content: "New content added via *add command",
+                                    beforeContent: documentContent
+                                });
+                                actionFunction("New content added via *add command", documentContent);
+                            } catch (error) {
+                                console.error('❌ Error calling showAIActions:', error);
+                            }
+                        } else {
+                            console.error('❌ showAIActions is not available!', {
+                                contextFunction: showAIActions,
+                                globalFunction: (window as any).currentShowAIActionsFunction,
+                                type: typeof showAIActions,
+                                isFunction: typeof showAIActions === 'function'
+                            });
+                        }
+                    }, 300);
+
+                    const assistantMsg: ChatMessage = {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: "✅ ADD Operation executed! New content has been added to your document with green highlighting. Use the action buttons to accept or reject the changes.",
+                        timestamp: Date.now(),
+                    };
+                    setInternalMessages(prev => [...prev, assistantMsg]);
+                } else if (text.toLowerCase() === '*remove') {
+                    const operationId = await executeAIRemoveOperation();
+
+                    // Store operation ID globally so DocumentEditor can access it
+                    (window as any).currentChatOperationId = operationId;
+                    (window as any).currentChatAIWriter = aiWriter;
+
+                    // Show AI actions for the operation with a slight delay to ensure content is rendered
+                    console.log('🎯 About to show AI actions for *remove. showAIActions:', showAIActions, 'type:', typeof showAIActions);
+                    setTimeout(() => {
+                        let actionFunction = showAIActions;
+
+                        // Fallback to global function if context function is not available
+                        if (!actionFunction && (window as any).currentShowAIActionsFunction) {
+                            console.log('🔧 Using fallback global showAIActions function for *remove');
+                            actionFunction = (window as any).currentShowAIActionsFunction;
+                        }
+
+                        if (actionFunction && typeof actionFunction === 'function') {
+                            console.log('✅ Calling showAIActions for *remove operation');
+                            try {
+                                actionFunction("Content marked for removal via *remove command", documentContent);
+                            } catch (error) {
+                                console.error('❌ Error calling showAIActions for *remove:', error);
+                            }
+                        } else {
+                            console.error('❌ showAIActions is not available for *remove!', {
+                                contextFunction: showAIActions,
+                                globalFunction: (window as any).currentShowAIActionsFunction,
+                                type: typeof showAIActions,
+                                isFunction: typeof showAIActions === 'function'
+                            });
+                        }
+                    }, 300);
+
+                    const assistantMsg: ChatMessage = {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: "🗑️ REMOVE Operation executed! Content has been marked for removal with red highlighting. Use the action buttons to accept or reject the changes.",
+                        timestamp: Date.now(),
+                    };
+                    setInternalMessages(prev => [...prev, assistantMsg]);
+                } else if (text.toLowerCase() === '*edit') {
+                    const operationId = await executeAIEditOperation();
+
+                    // Store operation ID globally so DocumentEditor can access it
+                    (window as any).currentChatOperationId = operationId;
+                    (window as any).currentChatAIWriter = aiWriter;
+
+                    // Show AI actions for the operation with a slight delay to ensure content is rendered
+                    console.log('🎯 About to show AI actions for *edit. showAIActions:', showAIActions, 'type:', typeof showAIActions);
+                    setTimeout(() => {
+                        let actionFunction = showAIActions;
+
+                        // Fallback to global function if context function is not available
+                        if (!actionFunction && (window as any).currentShowAIActionsFunction) {
+                            console.log('🔧 Using fallback global showAIActions function for *edit');
+                            actionFunction = (window as any).currentShowAIActionsFunction;
+                        }
+
+                        if (actionFunction && typeof actionFunction === 'function') {
+                            console.log('✅ Calling showAIActions for *edit operation');
+                            try {
+                                actionFunction("Content edited via *edit command", documentContent);
+                            } catch (error) {
+                                console.error('❌ Error calling showAIActions for *edit:', error);
+                            }
+                        } else {
+                            console.error('❌ showAIActions is not available for *edit!', {
+                                contextFunction: showAIActions,
+                                globalFunction: (window as any).currentShowAIActionsFunction,
+                                type: typeof showAIActions,
+                                isFunction: typeof showAIActions === 'function'
+                            });
+                        }
+                    }, 300);
+
+                    const assistantMsg: ChatMessage = {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: "🔄 EDIT Operation executed! Content has been replaced with dual highlighting (red for original, green for new). Use the action buttons to accept or reject the changes.",
+                        timestamp: Date.now(),
+                    };
+                    setInternalMessages(prev => [...prev, assistantMsg]);
+                } else {
+                    // Regular AI content generation using EnhancedAIContentWriter - ADD AT END OF DOCUMENT
+                    const aiResponse = await generateAIContent(text);
+
+                    if (aiWriter && editor && aiResponse) {
+                        // Get the end of document position instead of cursor position
+                        const doc = editor.state.doc;
+                        const endPosition = doc.content.size;
+
+                        const position: ContentPosition = {
+                            from: endPosition,
+                            to: endPosition,
+                            length: 0
+                        };
+
+                        // Use the AI writer to add content at the end of document with proper highlighting
+                        const operationId = await aiWriter.addContentAtPosition(position, `\n\n${aiResponse}`);
+
+                        // Store operation ID globally so DocumentEditor can access it
+                        (window as any).currentChatOperationId = operationId;
+                        (window as any).currentChatAIWriter = aiWriter;
+
+                        // Show AI actions for the operation with a slight delay to ensure content is rendered
+                        console.log('🎯 About to show AI actions for regular AI. showAIActions:', showAIActions);
+                        setTimeout(() => {
+                            let actionFunction = showAIActions;
+
+                            // Fallback to global function if context function is not available
+                            if (!actionFunction && (window as any).currentShowAIActionsFunction) {
+                                console.log('🔧 Using fallback global showAIActions function for regular chat');
+                                actionFunction = (window as any).currentShowAIActionsFunction;
+                            }
+
+                            if (actionFunction && typeof actionFunction === 'function') {
+                                console.log('✅ Calling showAIActions for regular AI operation');
+                                try {
+                                    actionFunction(`AI Response: ${text}`, documentContent);
+                                } catch (error) {
+                                    console.error('❌ Error calling showAIActions for regular AI:', error);
+                                }
+                            } else {
+                                console.error('❌ showAIActions is not available for regular AI!', {
+                                    contextFunction: showAIActions,
+                                    globalFunction: (window as any).currentShowAIActionsFunction,
+                                    type: typeof showAIActions,
+                                    isFunction: typeof showAIActions === 'function'
+                                });
+                            }
+                        }, 300);
+                    }
+
+                    // Add confirmation message 
+                    const assistantMsg: ChatMessage = {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: "✨ AI content generated and added to the end of your document. Review the green-highlighted content and use the action container to accept, reject, or regenerate.",
+                        timestamp: Date.now(),
+                    };
+
+                    setInternalMessages(prev => [...prev, assistantMsg]);
                 }
-
-                // Add confirmation message 
-                const assistantMsg: ChatMessage = {
-                    id: crypto.randomUUID(),
-                    role: "assistant",
-                    content: "✨ AI content preview generated and highlighted in your document. Review the green-highlighted content and use the action container to accept, reject, or regenerate.",
-                    timestamp: Date.now(),
-                };
-
-                setInternalMessages(prev => [...prev, assistantMsg]);
             } catch (error) {
-                console.error('Error generating AI content:', error);
+                console.error('Error processing request:', error);
                 const errorMsg: ChatMessage = {
                     id: crypto.randomUUID(),
                     role: "assistant",
-                    content: "I'm sorry, I encountered an error while generating content. Please try again.",
+                    content: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}. Please try again.`,
                     timestamp: Date.now(),
                 };
                 setInternalMessages(prev => [...prev, errorMsg]);
@@ -345,10 +623,12 @@ export default function ChatSidebar({
                         <div className="px-3 pb-2">
                             <div className="flex flex-wrap justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                 {(suggestions ?? [
-                                    "Strengthen success metrics",
-                                    "Review executive summary",
-                                    "Add competitor analysis",
-                                ]).slice(0, 4).map((s, idx) => (
+                                    "*add",
+                                    "*remove",
+                                    "*edit",
+                                    "Improve content",
+                                    "Add summary",
+                                ]).slice(0, 5).map((s, idx) => (
                                     <Button
                                         key={`${idx}-${s.slice(0, 12)}`}
                                         variant="outline"
