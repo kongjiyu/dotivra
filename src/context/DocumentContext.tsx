@@ -44,6 +44,11 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
         console.log('DocumentContext onOpenChat changed:', onOpenChat);
     }, [onOpenChat]);
 
+    // Add debugging for showAIActions changes
+    useEffect(() => {
+        console.log('🎯 DocumentContext showAIActions changed:', !!showAIActions, 'function:', showAIActions);
+    }, [showAIActions]);
+
     const handleTitleChange = (title: string) => {
         setDocumentTitle(title);
         setIsDocumentModified(true);
