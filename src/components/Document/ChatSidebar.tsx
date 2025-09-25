@@ -45,8 +45,7 @@ export default function ChatSidebar({
     // Get AI actions function from document context
     const { showAIActions, documentContent } = useDocument();
 
-    // Store current operation ID for accept/reject functionality
-    const [currentChatOperationId, setCurrentChatOperationId] = useState<string | null>(null);
+    // Note: Current operation ID is stored globally for DocumentEditor access
 
     // Debug context values
     useEffect(() => {
@@ -189,18 +188,136 @@ export default function ChatSidebar({
 
     // AI Content Generation Functions
     const generateAIContent = async (prompt: string): Promise<string> => {
-        // Simulate AI response for now - replace with actual AI API call
+        // Enhanced AI content generation based on user input
         return new Promise((resolve) => {
             setTimeout(() => {
-                const responses = {
-                    'summary': `## Summary\n\nThis document provides a comprehensive overview of the key points discussed. The main themes include strategic planning, implementation guidelines, and success metrics.\n\n### Key Points:\n- Strategic alignment with business objectives\n- Clear implementation roadmap\n- Measurable success criteria\n- Risk mitigation strategies`,
-                    'improve': `**Enhanced Structure:**\n1. **Clear Introduction** - Set the context and objectives\n2. **Main Content** - Develop your ideas with supporting evidence\n3. **Actionable Conclusion** - Provide clear next steps\n\n**Writing Improvements:**\n- Use active voice for clarity\n- Include specific examples\n- Add transition sentences between sections\n- Strengthen your conclusion with concrete recommendations`,
-                    'outline': `# Document Outline\n\n## I. Executive Summary\n   - Key objectives\n   - Main recommendations\n   - Expected outcomes\n\n## II. Background & Context\n   - Current situation analysis\n   - Problem statement\n   - Scope and limitations\n\n## III. Main Content\n   A. Analysis and findings\n   B. Proposed solutions\n   C. Implementation plan\n\n## IV. Conclusion & Next Steps\n   - Summary of recommendations\n   - Action items\n   - Timeline and milestones`,
-                    'default': `**Content Enhancement:**\n- Add more specific examples to support your points\n- Include relevant data or statistics\n- Consider adding visual elements like charts or diagrams\n\n**Structure Improvements:**\n- Use clear headings to organize content\n- Add transition sentences between sections\n- Include a strong conclusion\n\n**Style Suggestions:**\n- Write in active voice\n- Use concise, clear language\n- Vary sentence length for better flow`
-                };
+                const lowerPrompt = prompt.toLowerCase();
+                let content = '';
 
-                const key = Object.keys(responses).find(k => prompt.toLowerCase().includes(k)) || 'default';
-                resolve(responses[key as keyof typeof responses]);
+                // Generate contextual content based on keywords in the prompt
+                if (lowerPrompt.includes('summary') || lowerPrompt.includes('summarize')) {
+                    content = `## Document Summary\n\nThis comprehensive document outlines our strategic approach and key initiatives. The main focus areas include:\n\n### Key Highlights:\n- **Strategic Vision**: Clear direction for 2024 and beyond\n- **Implementation Framework**: Structured approach to execution\n- **Success Metrics**: Measurable outcomes and KPIs\n- **Risk Management**: Proactive mitigation strategies\n\n### Recommendations:\n1. Proceed with implementation as outlined\n2. Monitor progress against defined metrics\n3. Adjust strategies based on market feedback`;
+
+                } else if (lowerPrompt.includes('conclusion') || lowerPrompt.includes('ending') || lowerPrompt.includes('wrap up')) {
+                    content = `## Final Thoughts\n\nAs we move forward with this strategic initiative, it's essential to maintain focus on our core objectives while remaining agile enough to adapt to changing circumstances.\n\n### Next Steps:\n- **Immediate Actions**: Begin implementation of Phase 1 initiatives\n- **Short-term Goals**: Establish baseline metrics and monitoring systems\n- **Long-term Vision**: Position for sustained growth and market leadership\n\n### Call to Action:\nThe success of this strategy depends on coordinated effort across all teams. We encourage active participation and continuous feedback to ensure optimal outcomes.\n\n*"Strategy without execution is hallucination. Execution without strategy is chaos."* - Let's ensure we have both.`;
+
+                } else if (lowerPrompt.includes('next steps') || lowerPrompt.includes('action') || lowerPrompt.includes('todo')) {
+                    content = `## Action Items & Next Steps\n\n### Immediate Actions (Next 30 Days):\n- [ ] Finalize resource allocation and team assignments\n- [ ] Establish communication protocols and reporting structure\n- [ ] Set up monitoring dashboards and success metrics\n- [ ] Conduct stakeholder alignment sessions\n\n### Short-term Goals (Next 90 Days):\n- [ ] Launch pilot programs in selected markets\n- [ ] Implement feedback collection mechanisms\n- [ ] Optimize processes based on initial results\n- [ ] Prepare for full-scale rollout\n\n### Long-term Milestones (6-12 Months):\n- [ ] Achieve target performance metrics\n- [ ] Expand to additional markets or segments\n- [ ] Conduct comprehensive strategy review\n- [ ] Plan for next strategic cycle`;
+
+                } else if (lowerPrompt.includes('improve') || lowerPrompt.includes('enhance') || lowerPrompt.includes('better')) {
+                    content = `## Enhancement Recommendations
+
+### Content Improvements:
+- **Add Supporting Data**: Include relevant statistics and benchmarks
+- **Visual Elements**: Consider adding charts, graphs, or infographics  
+- **Case Studies**: Include real-world examples and success stories
+- **Expert Quotes**: Add insights from industry leaders or stakeholders
+
+### Structure Enhancements:
+1. **Executive Summary**: Add a concise overview at the beginning
+2. **Appendices**: Include detailed data and supporting materials
+3. **Glossary**: Define technical terms and acronyms
+4. **Reference Section**: Add citations and further reading
+
+### Code Examples:
+Here's how to implement \`structured data\`:
+
+\`\`\`javascript
+const enhancedData = {
+  title: "Document Enhancement",
+  methods: ["analysis", "optimization", "validation"]
+};
+\`\`\`
+
+### Style Recommendations:
+- Use *active voice* for clarity and impact
+- Vary **sentence length** for better readability
+- Include ***transition sentences*** between sections
+- Strengthen conclusions with specific recommendations
+
+> "The best way to improve documentation is through continuous iteration and user feedback."
+
+### Reference Table:
+| Aspect | Current | Enhanced | Impact |
+|--------|---------|----------|--------|
+| Structure | Basic | Advanced | High |
+| Content | Good | Excellent | Medium |
+| Style | Standard | Professional | High |`;
+
+                } else if (lowerPrompt.includes('risk') || lowerPrompt.includes('challenge') || lowerPrompt.includes('mitigation')) {
+                    content = `## Risk Assessment & Mitigation\n\n### Identified Risks:\n\n#### High Priority:\n1. **Market Volatility**: Economic uncertainties may impact demand\n   - *Mitigation*: Diversify market exposure and maintain flexible pricing\n\n2. **Resource Constraints**: Limited availability of skilled personnel\n   - *Mitigation*: Invest in training programs and strategic partnerships\n\n3. **Technology Disruption**: Rapid pace of technological change\n   - *Mitigation*: Continuous innovation and agile development practices\n\n#### Medium Priority:\n- Regulatory changes in target markets\n- Competitive response to our initiatives\n- Supply chain disruptions\n\n### Monitoring Framework:\n- Monthly risk assessment reviews\n- Quarterly strategy adjustments\n- Annual comprehensive risk audit`;
+
+                } else if (lowerPrompt.includes('metric') || lowerPrompt.includes('kpi') || lowerPrompt.includes('measure')) {
+                    content = `## Key Performance Indicators\n\n### Primary Success Metrics:\n\n#### Financial Performance:\n- **Revenue Growth**: 25% year-over-year increase\n- **Profit Margins**: Maintain or improve current levels\n- **ROI**: Achieve minimum 20% return on strategic investments\n- **Cost Efficiency**: Reduce operational costs by 15%\n\n#### Operational Excellence:\n- **Customer Satisfaction**: 95% satisfaction score\n- **Quality Metrics**: <2% defect rate\n- **Delivery Performance**: 98% on-time delivery\n- **Process Efficiency**: 30% reduction in cycle time\n\n#### Growth Indicators:\n- **Market Share**: Increase by 5 percentage points\n- **Customer Acquisition**: 40% increase in new customers\n- **Employee Engagement**: 90% satisfaction score\n- **Innovation Pipeline**: 5 new products/services launched\n\n### Reporting Schedule:\n- Daily operational dashboards\n- Weekly performance reviews\n- Monthly executive summaries\n- Quarterly strategic assessments`;
+
+                } else {
+                    // Generate contextual content based on the user's specific request
+                    const topics = [
+                        'implementation strategy',
+                        'market analysis',
+                        'competitive positioning',
+                        'resource planning',
+                        'stakeholder engagement',
+                        'technology roadmap',
+                        'performance optimization'
+                    ];
+
+                    const randomTopic = topics[Math.floor(Math.random() * topics.length)];
+
+                    content = `# Additional Insights: ${prompt}
+
+## Context:
+Based on your request **"${prompt}"**, here are some relevant considerations and recommendations with mixed *markdown* and <strong>HTML</strong> formatting:
+
+### Key Points:
+- **Strategic Alignment**: Ensure this initiative aligns with overall business objectives
+- ***Resource Requirements***: Consider the necessary personnel, budget, and timeline  
+- **Success Criteria**: Define clear, measurable outcomes and milestones
+- <em>Risk Factors</em>: Identify potential challenges and mitigation strategies
+
+### Code Implementation:
+\`\`\`typescript
+interface ProjectInsights {
+  topic: string;
+  priority: "high" | "medium" | "low";
+  timeline: number;
+}
+
+const insight: ProjectInsights = {
+  topic: "${randomTopic}",
+  priority: "high", 
+  timeline: 30
+};
+\`\`\`
+
+### Detailed Analysis:
+This topic relates to our broader **${randomTopic}** and should be integrated into our comprehensive approach. Consider the following:
+
+1. **Current State Assessment**: Where are we today?
+2. **Desired Outcomes**: What specific results are we targeting?  
+3. **Action Steps**: What concrete steps will move us forward?
+4. **Success Metrics**: How will we measure progress and success?
+
+> "Success is not final, failure is not fatal: it is the courage to continue that counts." - Winston Churchill
+
+### Comparison Matrix:
+| Aspect | Before | After | Impact Level |
+|--------|--------|--------|--------------|
+| Efficiency | 60% | 85% | <strong>High</strong> |
+| Quality | Good | *Excellent* | Medium |  
+| Speed | Standard | **Fast** | High |
+
+### Recommendations:
+- Conduct stakeholder consultation to validate approach
+- Develop detailed implementation timeline
+- Establish clear accountability and governance structure  
+- Create feedback loops for continuous improvement
+
+### Links and References:
+Check out [our methodology](https://example.com/methodology) and \`inline code examples\` for more details.`;
+                }
+
+                resolve(content);
             }, 1500);
         });
     };
@@ -229,7 +346,6 @@ export default function ChatSidebar({
                 // Check for special AI operation commands
                 if (text.toLowerCase() === '*add') {
                     const operationId = await executeAIAddOperation();
-                    setCurrentChatOperationId(operationId);
 
                     // Store operation ID globally so DocumentEditor can access it
                     (window as any).currentChatOperationId = operationId;
@@ -276,7 +392,6 @@ export default function ChatSidebar({
                     setInternalMessages(prev => [...prev, assistantMsg]);
                 } else if (text.toLowerCase() === '*remove') {
                     const operationId = await executeAIRemoveOperation();
-                    setCurrentChatOperationId(operationId);
 
                     // Store operation ID globally so DocumentEditor can access it
                     (window as any).currentChatOperationId = operationId;
@@ -319,7 +434,6 @@ export default function ChatSidebar({
                     setInternalMessages(prev => [...prev, assistantMsg]);
                 } else if (text.toLowerCase() === '*edit') {
                     const operationId = await executeAIEditOperation();
-                    setCurrentChatOperationId(operationId);
 
                     // Store operation ID globally so DocumentEditor can access it
                     (window as any).currentChatOperationId = operationId;
@@ -361,21 +475,22 @@ export default function ChatSidebar({
                     };
                     setInternalMessages(prev => [...prev, assistantMsg]);
                 } else {
-                    // Regular AI content generation using EnhancedAIContentWriter
+                    // Regular AI content generation using EnhancedAIContentWriter - ADD AT END OF DOCUMENT
                     const aiResponse = await generateAIContent(text);
 
                     if (aiWriter && editor && aiResponse) {
-                        // Get current cursor position
-                        const { from } = editor.state.selection;
+                        // Get the end of document position instead of cursor position
+                        const doc = editor.state.doc;
+                        const endPosition = doc.content.size;
+
                         const position: ContentPosition = {
-                            from,
-                            to: from,
+                            from: endPosition,
+                            to: endPosition,
                             length: 0
                         };
 
-                        // Use the AI writer to add content with proper highlighting
+                        // Use the AI writer to add content at the end of document with proper highlighting
                         const operationId = await aiWriter.addContentAtPosition(position, `\n\n${aiResponse}`);
-                        setCurrentChatOperationId(operationId);
 
                         // Store operation ID globally so DocumentEditor can access it
                         (window as any).currentChatOperationId = operationId;
@@ -384,18 +499,37 @@ export default function ChatSidebar({
                         // Show AI actions for the operation with a slight delay to ensure content is rendered
                         console.log('🎯 About to show AI actions for regular AI. showAIActions:', showAIActions);
                         setTimeout(() => {
-                            if (showAIActions) {
+                            let actionFunction = showAIActions;
+
+                            // Fallback to global function if context function is not available
+                            if (!actionFunction && (window as any).currentShowAIActionsFunction) {
+                                console.log('🔧 Using fallback global showAIActions function for regular chat');
+                                actionFunction = (window as any).currentShowAIActionsFunction;
+                            }
+
+                            if (actionFunction && typeof actionFunction === 'function') {
                                 console.log('✅ Calling showAIActions for regular AI operation');
-                                showAIActions(`AI Response: ${text}`, documentContent);
+                                try {
+                                    actionFunction(`AI Response: ${text}`, documentContent);
+                                } catch (error) {
+                                    console.error('❌ Error calling showAIActions for regular AI:', error);
+                                }
                             } else {
-                                console.error('❌ showAIActions is undefined for regular AI!');
+                                console.error('❌ showAIActions is not available for regular AI!', {
+                                    contextFunction: showAIActions,
+                                    globalFunction: (window as any).currentShowAIActionsFunction,
+                                    type: typeof showAIActions,
+                                    isFunction: typeof showAIActions === 'function'
+                                });
                             }
                         }, 300);
-                    }                    // Add confirmation message 
+                    }
+
+                    // Add confirmation message 
                     const assistantMsg: ChatMessage = {
                         id: crypto.randomUUID(),
                         role: "assistant",
-                        content: "✨ AI content preview generated and highlighted in your document. Review the green-highlighted content and use the action container to accept, reject, or regenerate.",
+                        content: "✨ AI content generated and added to the end of your document. Review the green-highlighted content and use the action container to accept, reject, or regenerate.",
                         timestamp: Date.now(),
                     };
 

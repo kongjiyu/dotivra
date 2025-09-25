@@ -1,4 +1,5 @@
 import type { Editor } from '@tiptap/react';
+import { enhancedContentProcessor } from './contentProcessor';
 
 /**
  * Enhanced AI Content Position Interface for precise targeting
@@ -31,6 +32,16 @@ export class EnhancedAIContentWriter {
   }
 
   /**
+   * Calculate the actual text length of HTML content when rendered in the editor
+   */
+  private calculateContentLength(htmlContent: string): number {
+    // Create a temporary div to parse HTML and get text length
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    return tempDiv.textContent?.length || htmlContent.length;
+  }
+
+  /**
    * Add content at specific position with highlight
    */
   public async addContentAtPosition(
@@ -40,23 +51,31 @@ export class EnhancedAIContentWriter {
   ): Promise<string> {
     const changeId = `add-${Date.now()}`;
     
-    console.log('➕ Adding content:', { changeId, position, newContent });
+    console.log('➕ Adding content (before processing):', { changeId, position, original: newContent });
 
-    // Insert content at position
-    this.editor.commands.insertContentAt(position.from, newContent);
+    // Process content to convert markdown/HTML to TipTap-compatible format
+    const processedContent = enhancedContentProcessor(newContent);
+    
+    console.log('✨ Processed content:', { processedContent });
+
+    // Insert processed content at position
+    this.editor.commands.insertContentAt(position.from, processedContent);
+    
+    // Calculate the actual length after processing (HTML may be different length than original)
+    const actualLength = this.calculateContentLength(processedContent);
+    const newTo = position.from + actualLength;
     
     // Select and highlight the newly inserted content
-    const newTo = position.from + newContent.length;
     this.editor.commands.setTextSelection({ from: position.from, to: newTo });
     this.editor.commands.setMark('highlight', { 
       color: 'rgba(34, 197, 94, 0.3)' // Green highlight for additions
     });
 
-    // Store the change for later accept/reject
+    // Store the change for later accept/reject (store both original and processed)
     this.activeChanges.set(changeId, {
       position: { ...position, to: newTo },
       type: 'addition',
-      newContent
+      newContent: processedContent
     });
 
     return changeId;
@@ -102,13 +121,18 @@ export class EnhancedAIContentWriter {
   ): Promise<string> {
     const changeId = `replace-${Date.now()}`;
     
-    console.log('🔄 Replacing content:', { changeId, position, newContent });
+    console.log('🔄 Replacing content (before processing):', { changeId, position, original: newContent });
 
     // Store original content
     const originalContent = this.editor.state.doc.textBetween(position.from, position.to);
 
+    // Process the new content to convert markdown/HTML to TipTap-compatible format
+    const processedNewContent = enhancedContentProcessor(newContent);
+    
+    console.log('✨ Processed replacement content:', { processedNewContent });
+
     // Create combined content showing replacement
-    const combinedContent = `${originalContent} → ${newContent}`;
+    const combinedContent = `${originalContent} → ${processedNewContent}`;
 
     // Replace content with combined version
     this.editor.commands.setTextSelection({ from: position.from, to: position.to });
@@ -118,7 +142,8 @@ export class EnhancedAIContentWriter {
     // Calculate highlighting positions
     const oldContentEnd = position.from + originalContent.length;
     const newContentStart = oldContentEnd + 3; // " → "
-    const newContentEnd = newContentStart + newContent.length;
+    const processedNewContentLength = this.calculateContentLength(processedNewContent);
+    const newContentEnd = newContentStart + processedNewContentLength;
 
     // Highlight old content in red
     this.editor.commands.setTextSelection({ from: position.from, to: oldContentEnd });
@@ -128,12 +153,12 @@ export class EnhancedAIContentWriter {
     this.editor.commands.setTextSelection({ from: newContentStart, to: newContentEnd });
     this.editor.commands.setMark('highlight', { color: 'rgba(34, 197, 94, 0.3)' });
 
-    // Store the change for later accept/reject
+    // Store the change for later accept/reject (store processed content)
     this.activeChanges.set(changeId, {
-      position: { ...position, to: position.from + combinedContent.length },
+      position: { ...position, to: position.from + this.calculateContentLength(combinedContent) },
       type: 'replacement',
       originalContent,
-      newContent
+      newContent: processedNewContent
     });
 
     return changeId;

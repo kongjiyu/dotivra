@@ -143,7 +143,6 @@ export default function DocumentEditor() {
     const [operationType, setOperationType] = useState<'addition' | 'removal' | 'replacement' | null>(null);
     const [currentOperation, setCurrentOperation] = useState<AIOperation | null>(null);
     const [currentOperationId, setCurrentOperationId] = useState<string | null>(null);
-    const [activeOperations, setActiveOperations] = useState<string[]>([]);
 
     const [aiWriter, setAiWriter] = useState<EnhancedAIContentWriter | null>(null);
     const [currentEditor, setCurrentEditorLocal] = useState<any>(null);
@@ -184,7 +183,6 @@ export default function DocumentEditor() {
         } else if (currentOperationId && aiWriter) {
             console.log('🎯 Accepting sidebar operation:', currentOperationId);
             aiWriter.acceptChange(currentOperationId);
-            setActiveOperations(prev => prev.filter(id => id !== currentOperationId));
             setShowAIAction(false);
             setCurrentOperationId(null);
             setCurrentOperation(null);
@@ -209,7 +207,6 @@ export default function DocumentEditor() {
         } else if (currentOperationId && aiWriter) {
             console.log('🎯 Rejecting sidebar operation:', currentOperationId);
             aiWriter.rejectChange(currentOperationId);
-            setActiveOperations(prev => prev.filter(id => id !== currentOperationId));
             setShowAIAction(false);
             setCurrentOperationId(null);
             setCurrentOperation(null);
@@ -239,7 +236,6 @@ export default function DocumentEditor() {
             console.log('🎯 Regenerating sidebar operation:', currentOperationId);
             // First reject the current change
             aiWriter.rejectChange(currentOperationId);
-            setActiveOperations(prev => prev.filter(id => id !== currentOperationId));
 
             // Store operation to re-execute after rejection
             const operationToRetry = currentOperation;
@@ -311,7 +307,6 @@ export default function DocumentEditor() {
                     }
 
                     if (operationId) {
-                        setActiveOperations(prev => [...prev, operationId]);
                         setCurrentOperationId(operationId);
                         setCurrentOperation(operationToRetry);
                         setShowAIAction(true);
