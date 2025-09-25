@@ -1,5 +1,5 @@
 import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { 
   SidebarProvider,
@@ -23,8 +23,10 @@ import {
   Settings, 
   User,
   Plus,
-  Github
+  Github,
+  LogOut
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -32,6 +34,13 @@ interface LayoutProps {
 
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, userProfile, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate('/');
+  };
 
   const navigation = [
     { name: 'Home', href: '/', icon: Home },
@@ -98,13 +107,39 @@ const Layout = ({ children }: LayoutProps) => {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild>
+                      <button onClick={handleSignOut} className="w-full text-left flex items-center">
+                        <LogOut className="w-4 h-4" />
+                        <span>Sign Out</span>
+                      </button>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
 
           <SidebarFooter>
-            <div className="p-4">
+            <div className="p-4 space-y-2">
+              {/* User Info */}
+              {user && (
+                <div className="flex items-center space-x-2 p-2 rounded-lg bg-gray-50">
+                  <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                    {user.photoURL ? (
+                      <img src={user.photoURL} alt="Avatar" className="w-8 h-8 rounded-full" />
+                    ) : (
+                      <User className="w-4 h-4 text-white" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {userProfile?.displayName || user.displayName || 'User'}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                  </div>
+                </div>
+              )}
               <Button className="w-full" size="sm">
                 <Plus className="w-4 h-4 mr-2" />
                 New Document
@@ -127,7 +162,17 @@ const Layout = ({ children }: LayoutProps) => {
                   <Brain className="w-4 h-4 mr-2" />
                   New Doc
                 </Button>
-                <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
+                <div className="flex items-center space-x-2">
+                  {user && (
+                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                      {user.photoURL ? (
+                        <img src={user.photoURL} alt="Avatar" className="w-8 h-8 rounded-full" />
+                      ) : (
+                        <User className="w-4 h-4 text-white" />
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </header>
