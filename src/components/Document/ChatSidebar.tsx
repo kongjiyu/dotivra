@@ -5,8 +5,9 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, Sparkles, SendHorizonal, Wand2 } from "lucide-react";
 import type { Editor } from "@tiptap/react";
-import { writeAIContent, streamAIContent } from "@/utils/aiContentWriter";
 import { useDocument } from "@/context/DocumentContext";
+import { EnhancedAIContentWriter } from "@/utils/enhancedAIContentWriter";
+import type { ContentPosition } from "@/utils/enhancedAIContentWriter";
 
 export type ChatMessage = {
     id: string;
@@ -39,9 +40,19 @@ export default function ChatSidebar({
     const [isGenerating, setIsGenerating] = useState(false);
     const listRef = useRef<HTMLDivElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const [aiWriter, setAIWriter] = useState<EnhancedAIContentWriter | null>(null);
 
     // Get AI actions function from document context
     const { showAIActions, documentContent } = useDocument();
+
+    // Store current operation ID for accept/reject functionality
+    const [currentChatOperationId, setCurrentChatOperationId] = useState<string | null>(null);
+
+    // Debug context values
+    useEffect(() => {
+        console.log('🔍 ChatSidebar: showAIActions changed to:', !!showAIActions, 'function:', showAIActions);
+        console.log('🔍 ChatSidebar: documentContent available:', !!documentContent);
+    }, [showAIActions, documentContent]);
 
     // Combine external messages (if any) with internal state
     const messages = useMemo(() => externalMessages ?? internalMessages, [externalMessages, internalMessages]);
@@ -52,12 +63,19 @@ export default function ChatSidebar({
             const helloMsg: ChatMessage = {
                 id: 'hello-msg',
                 role: 'assistant',
-                content: 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content. When I generate content, it will appear directly in your document for you to review and accept. How can I assist you today?',
+                content: 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content.\n\n**Special AI Operations:**\n• Type `*add` to add new content\n• Type `*remove` to mark content for removal\n• Type `*edit` to replace existing content\n\nThese operations will show highlighted changes in your document with accept/reject options. How can I assist you today?',
                 timestamp: Date.now(),
             };
             setInternalMessages([helloMsg]);
         }
     }, [open, externalMessages, internalMessages.length]);
+
+    // Initialize AI Writer when editor is available
+    useEffect(() => {
+        if (editor && !aiWriter) {
+            setAIWriter(new EnhancedAIContentWriter(editor));
+        }
+    }, [editor, aiWriter]);
 
     // Handle initial message from context menu
     useEffect(() => {
@@ -82,6 +100,93 @@ export default function ChatSidebar({
         return () => clearTimeout(timeoutId);
     }, [messages.length, messages, open]);
 
+    // AI Operations Functions
+    const executeAIAddOperation = async (): Promise<string> => {
+        if (!aiWriter || !editor) throw new Error('Editor not available');
+
+        // Get current cursor position
+        const { from } = editor.state.selection;
+        const position: ContentPosition = {
+            from,
+            to: from,
+            length: 0
+        };
+
+        // Generate content to add
+        const newContent = `\n\n### New AI-Generated Section\n\nThis section was added through AI operations. It demonstrates how content can be intelligently inserted at specific positions within your document.\n\n**Key Features:**\n- Smart positioning\n- Context awareness\n- Interactive review process\n\n`;
+
+        // Execute the add operation
+        const changeId = await aiWriter.addContentAtPosition(position, newContent);
+        return changeId;
+    };
+
+    const executeAIRemoveOperation = async (): Promise<string> => {
+        if (!aiWriter || !editor) throw new Error('Editor not available');
+
+        // Try to find content to remove - look for a heading or paragraph
+        const doc = editor.state.doc;
+        let targetPosition: ContentPosition | null = null;
+
+        // Find the first non-empty paragraph or heading to remove
+        doc.descendants((node, pos) => {
+            if (!targetPosition && node.type.name === 'paragraph' && node.textContent.trim().length > 50) {
+                targetPosition = {
+                    from: pos,
+                    to: pos + node.nodeSize,
+                    length: node.nodeSize,
+                    text: node.textContent
+                };
+                return false; // Stop iteration
+            }
+            return true;
+        });
+
+        if (!targetPosition) {
+            // Fallback: mark current selection or cursor line
+            const { from, to } = editor.state.selection;
+            targetPosition = { from, to: to || from + 10, length: (to || from + 10) - from };
+        }
+
+        // Execute the remove operation
+        const changeId = await aiWriter.markContentForRemoval(targetPosition);
+        return changeId;
+    };
+
+    const executeAIEditOperation = async (): Promise<string> => {
+        if (!aiWriter || !editor) throw new Error('Editor not available');
+
+        // Find content to edit - look for the first paragraph
+        const doc = editor.state.doc;
+        let foundPosition: ContentPosition | null = null;
+
+        doc.descendants((node, pos) => {
+            if (!foundPosition && node.type.name === 'paragraph' && node.textContent.trim().length > 20) {
+                foundPosition = {
+                    from: pos,
+                    to: pos + node.nodeSize,
+                    length: node.nodeSize
+                };
+                return false; // Stop iteration
+            }
+            return true;
+        });
+
+        if (!foundPosition) {
+            throw new Error('No suitable content found to edit');
+        }
+
+        // Type assertion to help TypeScript understand the type
+        const position = foundPosition as ContentPosition;
+
+        // Generate improved content
+        const originalText = editor.state.doc.textBetween(position.from, position.to);
+        const improvedContent = `${originalText.trim()} Additionally, this content has been enhanced with AI-powered improvements, including better structure, clarity, and comprehensive details.`;
+
+        // Execute the replace operation
+        const changeId = await aiWriter.replaceContentWithHighlights(position, improvedContent);
+        return changeId;
+    };
+
     // AI Content Generation Functions
     const generateAIContent = async (prompt: string): Promise<string> => {
         // Simulate AI response for now - replace with actual AI API call
@@ -100,126 +205,7 @@ export default function ChatSidebar({
         });
     };
 
-    const showPreviewInEditor = async (content: string) => {
-        if (!editor) return;
-
-        try {
-            // Store the content before AI insertion for potential undo
-            const beforeContent = documentContent;
-
-            // Insert the content as a preview with highlighting
-            await insertPreviewContentToEditor(content, {
-                animate: true,
-                parseMarkdown: true,
-                position: 'current'
-            });
-
-            // Show the AI action container after content insertion is complete
-            // Adding a small delay to ensure highlighting is applied first
-            setTimeout(() => {
-                if (showAIActions) {
-                    showAIActions(content, beforeContent);
-                }
-            }, 200);
-        } catch (error) {
-            console.error('Error showing preview in editor:', error);
-        }
-    };
-
-    const insertPreviewContentToEditor = async (content: string, options: {
-        animate?: boolean;
-        position?: 'current' | 'end' | 'start';
-        parseMarkdown?: boolean;
-    } = {}) => {
-        if (!editor) return;
-
-        const { animate = true, position = 'current', parseMarkdown = true } = options;
-
-        try {
-            // Mark the current position before inserting content
-            const startPos = editor.state.selection.from;
-
-            // Insert the content normally first
-            if (animate) {
-                await streamAIContent(editor, content, {
-                    position,
-                    parseMarkdown,
-                    streamDelay: 20,
-                    focus: true
-                });
-            } else {
-                await writeAIContent(editor, content, {
-                    position,
-                    parseMarkdown,
-                    focus: true
-                });
-            }
-
-            // After content insertion, add persistent green highlighting
-            setTimeout(() => {
-                const endPos = editor.state.selection.from;
-
-                // Select the inserted content range
-                if (endPos > startPos) {
-                    editor.commands.setTextSelection({ from: startPos, to: endPos });
-
-                    // Apply preview highlighting using CSS class
-                    const editorElement = editor.options.element;
-                    if (editorElement) {
-                        const proseMirrorElement = editorElement.querySelector('.ProseMirror');
-                        if (proseMirrorElement) {
-                            // Create a unique identifier for this AI content
-                            const aiContentId = `ai-content-${Date.now()}`;
-
-                            // Get all text nodes in the selection
-                            const walker = document.createTreeWalker(
-                                proseMirrorElement,
-                                NodeFilter.SHOW_ELEMENT,
-                                null
-                            );
-
-                            let node;
-                            const elementsToHighlight: HTMLElement[] = [];
-
-                            // Find elements that contain the cursor position
-                            while (node = walker.nextNode()) {
-                                const element = node as HTMLElement;
-                                if (element.tagName && (
-                                    element.tagName.match(/^H[1-6]$/) ||
-                                    element.tagName === 'P' ||
-                                    element.tagName === 'LI' ||
-                                    element.tagName === 'UL' ||
-                                    element.tagName === 'OL' ||
-                                    element.tagName === 'BLOCKQUOTE'
-                                )) {
-                                    // Check if this element was just inserted
-                                    const elementPos = editor.view.posAtDOM(element, 0);
-                                    if (elementPos >= startPos && elementPos <= endPos) {
-                                        elementsToHighlight.push(element);
-                                    }
-                                }
-                            }
-
-                            // Apply highlighting to found elements
-                            elementsToHighlight.forEach(element => {
-                                element.classList.add('ai-preview-content');
-                                element.setAttribute('data-ai-content-id', aiContentId);
-                            });
-
-                            // Store the AI content ID globally for later cleanup
-                            (window as any).currentAIContentId = aiContentId;
-                        }
-                    }
-
-                    // Position cursor at the end of inserted content
-                    editor.commands.setTextSelection(endPos);
-                }
-            }, 100);
-
-        } catch (error) {
-            console.error('Error inserting preview content to editor:', error);
-        }
-    };
+    // Regular AI content generation now uses EnhancedAIContentWriter for consistency
 
     const handleSend = async () => {
         const text = input.trim();
@@ -240,29 +226,187 @@ export default function ChatSidebar({
             setIsGenerating(true);
 
             try {
-                // Generate AI response
-                const aiResponse = await generateAIContent(text);
+                // Check for special AI operation commands
+                if (text.toLowerCase() === '*add') {
+                    const operationId = await executeAIAddOperation();
+                    setCurrentChatOperationId(operationId);
 
-                // Trigger preview in the document editor instead of showing in chat
-                if (editor && aiResponse) {
-                    await showPreviewInEditor(aiResponse);
+                    // Store operation ID globally so DocumentEditor can access it
+                    (window as any).currentChatOperationId = operationId;
+                    (window as any).currentChatAIWriter = aiWriter;
+
+                    // Show AI actions for the operation with a slight delay to ensure content is rendered
+                    console.log('🎯 About to show AI actions. showAIActions:', showAIActions, 'type:', typeof showAIActions, 'documentContent:', documentContent);
+                    setTimeout(() => {
+                        let actionFunction = showAIActions;
+
+                        // Fallback to global function if context function is not available
+                        if (!actionFunction && (window as any).currentShowAIActionsFunction) {
+                            console.log('🔧 Using fallback global showAIActions function');
+                            actionFunction = (window as any).currentShowAIActionsFunction;
+                        }
+
+                        if (actionFunction && typeof actionFunction === 'function') {
+                            console.log('✅ Calling showAIActions for *add operation');
+                            try {
+                                console.log('🚀 Calling actionFunction with params:', {
+                                    content: "New content added via *add command",
+                                    beforeContent: documentContent
+                                });
+                                actionFunction("New content added via *add command", documentContent);
+                            } catch (error) {
+                                console.error('❌ Error calling showAIActions:', error);
+                            }
+                        } else {
+                            console.error('❌ showAIActions is not available!', {
+                                contextFunction: showAIActions,
+                                globalFunction: (window as any).currentShowAIActionsFunction,
+                                type: typeof showAIActions,
+                                isFunction: typeof showAIActions === 'function'
+                            });
+                        }
+                    }, 300);
+
+                    const assistantMsg: ChatMessage = {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: "✅ ADD Operation executed! New content has been added to your document with green highlighting. Use the action buttons to accept or reject the changes.",
+                        timestamp: Date.now(),
+                    };
+                    setInternalMessages(prev => [...prev, assistantMsg]);
+                } else if (text.toLowerCase() === '*remove') {
+                    const operationId = await executeAIRemoveOperation();
+                    setCurrentChatOperationId(operationId);
+
+                    // Store operation ID globally so DocumentEditor can access it
+                    (window as any).currentChatOperationId = operationId;
+                    (window as any).currentChatAIWriter = aiWriter;
+
+                    // Show AI actions for the operation with a slight delay to ensure content is rendered
+                    console.log('🎯 About to show AI actions for *remove. showAIActions:', showAIActions, 'type:', typeof showAIActions);
+                    setTimeout(() => {
+                        let actionFunction = showAIActions;
+
+                        // Fallback to global function if context function is not available
+                        if (!actionFunction && (window as any).currentShowAIActionsFunction) {
+                            console.log('🔧 Using fallback global showAIActions function for *remove');
+                            actionFunction = (window as any).currentShowAIActionsFunction;
+                        }
+
+                        if (actionFunction && typeof actionFunction === 'function') {
+                            console.log('✅ Calling showAIActions for *remove operation');
+                            try {
+                                actionFunction("Content marked for removal via *remove command", documentContent);
+                            } catch (error) {
+                                console.error('❌ Error calling showAIActions for *remove:', error);
+                            }
+                        } else {
+                            console.error('❌ showAIActions is not available for *remove!', {
+                                contextFunction: showAIActions,
+                                globalFunction: (window as any).currentShowAIActionsFunction,
+                                type: typeof showAIActions,
+                                isFunction: typeof showAIActions === 'function'
+                            });
+                        }
+                    }, 300);
+
+                    const assistantMsg: ChatMessage = {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: "🗑️ REMOVE Operation executed! Content has been marked for removal with red highlighting. Use the action buttons to accept or reject the changes.",
+                        timestamp: Date.now(),
+                    };
+                    setInternalMessages(prev => [...prev, assistantMsg]);
+                } else if (text.toLowerCase() === '*edit') {
+                    const operationId = await executeAIEditOperation();
+                    setCurrentChatOperationId(operationId);
+
+                    // Store operation ID globally so DocumentEditor can access it
+                    (window as any).currentChatOperationId = operationId;
+                    (window as any).currentChatAIWriter = aiWriter;
+
+                    // Show AI actions for the operation with a slight delay to ensure content is rendered
+                    console.log('🎯 About to show AI actions for *edit. showAIActions:', showAIActions, 'type:', typeof showAIActions);
+                    setTimeout(() => {
+                        let actionFunction = showAIActions;
+
+                        // Fallback to global function if context function is not available
+                        if (!actionFunction && (window as any).currentShowAIActionsFunction) {
+                            console.log('🔧 Using fallback global showAIActions function for *edit');
+                            actionFunction = (window as any).currentShowAIActionsFunction;
+                        }
+
+                        if (actionFunction && typeof actionFunction === 'function') {
+                            console.log('✅ Calling showAIActions for *edit operation');
+                            try {
+                                actionFunction("Content edited via *edit command", documentContent);
+                            } catch (error) {
+                                console.error('❌ Error calling showAIActions for *edit:', error);
+                            }
+                        } else {
+                            console.error('❌ showAIActions is not available for *edit!', {
+                                contextFunction: showAIActions,
+                                globalFunction: (window as any).currentShowAIActionsFunction,
+                                type: typeof showAIActions,
+                                isFunction: typeof showAIActions === 'function'
+                            });
+                        }
+                    }, 300);
+
+                    const assistantMsg: ChatMessage = {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: "🔄 EDIT Operation executed! Content has been replaced with dual highlighting (red for original, green for new). Use the action buttons to accept or reject the changes.",
+                        timestamp: Date.now(),
+                    };
+                    setInternalMessages(prev => [...prev, assistantMsg]);
+                } else {
+                    // Regular AI content generation using EnhancedAIContentWriter
+                    const aiResponse = await generateAIContent(text);
+
+                    if (aiWriter && editor && aiResponse) {
+                        // Get current cursor position
+                        const { from } = editor.state.selection;
+                        const position: ContentPosition = {
+                            from,
+                            to: from,
+                            length: 0
+                        };
+
+                        // Use the AI writer to add content with proper highlighting
+                        const operationId = await aiWriter.addContentAtPosition(position, `\n\n${aiResponse}`);
+                        setCurrentChatOperationId(operationId);
+
+                        // Store operation ID globally so DocumentEditor can access it
+                        (window as any).currentChatOperationId = operationId;
+                        (window as any).currentChatAIWriter = aiWriter;
+
+                        // Show AI actions for the operation with a slight delay to ensure content is rendered
+                        console.log('🎯 About to show AI actions for regular AI. showAIActions:', showAIActions);
+                        setTimeout(() => {
+                            if (showAIActions) {
+                                console.log('✅ Calling showAIActions for regular AI operation');
+                                showAIActions(`AI Response: ${text}`, documentContent);
+                            } else {
+                                console.error('❌ showAIActions is undefined for regular AI!');
+                            }
+                        }, 300);
+                    }                    // Add confirmation message 
+                    const assistantMsg: ChatMessage = {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: "✨ AI content preview generated and highlighted in your document. Review the green-highlighted content and use the action container to accept, reject, or regenerate.",
+                        timestamp: Date.now(),
+                    };
+
+                    setInternalMessages(prev => [...prev, assistantMsg]);
                 }
-
-                // Add confirmation message 
-                const assistantMsg: ChatMessage = {
-                    id: crypto.randomUUID(),
-                    role: "assistant",
-                    content: "✨ AI content preview generated and highlighted in your document. Review the green-highlighted content and use the action container to accept, reject, or regenerate.",
-                    timestamp: Date.now(),
-                };
-
-                setInternalMessages(prev => [...prev, assistantMsg]);
             } catch (error) {
-                console.error('Error generating AI content:', error);
+                console.error('Error processing request:', error);
                 const errorMsg: ChatMessage = {
                     id: crypto.randomUUID(),
                     role: "assistant",
-                    content: "I'm sorry, I encountered an error while generating content. Please try again.",
+                    content: `❌ Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}. Please try again.`,
                     timestamp: Date.now(),
                 };
                 setInternalMessages(prev => [...prev, errorMsg]);
@@ -345,10 +489,12 @@ export default function ChatSidebar({
                         <div className="px-3 pb-2">
                             <div className="flex flex-wrap justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                 {(suggestions ?? [
-                                    "Strengthen success metrics",
-                                    "Review executive summary",
-                                    "Add competitor analysis",
-                                ]).slice(0, 4).map((s, idx) => (
+                                    "*add",
+                                    "*remove",
+                                    "*edit",
+                                    "Improve content",
+                                    "Add summary",
+                                ]).slice(0, 5).map((s, idx) => (
                                     <Button
                                         key={`${idx}-${s.slice(0, 12)}`}
                                         variant="outline"

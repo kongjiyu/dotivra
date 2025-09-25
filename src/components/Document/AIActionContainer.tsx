@@ -26,9 +26,12 @@ export default function AIActionContainer({
     const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
+        console.log('🎯 AIActionContainer show prop changed to:', show);
         if (show) {
+            console.log('✅ Making AIActionContainer visible');
             setIsVisible(true);
         } else {
+            console.log('❌ Hiding AIActionContainer');
             // Delay hiding to allow for exit animation
             const timer = setTimeout(() => setIsVisible(false), 300);
             return () => clearTimeout(timer);
@@ -53,21 +56,27 @@ export default function AIActionContainer({
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [show, onAccept, onReject]);
 
-    if (!isVisible) return null;
+    if (!isVisible) {
+        console.log('🚫 AIActionContainer not visible, returning null');
+        return null;
+    }
+
+    console.log('👀 AIActionContainer is visible, rendering with show:', show);
 
     // Adjust positioning based on chat sidebar state
     const rightPosition = chatSidebarOpen ? 'right-[30rem]' : 'right-6';
 
     return (
-        <div className={`fixed bottom-6 ${rightPosition} z-50 transition-all duration-300 ${show ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 translate-y-4 scale-95'
+        <div className={`fixed bottom-6 ${rightPosition} z-50 transition-all duration-300 ${show ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
             }`}>
-            <div className="bg-white border border-gray-200 rounded-xl shadow-2xl p-4 min-w-[320px] backdrop-blur-sm bg-white/95">
+            <div className={`bg-white border-2 rounded-xl shadow-lg p-4 min-w-[320px] ${show ? 'border-blue-400' : 'border-gray-200'
+                }`}>
                 {/* Header */}
                 <div className="flex items-start gap-3 mb-4">
                     <div className={`p-2 rounded-lg ${operationType === 'removal' ? 'bg-gradient-to-br from-red-500 to-red-600' :
-                            operationType === 'editing' ? 'bg-gradient-to-br from-blue-500 to-blue-600' :
-                                operationType === 'replacement' ? 'bg-gradient-to-br from-orange-500 to-orange-600' :
-                                    'bg-gradient-to-br from-green-500 to-green-600'
+                        operationType === 'editing' ? 'bg-gradient-to-br from-blue-500 to-blue-600' :
+                            operationType === 'replacement' ? 'bg-gradient-to-br from-orange-500 to-orange-600' :
+                                'bg-gradient-to-br from-green-500 to-green-600'
                         }`}>
                         <Sparkles className="w-5 h-5 text-white" />
                     </div>
