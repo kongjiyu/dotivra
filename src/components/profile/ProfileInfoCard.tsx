@@ -13,14 +13,45 @@ interface UserInfo {
 
 interface ProfileInfoCardProps {
   user: UserInfo;
+  onProfileEdit: (profileData: any) => Promise<void>;
 }
 
-const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
+const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user, onProfileEdit }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [formData, setFormData] = useState({
+    name: user.name,
+    email: user.email,
+    githubUsername: user.githubUsername
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSaveChanges = () => {
-    console.log('Save profile changes');
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSaveChanges = async () => {
+    try {
+      console.log('📝 Starting profile save process...');
+      console.log('Form data to save:', formData);
+      setIsSubmitting(true);
+      await onProfileEdit(formData);
+      setIsEditing(false);
+      console.log('✅ Profile save completed successfully');
+    } catch (error) {
+      console.error('❌ Error saving profile:', error);
+      alert('Error saving profile. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setFormData({
+      name: user.name,
+      email: user.email,
+      githubUsername: user.githubUsername
+    });
     setIsEditing(false);
   };
 
@@ -28,12 +59,38 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
     <div className="bg-white border border-gray-200 rounded-lg p-6">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg font-semibold text-gray-900">Profile Information</h2>
-        <button
-          onClick={() => setIsEditing(!isEditing)}
-          className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          {isEditing ? 'Cancel' : 'Edit Profile'}
-        </button>
+        {!isEditing ? (
+          <button
+            onClick={() => {
+              console.log('🔧 Edit Profile button clicked');
+              setIsEditing(true);
+            }}
+            className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Edit Profile
+          </button>
+        ) : (
+          <div className="flex space-x-2">
+            <button
+              onClick={handleCancel}
+              className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveChanges}
+              disabled={isSubmitting}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center space-x-2"
+            >
+              {isSubmitting ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+              ) : (
+                <Save className="h-4 w-4" />
+              )}
+              <span>{isSubmitting ? 'Saving...' : 'Save Changes'}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Profile Avatar & Basic Info */}
@@ -62,7 +119,8 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
             <input
               id="name"
               type="text"
-              defaultValue={user.name}
+              value={formData.name}
+              onChange={(e) => handleInputChange('name', e.target.value)}
               disabled={!isEditing}
               className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                 !isEditing ? 'bg-gray-50 text-gray-600' : 'bg-white'
@@ -83,7 +141,8 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
             <input
               id="email"
               type="email"
-              defaultValue={user.email}
+              value={formData.email}
+              onChange={(e) => handleInputChange('email', e.target.value)}
               disabled={!isEditing}
               className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                 !isEditing ? 'bg-gray-50 text-gray-600' : 'bg-white'
@@ -104,7 +163,8 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
             <input
               id="githubUsername"
               type="text"
-              defaultValue={user.githubUsername}
+              value={formData.githubUsername}
+              onChange={(e) => handleInputChange('githubUsername', e.target.value)}
               disabled={!isEditing}
               className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
                 !isEditing ? 'bg-gray-50 text-gray-600' : 'bg-white'

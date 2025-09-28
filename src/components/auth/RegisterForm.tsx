@@ -1,6 +1,7 @@
 // src/components/auth/RegisterForm.tsx - Registration with GitHub integration
 import React, { useState } from 'react';
-import { Eye, EyeOff, Mail, Lock, User, Github } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { User, Mail, Lock, Eye, EyeOff, Github } from 'lucide-react';
 
 interface RegisterFormProps {
   onToggleMode: () => void;
@@ -8,6 +9,11 @@ interface RegisterFormProps {
 
 const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
   const [showPassword, setShowPassword] = useState(false);
+  const [isConnectingGithub, setIsConnectingGithub] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const navigate = useNavigate();
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -15,7 +21,6 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
     githubUsername: '',
     terms: false
   });
-  const [isConnectingGithub, setIsConnectingGithub] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -23,6 +28,11 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }));
+    
+    // Clear errors when user starts typing
+    if (errors[name]) {
+      setErrors(prev => ({ ...prev, [name]: '' }));
+    }
   };
 
   const handleConnectGithub = async () => {
@@ -40,10 +50,60 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Registration data:', formData);
-    // TODO: Implement registration logic
+    
+    // Basic validation
+    const newErrors: {[key: string]: string} = {};
+    if (!formData.name) newErrors.name = 'Full name is required';
+    if (!formData.email) newErrors.email = 'Email is required';
+    if (!formData.password) newErrors.password = 'Password is required';
+    if (!formData.githubUsername) newErrors.githubUsername = 'GitHub username is required';
+    if (!formData.terms) newErrors.terms = 'You must accept the terms and conditions';
+    
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    setIsSubmitting(true);
+    console.log('📝 Attempting to register...', { 
+      name: formData.name, 
+      email: formData.email, 
+      githubUsername: formData.githubUsername 
+    });
+    
+    try {
+      const response = await fetch('http://localhost:3001/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          password: formData.password,
+          githubUsername: formData.githubUsername
+        })
+      });
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        console.log('✅ Registration successful:', data);
+        alert(`Welcome ${data.user.name}! Your account has been created successfully.`);
+        // TODO: Store token and user data
+        navigate('/dashboard');
+      } else {
+        console.error('❌ Registration failed:', data.error);
+        alert(data.error || 'Registration failed. Please try again.');
+      }
+    } catch (error) {
+      console.error('❌ Registration API error:', error);
+      alert('Network error. Please check your connection and try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -71,11 +131,16 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
               type="text"
               value={formData.name}
               onChange={handleInputChange}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                errors.name ? 'border-red-300' : 'border-gray-300'
+              }`}
               placeholder="Enter your full name"
               required
             />
           </div>
+          {errors.name && (
+            <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+          )}
         </div>
 
         {/* Email Field */}
@@ -93,11 +158,16 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
               type="email"
               value={formData.email}
               onChange={handleInputChange}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                errors.email ? 'border-red-300' : 'border-gray-300'
+              }`}
               placeholder="Enter your email"
               required
             />
           </div>
+          {errors.email && (
+            <p className="mt-1 text-sm text-red-600">{errors.email}</p>
+          )}
         </div>
 
         {/* Password Field */}
@@ -115,7 +185,9 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
               type={showPassword ? 'text' : 'password'}
               value={formData.password}
               onChange={handleInputChange}
-              className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              className={`w-full pl-10 pr-12 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                errors.password ? 'border-red-300' : 'border-gray-300'
+              }`}
               placeholder="Create a password"
               required
             />
@@ -131,6 +203,9 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
               )}
             </button>
           </div>
+          {errors.password && (
+            <p className="mt-1 text-sm text-red-600">{errors.password}</p>
+          )}
         </div>
 
         {/* GitHub Username Field */}
@@ -148,7 +223,9 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
               type="text"
               value={formData.githubUsername}
               onChange={handleInputChange}
-              className="w-full pl-10 pr-24 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              className={`w-full pl-10 pr-24 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                errors.githubUsername ? 'border-red-300' : 'border-gray-300'
+              }`}
               placeholder="Enter your GitHub username"
               required
             />
@@ -161,6 +238,9 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
               {isConnectingGithub ? 'Connecting...' : 'Connect'}
             </button>
           </div>
+          {errors.githubUsername && (
+            <p className="mt-1 text-sm text-red-600">{errors.githubUsername}</p>
+          )}
           <p className="mt-2 text-sm text-gray-600">
             We'll use this to access your repositories for project creation
           </p>
@@ -174,7 +254,9 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
             type="checkbox"
             checked={formData.terms}
             onChange={handleInputChange}
-            className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            className={`mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 ${
+              errors.terms ? 'border-red-300' : ''
+            }`}
             required
           />
           <label htmlFor="terms" className="text-sm text-gray-600">
@@ -184,13 +266,20 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
             <a href="#" className="text-blue-600 hover:text-blue-700">Privacy Policy</a>
           </label>
         </div>
+        {errors.terms && (
+          <p className="mt-1 text-sm text-red-600">{errors.terms}</p>
+        )}
 
         {/* Submit Button */}
         <button
           type="submit"
-          className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
+          disabled={isSubmitting}
+          className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
         >
-          Create account
+          {isSubmitting ? (
+            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
+          ) : null}
+          <span>{isSubmitting ? 'Creating account...' : 'Create account'}</span>
         </button>
       </form>
 

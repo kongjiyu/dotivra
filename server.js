@@ -284,6 +284,238 @@ app.get('/api/projects/:id', (req, res) => {
   }
 });
 
+// ============================================================================
+// BASIC API ENDPOINTS FOR FRONTEND CONNECTION
+// ============================================================================
+
+// Profile edit endpoint
+app.put('/api/profile/edit', (req, res) => {
+  try {
+    console.log('📝 PUT /api/profile/edit - Connection established');
+    console.log('Request body:', req.body);
+    
+    res.json({
+      success: true,
+      message: 'Profile edit endpoint connected successfully',
+      data: req.body
+    });
+  } catch (error) {
+    console.error('Profile edit error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Profile edit endpoint error',
+      details: error.message
+    });
+  }
+});
+
+// Profile delete endpoint
+app.delete('/api/profile/delete', (req, res) => {
+  try {
+    console.log('🗑️ DELETE /api/profile/delete - Connection established');
+    console.log('Request body:', req.body);
+    
+    res.json({
+      success: true,
+      message: 'Profile delete endpoint connected successfully',
+      data: req.body
+    });
+  } catch (error) {
+    console.error('Profile delete error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Profile delete endpoint error',
+      details: error.message
+    });
+  }
+});
+
+// Document add endpoint
+app.post('/api/document/add', (req, res) => {
+  try {
+    console.log('📄 POST /api/document/add - Connection established');
+    console.log('Request body:', req.body);
+    
+    res.json({
+      success: true,
+      message: 'Document add endpoint connected successfully',
+      data: req.body
+    });
+  } catch (error) {
+    console.error('Document add error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Document add endpoint error',
+      details: error.message
+    });
+  }
+});
+
+// ============================================================================
+// AUTHENTICATION ENDPOINTS
+// ============================================================================
+
+// Sign up endpoint
+app.post('/api/auth/signup', (req, res) => {
+  try {
+    console.log('🔐 POST /api/auth/signup - Connection established');
+    console.log('Request body:', req.body);
+    
+    const { name, email, password, githubUsername } = req.body;
+    
+    // Basic validation logging
+    if (!name || !email || !password) {
+      console.log('❌ Sign up validation failed: Missing required fields');
+      return res.status(400).json({
+        success: false,
+        error: 'Name, email, and password are required',
+        details: 'Missing required fields'
+      });
+    }
+    
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      console.log('❌ Sign up validation failed: Invalid email format');
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid email format',
+        details: 'Please provide a valid email address'
+      });
+    }
+    
+    // TODO: In a real implementation, you would:
+    // - Check if email already exists in database
+    // - Hash the password
+    // - Save user to database
+    // - Generate JWT token
+    // - Send welcome email
+    
+    console.log('✅ Sign up successful for:', email);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Sign up endpoint connected successfully',
+      user: {
+        id: Math.floor(Math.random() * 1000) + 1, // Mock ID
+        name: name,
+        email: email.toLowerCase(),
+        githubUsername: githubUsername || null,
+        createdAt: new Date().toISOString()
+      },
+      token: 'mock-jwt-token-' + Date.now(), // Mock token
+      data: req.body
+    });
+  } catch (error) {
+    console.error('Sign up error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Sign up endpoint error',
+      details: error.message
+    });
+  }
+});
+
+// Sign in endpoint
+app.post('/api/auth/signin', (req, res) => {
+  try {
+    console.log('🔑 POST /api/auth/signin - Connection established');
+    console.log('Request body:', { ...req.body, password: '[HIDDEN]' });
+    
+    const { email, password } = req.body;
+    
+    // Basic validation
+    if (!email || !password) {
+      console.log('❌ Sign in validation failed: Missing credentials');
+      return res.status(400).json({
+        success: false,
+        error: 'Email and password are required',
+        details: 'Missing credentials'
+      });
+    }
+    
+    // Email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      console.log('❌ Sign in validation failed: Invalid email format');
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid email format',
+        details: 'Please provide a valid email address'
+      });
+    }
+    
+    // TODO: In a real implementation, you would:
+    // - Query database for user by email
+    // - Compare hashed password
+    // - Generate JWT token
+    // - Update last login timestamp
+    // - Return user data and token
+    
+    // Mock authentication check
+    if (email === 'test@example.com' && password === 'password') {
+      console.log('✅ Sign in successful for:', email);
+      
+      res.json({
+        success: true,
+        message: 'Sign in successful',
+        user: {
+          id: 1,
+          name: 'Test User',
+          email: email.toLowerCase(),
+          githubUsername: 'testuser',
+          joinedDate: 'January 2024'
+        },
+        token: 'mock-jwt-token-' + Date.now(),
+        data: { email }
+      });
+    } else {
+      console.log('❌ Sign in failed: Invalid credentials for:', email);
+      
+      res.status(401).json({
+        success: false,
+        error: 'Invalid credentials',
+        details: 'Email or password is incorrect'
+      });
+    }
+  } catch (error) {
+    console.error('Sign in error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Sign in endpoint error',
+      details: error.message
+    });
+  }
+});
+
+// Sign out endpoint
+app.post('/api/auth/signout', (req, res) => {
+  try {
+    console.log('🚪 POST /api/auth/signout - Connection established');
+    console.log('Request body:', req.body);
+    
+    // TODO: In a real implementation, you would:
+    // - Invalidate JWT token
+    // - Clear any refresh tokens
+    // - Log the sign out activity
+    
+    console.log('✅ Sign out successful');
+    
+    res.json({
+      success: true,
+      message: 'Sign out successful',
+      data: req.body
+    });
+  } catch (error) {
+    console.error('Sign out error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Sign out endpoint error',
+      details: error.message
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
