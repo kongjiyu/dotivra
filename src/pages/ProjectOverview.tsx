@@ -134,45 +134,14 @@ const ProjectOverview: React.FC = () => {
     alert(`Delete "${document.name}"? (This is just a demo)`);
   };
 
-  const handleCreateDocument = async ({
+  const handleCreateDocument = ({
     template,
     category,
     name,
     role
   }: CreateDocumentPayload) => {
-    try {
-      console.log('Calling document add API...');
-      
-      const response = await fetch('http://localhost:3001/api/document/add', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          projectId: currentProjectId,
-          templateId: template.id,
-          templateName: template.name,
-          category,
-          documentName: name,
-          role,
-          createdAt: new Date().toISOString()
-        })
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        console.log('Document add API response:', data);
-        alert(`Document "${name}" created successfully!`);
-        // TODO: Refresh documents list or add to local state
-      } else {
-        console.error('Document add failed:', data.error);
-        alert('Failed to create document. Please try again.');
-      }
-    } catch (error) {
-      console.error('Document add API error:', error);
-      alert('Network error. Please check your connection and try again.');
-    }
+    console.log('Creating document with template:', template.name, 'for category:', category, 'name:', name, 'role:', role);
+    alert(`Creating new ${category} document "${name}" (${role}) with ${template.name} template! (This is just a demo)`);
   };
 
   const handleCloseModal = () => {

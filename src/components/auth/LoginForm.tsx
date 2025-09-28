@@ -9,67 +9,7 @@ interface LoginFormProps {
 
 const LoginForm: React.FC<LoginFormProps> = ({ onToggleMode }) => {
   const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState<{email?: string; password?: string}>({});
   const navigate = useNavigate();
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    
-    // Clear errors when user starts typing
-    if (errors[name as keyof typeof errors]) {
-      setErrors(prev => ({ ...prev, [name]: '' }));
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    // Basic validation
-    const newErrors: {email?: string; password?: string} = {};
-    if (!formData.email) newErrors.email = 'Email is required';
-    if (!formData.password) newErrors.password = 'Password is required';
-    
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    setIsSubmitting(true);
-    console.log('🔑 Attempting to sign in...', { email: formData.email });
-    
-    try {
-      const response = await fetch('http://localhost:3001/api/auth/signin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      });
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        console.log('✅ Sign in successful:', data);
-        alert(`Welcome back, ${data.user.name}!`);
-        // TODO: Store token and user data
-        navigate('/dashboard');
-      } else {
-        console.error('❌ Sign in failed:', data.error);
-        alert(data.error || 'Sign in failed. Please try again.');
-      }
-    } catch (error) {
-      console.error('❌ Sign in API error:', error);
-      alert('Network error. Please check your connection and try again.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   return (
     <div className="w-full max-w-md">
@@ -80,7 +20,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onToggleMode }) => {
       </div>
 
       {/* Login Form */}
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form className="space-y-6">
         {/* Email Field */}
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
@@ -92,20 +32,11 @@ const LoginForm: React.FC<LoginFormProps> = ({ onToggleMode }) => {
             </div>
             <input
               id="email"
-              name="email"
               type="email"
-              value={formData.email}
-              onChange={handleInputChange}
-              className={`w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                errors.email ? 'border-red-300' : 'border-gray-300'
-              }`}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
               placeholder="Enter your email"
-              required
             />
           </div>
-          {errors.email && (
-            <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-          )}
         </div>
 
         {/* Password Field */}
@@ -119,15 +50,9 @@ const LoginForm: React.FC<LoginFormProps> = ({ onToggleMode }) => {
             </div>
             <input
               id="password"
-              name="password"
               type={showPassword ? 'text' : 'password'}
-              value={formData.password}
-              onChange={handleInputChange}
-              className={`w-full pl-10 pr-12 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                errors.password ? 'border-red-300' : 'border-gray-300'
-              }`}
+              className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
               placeholder="Enter your password"
-              required
             />
             <button
               type="button"
@@ -141,9 +66,6 @@ const LoginForm: React.FC<LoginFormProps> = ({ onToggleMode }) => {
               )}
             </button>
           </div>
-          {errors.password && (
-            <p className="mt-1 text-sm text-red-600">{errors.password}</p>
-          )}
         </div>
 
         {/* Forgot Password Link */}
@@ -157,14 +79,11 @@ const LoginForm: React.FC<LoginFormProps> = ({ onToggleMode }) => {
         </div>
 
         <button
-          type="submit"
-          disabled={isSubmitting}
-          className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+          type="button"
+          onClick={() => navigate('/dashboard')}
+          className="w-full py-3 px-4 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
         >
-          {isSubmitting ? (
-            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
-          ) : null}
-          <span>{isSubmitting ? 'Signing in...' : 'Sign in'}</span>
+          Sign in
         </button>
         
       </form>
