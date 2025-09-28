@@ -6,7 +6,7 @@ import TemplateGrid from '../components/dashboard/TemplateGrid';
 import ProjectList from '../components/dashboard/ProjectList';
 import AddProjectModal from '../components/modal/addProject';
 import AddDocumentFromTemplate from '../components/modal/addDocumentFromTemplate';
-import type { Template, Project } from '../types';
+import type { Template } from '../types';
 
 
 const Dashboard: React.FC = () => {
@@ -88,10 +88,10 @@ const Dashboard: React.FC = () => {
     navigate('/ai-generator');
   };
 
-  const handleProjectClick = (project: Project) => {
-    console.log('Navigating to project:', project.name);
+  const handleProjectClick = (projectId: string) => {
+    console.log('Navigating to project:', projectId);
     // 🎯 NAVIGATION: Go to project view based on project ID 
-    navigate(`/project/${project.id}`);
+    navigate(`/project/${projectId}`);
   };
 
   const handleViewAllProjects = () => {

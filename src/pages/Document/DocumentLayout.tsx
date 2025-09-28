@@ -11,9 +11,9 @@ import {
     Folder
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import DocumentMenu from "@/components/document/DocumentMenu";
-import ChatSidebar from "@/components/document/ChatSidebar";
-import SimpleShare from "@/components/document/SimpleShare";
+import DocumentMenu from "@/components/Document/DocumentMenu";
+import ChatSidebar from "@/components/Document/ChatSidebar";
+import SimpleShare from "@/components/Document/SimpleShare";
 import { useDocument } from "@/context/DocumentContext";
 
 interface DocumentLayoutProps {

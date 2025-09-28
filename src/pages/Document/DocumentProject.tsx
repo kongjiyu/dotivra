@@ -3,8 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { FileText, Plus, Download } from "lucide-react";
 import { useDocument } from "@/context/DocumentContext";
-import SimpleShare from "@/components/document/SimpleShare";
-import ImportModal from "@/components/document/ImportModal";
+import SimpleShare from "@/components/Document/SimpleShare";
+import ImportModal from "@/components/Document/ImportModal";
 
 export default function DocumentProject() {
     const { documentTitle, setDocumentContent } = useDocument();
