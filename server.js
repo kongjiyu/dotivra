@@ -519,6 +519,117 @@ app.get('/api/users/email/:email', async (req, res) => {
   }
 });
 
+// ============================================================================
+// PROFILE MANAGEMENT ENDPOINTS
+// ============================================================================
+
+// Edit user profile
+app.put('/api/profile/edit', async (req, res) => {
+  try {
+    console.log('✏️ PUT /api/profile/edit received:', req.body);
+    const { userId, UserName, UserEmail, currentPassword, newPassword } = req.body;
+    
+    // Validate required fields
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+    
+    // Find the user by User_Id
+    const q = query(
+      collection(firestore, 'Users'),
+      where('User_Id', '==', userId)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const userDoc = querySnapshot.docs[0];
+    const userData = userDoc.data();
+    
+    // If password is being changed, verify current password
+    if (newPassword && currentPassword) {
+      if (userData.UserPw !== currentPassword) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+    }
+    
+    // Prepare update data
+    const updateData = {};
+    if (UserName) updateData.UserName = UserName;
+    if (UserEmail) updateData.UserEmail = UserEmail;
+    if (newPassword) updateData.UserPw = newPassword; // In production, hash this!
+    
+    // Update the user document
+    await updateDoc(doc(firestore, 'Users', userDoc.id), updateData);
+    
+    // Return updated user data (without password)
+    const updatedUser = { ...userData, ...updateData };
+    const { UserPw: _, ...userResponse } = updatedUser;
+    
+    console.log('✅ Profile updated successfully for user:', userId);
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: userResponse
+    });
+  } catch (error) {
+    console.error('❌ Error updating profile:', error);
+    res.status(500).json({
+      error: 'Failed to update profile',
+      details: error.message
+    });
+  }
+});
+
+// Delete user profile
+app.delete('/api/profile/delete', async (req, res) => {
+  try {
+    console.log('🗑️ DELETE /api/profile/delete received:', req.body);
+    const { userId, password } = req.body;
+    
+    // Validate required fields
+    if (!userId || !password) {
+      return res.status(400).json({ error: 'userId and password are required' });
+    }
+    
+    // Find the user by User_Id
+    const q = query(
+      collection(firestore, 'Users'),
+      where('User_Id', '==', userId)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    if (querySnapshot.empty) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const userDoc = querySnapshot.docs[0];
+    const userData = userDoc.data();
+    
+    // Verify password before deletion
+    if (userData.UserPw !== password) {
+      return res.status(401).json({ error: 'Incorrect password. Cannot delete profile.' });
+    }
+    
+    // Delete the user document
+    await deleteDoc(doc(firestore, 'Users', userDoc.id));
+    
+    console.log('✅ Profile deleted successfully for user:', userId);
+    res.json({
+      success: true,
+      message: 'Profile deleted successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error deleting profile:', error);
+    res.status(500).json({
+      error: 'Failed to delete profile',
+      details: error.message
+    });
+  }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Server error:', err);
