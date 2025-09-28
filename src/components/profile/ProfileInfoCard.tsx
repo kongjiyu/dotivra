@@ -9,6 +9,8 @@ interface UserInfo {
   githubUsername: string;
   joinedDate: string;
   avatar?: string;
+  provider?: string;
+  providerData?: any[];
 }
 
 interface ProfileInfoCardProps {
@@ -38,13 +40,31 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
 
       {/* Profile Avatar & Basic Info */}
       <div className="flex items-start space-x-6 mb-8">
-        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center">
-          <User className="h-10 w-10 text-blue-600" />
+        <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center overflow-hidden">
+          {user.avatar ? (
+            <img 
+              src={user.avatar} 
+              alt={user.name}
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <User className="h-10 w-10 text-blue-600" />
+          )}
         </div>
         <div className="flex-1">
           <h3 className="text-xl font-semibold text-gray-900 mb-1">{user.name}</h3>
           <p className="text-gray-600 mb-2">{user.email}</p>
-          <p className="text-sm text-gray-500">Member since {user.joinedDate}</p>
+          <div className="flex items-center space-x-3 mb-2">
+            <p className="text-sm text-gray-500">Member since {user.joinedDate}</p>
+            {(user as any).provider && (
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                {(user as any).provider === 'email' ? 'Email' : 
+                 (user as any).provider === 'google' ? 'Google' : 
+                 (user as any).provider === 'github' ? 'GitHub' : 
+                 (user as any).provider}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
