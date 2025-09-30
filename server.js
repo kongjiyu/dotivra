@@ -643,3 +643,251 @@ app.listen(PORT, () => {
   console.log(`🔑 GitHub App ID: ${process.env.GITHUB_APP_ID}`);
   console.log(`🔥 Firebase Project: ${process.env.VITE_FIREBASE_PROJECT_ID}`);
 });
+
+/* ------------------ Utility ------------------ */
+function hashJSON(obj) {
+  return "sha256:" + crypto.createHash("sha256").update(JSON.stringify(obj)).digest("hex");
+}
+
+/* ------------------ Document APIs ------------------ */
+
+// ✅ Get all documents for a project
+app.get("/api/project/:projectId/documents", async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const docsRef = firestore.collection("Document");
+    const snapshot = await docsRef.where("ProjectID", "==", projectId).get();
+
+    const documents = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ documents });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Get single document
+app.get("/api/document/editor/content/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const docSnap = await firestore.collection("Document").doc(docId).get();
+
+    if (!docSnap.exists) return res.status(404).json({ error: "NOT_FOUND" });
+    res.json({ id: docSnap.id, ...docSnap.data() });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Update document content
+app.put("/api/document/editor/content/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const { content, isDraft } = req.body;
+
+    await firestore.collection("Document").doc(docId).update({
+      Content: content,
+      IsDraft: isDraft,
+      UpdatedAt: new Date().toISOString(),
+      Hash: hashJSON(content),
+    });
+
+    res.json({ status: "ok" });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Delete document (and related history + chat)
+app.delete("/api/document/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+
+    await firestore.collection("Document").doc(docId).delete();
+
+    // cleanup related records
+    const batch = firestore.batch();
+
+    const chatSnap = await firestore.collection("ChatHistory").where("DocID", "==", docId).get();
+    chatSnap.forEach((d) => batch.delete(d.ref));
+
+    const histSnap = await firestore.collection("DocumentHistory").where("DocID", "==", docId).get();
+    histSnap.forEach((d) => batch.delete(d.ref));
+
+    await batch.commit();
+
+    res.json({ status: "deleted", docId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Document version history
+app.get("/api/document/editor/history/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const historyRef = firestore.collection("DocumentHistory");
+    const snapshot = await historyRef.where("DocID", "==", docId).orderBy("Version", "desc").get();
+
+    const versions = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ versions });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Latest summary (assistant reply)
+app.get("/api/document/editor/summary/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const chatRef = firestore.collection("ChatHistory");
+    const snapshot = await chatRef
+      .where("DocID", "==", docId)
+      .where("Role", "==", "assistant")
+      .orderBy("CreatedAt", "desc")
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) return res.json({ summary: null });
+
+    const summary = snapshot.docs[0].data();
+    res.json({ summary: summary.Message });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+/* ------------------ Chat APIs ------------------ */
+
+// ✅ Get normal chat history
+app.get("/api/document/chat/history/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const chatsRef = firestore.collection("ChatHistory");
+    const snapshot = await chatsRef.where("DocID", "==", docId).orderBy("CreatedAt", "asc").get();
+
+    const messages = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ messages });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Add chat message (user/assistant)
+app.post("/api/document/chat/prompt", async (req, res) => {
+  try {
+    const { userId, docId, message, role } = req.body;
+
+    const newMsg = {
+      UserID: userId || null,
+      DocID: docId,
+      Message: message,
+      Role: role || "user", // 'user' or 'assistant'
+      CreatedAt: new Date().toISOString(),
+    };
+
+    const ref = await firestore.collection("ChatHistory").add(newMsg);
+    res.status(201).json({ id: ref.id, ...newMsg });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+/* ------------------ AI Agent Workflow ------------------ */
+
+// ✅ Get workflow messages (reasoning → thinking → action)
+app.get("/api/document/chat/agent/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const chatsRef = firestore.collection("ChatHistory");
+    const snapshot = await chatsRef
+      .where("DocID", "==", docId)
+      .orderBy("CreatedAt", "asc")
+      .get();
+
+    const messages = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ workflow: messages });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Add AI agent step
+app.post("/api/document/chat/agent", async (req, res) => {
+  try {
+    const { docId, stage, message, userId } = req.body;
+
+    if (!["reasoning", "thinking", "action", "user"].includes(stage)) {
+      return res.status(400).json({ error: "INVALID_STAGE" });
+    }
+
+    const newMsg = {
+      UserID: userId || null,
+      DocID: docId,
+      Stage: stage, // reasoning | thinking | action | user
+      Message: message,
+      Role: stage === "user" ? "user" : "assistant",
+      CreatedAt: new Date().toISOString(),
+    };
+
+    const ref = await firestore.collection("ChatHistory").add(newMsg);
+
+    // auto-log Action step to DocumentHistory
+    if (stage === "action") {
+      await firestore.collection("DocumentHistory").add({
+        DocID: docId,
+        ActionID: ref.id,
+        Content: message,
+        CreatedAt: new Date().toISOString(),
+        Version: Date.now(), // naive version tracking
+      });
+    }
+
+    res.status(201).json({ id: ref.id, ...newMsg });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Get latest Action only
+app.get("/api/document/chat/agent/action/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const snapshot = await firestore.collection("ChatHistory")
+      .where("DocID", "==", docId)
+      .where("Stage", "==", "action")
+      .orderBy("CreatedAt", "desc")
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) return res.json({ action: null });
+
+    const action = snapshot.docs[0].data();
+    res.json({ action });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+/* ------------------ WebSocket ------------------ */
+const wss = new WebSocketServer({ noServer: true });
+
+wss.on("connection", (ws) => {
+  console.log("Client connected ✅");
+
+  ws.on("message", (msg) => {
+    console.log("Received:", msg.toString());
+  });
+
+  ws.send(JSON.stringify({ status: "connected" }));
+});
+
+const server = http.createServer(app);
+
+server.on("upgrade", (req, socket, head) => {
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    wss.emit("connection", ws, req);
+  });
+});
