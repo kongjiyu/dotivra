@@ -27,6 +27,7 @@ firebase-debug.*.log
 
 # Sensitive configuration files
 **/firebase-adminsdk-*.json
+dotivra-firebase-adminsdk-*.json
 **/*-private-key.pem
 config/keys.js
 config/prod_keys.js
