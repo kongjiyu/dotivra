@@ -5,6 +5,8 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import http from 'http';
+import { WebSocketServer } from 'ws';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
@@ -15,6 +17,7 @@ import {
   collection, 
   addDoc, 
   getDocs, 
+  getDoc,
   query, 
   where, 
   orderBy, 
@@ -33,9 +36,13 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 
-// CORS configuration
+// CORS configuration - allow both common dev ports
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: [
+    'http://localhost:5173', 
+    'http://localhost:5174',
+    process.env.FRONTEND_URL || 'http://localhost:5173'
+  ],
   credentials: true,
 }));
 
@@ -62,6 +69,20 @@ const firebaseApp = initializeApp(firebaseConfig);
 const firestore = getFirestore(firebaseApp);
 
 console.log('✅ Firebase initialized successfully');
+
+// Utility functions - Match existing Firebase format
+function generateProjectId() {
+  const now = new Date();
+  const dateStr = now.getFullYear().toString().slice(-2) + 
+                  String(now.getMonth() + 1).padStart(2, '0') + 
+                  String(now.getDate()).padStart(2, '0');
+  const sequence = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+  return "P" + dateStr + sequence;
+}
+
+function generateUserId() {
+  return "USER_" + Math.random().toString(36).substring(2, 15);
+}
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -232,16 +253,23 @@ app.get('/api/github/repository/:owner/:repo/file', async (req, res) => {
 app.post('/api/projects', async (req, res) => {
   try {
     console.log('🔥 POST /api/projects received:', req.body);
-    const { name, description, githubLink, selectedRepo, installationId, userId } = req.body;
+    const { name, description, userId } = req.body;
     
     // Validate required fields
     if (!name || !description || !userId) {
       console.log('❌ Validation failed: missing required fields');
-      return res.status(400).json({ error: 'Name, description, and userId are required' });
+      console.log('Received - name:', name, 'description:', description, 'userId:', userId);
+      return res.status(400).json({ 
+        error: 'Name, description, and userId are required',
+        received: { name: !!name, description: !!description, userId: !!userId }
+      });
     }
+
+    console.log('✅ Validation passed, creating project...');
 
     // Generate Project ID matching FirestoreService format
     const projectId = generateProjectId();
+    console.log('Generated Project ID:', projectId);
 
     // Create the project object matching FirestoreService interface
     const project = {
@@ -249,27 +277,38 @@ app.post('/api/projects', async (req, res) => {
       ProjectName: name.trim(),
       User_Id: userId,
       Description: description.trim(),
-      GitHubRepo: githubLink || '',
+      GitHubRepo: '', // Empty for now, focusing on Firebase only
       Created_Time: Timestamp.now() // Regular Firebase Timestamp
     };
+
+    console.log('Creating project in Firestore:', project);
 
     // Add to Firestore Projects collection
     const docRef = await addDoc(collection(firestore, 'Projects'), project);
     
-    console.log('✅ Project created with ID:', projectId);
+    console.log('✅ Project created with Firestore ID:', docRef.id);
+    console.log('✅ Project created with custom ID:', projectId);
+    
+    const responseProject = {
+      ...project,
+      id: docRef.id, // Add Firestore document ID
+      Project_Id: projectId, // Keep custom project ID for compatibility
+      Created_Time: project.Created_Time.toDate().toISOString()
+    };
+
+    console.log('Sending response:', responseProject);
     
     res.status(201).json({
       success: true,
-      project: {
-        ...project,
-        Created_Time: project.Created_Time.toDate().toISOString()
-      }
+      project: responseProject
     });
   } catch (error) {
-    console.error('Error creating project:', error);
+    console.error('❌ Error creating project:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       error: 'Failed to create project',
-      details: error.message
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -283,6 +322,7 @@ app.get('/api/projects', async (req, res) => {
     const querySnapshot = await getDocs(q);
     
     const projects = querySnapshot.docs.map(doc => ({
+      id: doc.id, // Include Firestore document ID for navigation
       ...doc.data(),
       Created_Time: doc.data().Created_Time?.toDate?.()?.toISOString() || new Date().toISOString()
     }));
@@ -432,6 +472,192 @@ app.delete('/api/projects/:id', async (req, res) => {
     console.error('Error deleting project:', error);
     res.status(500).json({
       error: 'Failed to delete project',
+      details: error.message
+    });
+  }
+});
+
+// ============================================================================
+// DOCUMENTS MANAGEMENT ENDPOINTS
+// ============================================================================
+
+// Create document
+app.post('/api/documents', async (req, res) => {
+  try {
+    console.log('🔥 POST /api/documents received:', req.body);
+    const { 
+      DocumentName, 
+      DocumentType, 
+      DocumentCategory, 
+      Project_Id, 
+      Template_Id, 
+      User_Id, 
+      Content, 
+      IsDraft 
+    } = req.body;
+    
+    // Validate required fields
+    if (!DocumentName || !DocumentType || !DocumentCategory || !Project_Id || !User_Id) {
+      console.log('❌ Document validation failed: missing required fields');
+      return res.status(400).json({ 
+        error: 'DocumentName, DocumentType, DocumentCategory, Project_Id, and User_Id are required',
+        received: { 
+          DocumentName: !!DocumentName, 
+          DocumentType: !!DocumentType, 
+          DocumentCategory: !!DocumentCategory, 
+          Project_Id: !!Project_Id, 
+          User_Id: !!User_Id 
+        }
+      });
+    }
+
+    console.log('✅ Document validation passed, creating document...');
+
+    // Create the document object
+    const document = {
+      DocumentName: DocumentName.trim(),
+      DocumentType: DocumentType.trim(),
+      DocumentCategory: DocumentCategory,
+      Project_Id: Project_Id,
+      Template_Id: Template_Id || null,
+      User_Id: User_Id,
+      Content: Content || '',
+      Created_Time: Timestamp.now(),
+      Updated_Time: Timestamp.now(),
+      IsDraft: IsDraft !== undefined ? IsDraft : true,
+      EditedBy: User_Id,
+      Hash: null // Will be calculated when content is saved
+    };
+
+    console.log('Creating document in Firestore:', document);
+
+    // Add to Firestore Documents collection
+    const docRef = await addDoc(collection(firestore, 'Documents'), document);
+    
+    console.log('✅ Document created with Firestore ID:', docRef.id);
+    
+    const responseDocument = {
+      ...document,
+      id: docRef.id, // Add Firestore document ID
+      Created_Time: document.Created_Time.toDate().toISOString(),
+      Updated_Time: document.Updated_Time.toDate().toISOString()
+    };
+
+    console.log('Sending document response:', responseDocument);
+    
+    res.status(201).json({
+      success: true,
+      document: responseDocument
+    });
+  } catch (error) {
+    console.error('❌ Error creating document:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({
+      error: 'Failed to create document',
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Get documents for a project
+app.get('/api/documents/project/:projectId', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    console.log('📋 GET /api/documents/project/' + projectId);
+    
+    const q = query(
+      collection(firestore, 'Documents'),
+      where('Project_Id', '==', projectId)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    const documents = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      Created_Time: doc.data().Created_Time?.toDate?.()?.toISOString() || new Date().toISOString(),
+      Updated_Time: doc.data().Updated_Time?.toDate?.()?.toISOString() || new Date().toISOString()
+    }));
+
+    console.log('📋 Returning', documents.length, 'documents for project', projectId);
+    
+    res.json({
+      success: true,
+      documents
+    });
+  } catch (error) {
+    console.error('Error fetching project documents:', error);
+    res.status(500).json({
+      error: 'Failed to fetch project documents',
+      details: error.message
+    });
+  }
+});
+
+// Get single document by ID
+app.get('/api/documents/:documentId', async (req, res) => {
+  try {
+    const documentId = req.params.documentId;
+    console.log('📄 GET /api/documents/' + documentId);
+    
+    const docRef = doc(firestore, 'Documents', documentId);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) {
+      console.log('❌ Document not found:', documentId);
+      return res.status(404).json({
+        success: false,
+        error: 'Document not found'
+      });
+    }
+    
+    const document = {
+      id: docSnap.id,
+      ...docSnap.data(),
+      Created_Time: docSnap.data().Created_Time?.toDate?.()?.toISOString() || new Date().toISOString(),
+      Updated_Time: docSnap.data().Updated_Time?.toDate?.()?.toISOString() || new Date().toISOString()
+    };
+
+    console.log('📄 Returning document:', document.DocumentName);
+    
+    res.json({
+      success: true,
+      document
+    });
+  } catch (error) {
+    console.error('Error fetching document:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch document',
+      details: error.message
+    });
+  }
+});
+
+// Update document by ID
+app.put('/api/documents/:documentId', async (req, res) => {
+  try {
+    const documentId = req.params.documentId;
+    const updateData = req.body;
+    console.log('📝 PUT /api/documents/' + documentId, 'Updates:', Object.keys(updateData));
+    
+    // Add timestamp for update
+    updateData.Updated_Time = Timestamp.now();
+    
+    const docRef = doc(firestore, 'Documents', documentId);
+    await updateDoc(docRef, updateData);
+    
+    console.log('📝 Document updated successfully');
+    
+    res.json({
+      success: true,
+      message: 'Document updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating document:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update document',
       details: error.message
     });
   }

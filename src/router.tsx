@@ -51,6 +51,10 @@ const router = createBrowserRouter([
     element: <ProtectedDocumentWrapper><DocumentEditor /></ProtectedDocumentWrapper>
   },
   {
+    path: "/document/:documentId",
+    element: <ProtectedDocumentWrapper><DocumentEditor /></ProtectedDocumentWrapper>
+  },
+  {
     path: "/document/summary",
     element: <ProtectedDocumentWrapper><DocumentSummary /></ProtectedDocumentWrapper>
   },

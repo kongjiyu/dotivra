@@ -54,8 +54,8 @@ const Projects: React.FC = () => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return allProjects;
     return allProjects.filter(project => 
-      project.name.toLowerCase().includes(query) ||
-      project.description.toLowerCase().includes(query)
+      project.ProjectName.toLowerCase().includes(query) ||
+      project.Description.toLowerCase().includes(query)
     );
   }, [searchQuery, allProjects]);
 
@@ -68,15 +68,18 @@ const Projects: React.FC = () => {
   };
 
   const handleProjectClick = (project: Project) => {
-    navigate(`/project/${project.id}`);
+    // Use Firestore document ID if available, otherwise use custom Project_Id
+    const projectId = project.id || project.Project_Id;
+    console.log('🎯 Navigating to project:', projectId, project);
+    navigate(`/project/${projectId}`);
   };
 
   const handleProjectEdit = (project: Project) => {
-    console.log('Edit project:', project.name);
+    console.log('Edit project:', project.ProjectName);
   };
 
   const handleProjectDelete = (project: Project) => {
-    console.log('Delete project:', project.name);
+    console.log('Delete project:', project.ProjectName);
   };
 
   return (

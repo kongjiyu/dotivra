@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { CircleUser, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import TemplateGrid from '../components/dashboard/TemplateGrid';
 import ProjectList from '../components/dashboard/ProjectList';
 import AddProjectModal from '../components/modal/addProject';
@@ -11,6 +12,7 @@ import type { Template } from '../types';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -19,7 +21,7 @@ const Dashboard: React.FC = () => {
   console.log('🔍 Dashboard component rendered, isModalOpen:', isModalOpen);
 
   const handleTemplateClick = (template: Template) => {
-    console.log('Template clicked:', template.name);
+    console.log('Template clicked:', template.TemplateName);
     setSelectedTemplate(template);
     setIsTemplateModalOpen(true);
   };
@@ -31,7 +33,7 @@ const Dashboard: React.FC = () => {
 
   const handleCreateDocumentFromTemplate = async (data: {
     template: Template;
-    projectId?: number;
+    projectId?: string;
     newProjectName?: string;
     newProjectDescription?: string;
     selectedRepo?: string;
@@ -45,30 +47,49 @@ const Dashboard: React.FC = () => {
 
       // If creating a new project, create it first
       if (!finalProjectId && data.newProjectName && data.newProjectDescription) {
+        console.log('Creating new project...');
+        
+        // For testing, use a mock user ID if not authenticated
+        const userId = user?.uid || 'mock-user-' + Date.now();
+        if (!user?.uid) {
+          console.warn('User not authenticated, using mock user ID:', userId);
+        }
+
+        console.log('Sending project creation request:', {
+          name: data.newProjectName,
+          description: data.newProjectDescription,
+          userId: userId
+        });
+
         const projectResponse = await fetch('http://localhost:3001/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: data.newProjectName,
             description: data.newProjectDescription,
-            githubLink: data.selectedRepo || null
+            userId: userId
+            // Removed githubLink for now
           }),
         });
 
+        console.log('Project creation response status:', projectResponse.status);
+
         if (!projectResponse.ok) {
-          throw new Error('Failed to create project');
+          const errorText = await projectResponse.text();
+          console.error('Project creation failed:', errorText);
+          throw new Error(`Failed to create project: ${projectResponse.status} ${projectResponse.statusText}`);
         }
 
         const projectResult = await projectResponse.json();
         finalProjectId = projectResult.project.id;
-        console.log('✅ New project created:', projectResult.project);
+        console.log('✅ New project created successfully:', projectResult.project);
       }
 
       // TODO: Create the document in the project
-      console.log(`📄 Creating document "${data.documentName}" (${data.documentRole}) in project ${finalProjectId} using template ${data.template.name}`);
+      console.log(`📄 Creating document "${data.documentName}" (${data.documentRole}) in project ${finalProjectId} using template ${data.template.TemplateName}`);
       
       // For now, show success message and navigate to project
-      alert(`Document "${data.documentName}" will be created with ${data.template.name} template!\n\nRole: ${data.documentRole}\n\n(Document creation API coming soon)`);
+      alert(`Document "${data.documentName}" will be created with ${data.template.TemplateName} template!\n\nRole: ${data.documentRole}\n\n(Document creation API coming soon)`);
       
       // Close modal and navigate to project
       setIsTemplateModalOpen(false);

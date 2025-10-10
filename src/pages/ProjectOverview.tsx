@@ -23,15 +23,16 @@ const ProjectOverview: React.FC = () => {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<'user' | 'developer' | null>(null);
   const [project, setProject] = useState<Project | null>(null);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Get project data from URL parameter
-  const currentProjectId = projectId ? parseInt(projectId) : null;
+  const currentProjectId = projectId; // Keep as string, don't parse as integer
   
-  // Load project data from API
+  // Load project data and documents from API
   useEffect(() => {
-    const loadProject = async () => {
+    const loadProjectAndDocuments = async () => {
       if (!currentProjectId) {
         setError('No project ID provided');
         setLoading(false);
@@ -42,16 +43,29 @@ const ProjectOverview: React.FC = () => {
         setLoading(true);
         setError(null);
         
-        const response = await fetch(`http://localhost:3001/api/projects/${currentProjectId}`);
-        if (!response.ok) {
-          if (response.status === 404) {
+        // Load project data
+        const projectResponse = await fetch(`http://localhost:3001/api/projects/${currentProjectId}`);
+        if (!projectResponse.ok) {
+          if (projectResponse.status === 404) {
             throw new Error('Project not found');
           }
           throw new Error('Failed to load project');
         }
         
-        const data = await response.json();
-        setProject(data.project);
+        const projectData = await projectResponse.json();
+        setProject(projectData.project);
+        
+        // Load documents for this project
+        const documentsResponse = await fetch(`http://localhost:3001/api/documents/project/${currentProjectId}`);
+        if (documentsResponse.ok) {
+          const documentsData = await documentsResponse.json();
+          setDocuments(documentsData.documents || []);
+          console.log('Loaded documents:', documentsData.documents);
+        } else {
+          console.warn('Failed to load documents, continuing without them');
+          setDocuments([]);
+        }
+        
       } catch (err) {
         console.error('Error loading project:', err);
         setError(err instanceof Error ? err.message : 'Failed to load project');
@@ -60,12 +74,12 @@ const ProjectOverview: React.FC = () => {
       }
     };
 
-    loadProject();
+    loadProjectAndDocuments();
   }, [currentProjectId]);
   
-  // For now, documents are empty (will be implemented later)
-  const userDocs: Document[] = [];
-  const devDocs: Document[] = [];
+  // Filter documents by category
+  const userDocs: Document[] = documents.filter(doc => doc.DocumentCategory === 'User');
+  const devDocs: Document[] = documents.filter(doc => doc.DocumentCategory === 'Developer');
 
   if (loading) {
     return (
@@ -111,7 +125,7 @@ const ProjectOverview: React.FC = () => {
   };
 
   const handleEditProject = () => {
-    console.log('Edit project:', project?.name);
+    console.log('Edit project:', project?.ProjectName);
     // TODO: Implement project editing functionality
     // For now, just open the edit modal
     // This requires managing the state for the EditProjectModal
@@ -125,23 +139,78 @@ const ProjectOverview: React.FC = () => {
   };
 
   const handleEditDocument = (document: Document) => {
-    console.log('Navigate to document editor:', document.name);
+    console.log('Navigate to document editor:', document.DocumentName);
     navigate(`/document/${document.id}`);
   };
 
   const handleDeleteDocument = (document: Document) => {
-    console.log('Delete document:', document.name);
-    alert(`Delete "${document.name}"? (This is just a demo)`);
+    console.log('Delete document:', document.DocumentName);
+    alert(`Delete "${document.DocumentName}"? (This is just a demo)`);
   };
 
-  const handleCreateDocument = ({
+  const handleCreateDocument = async ({
     template,
     category,
     name,
     role
   }: CreateDocumentPayload) => {
-    console.log('Creating document with template:', template.name, 'for category:', category, 'name:', name, 'role:', role);
-    alert(`Creating new ${category} document "${name}" (${role}) with ${template.name} template! (This is just a demo)`);
+    try {
+      console.log('Creating document with template:', template.TemplateName, 'for category:', category, 'name:', name, 'role:', role);
+      
+      if (!project?.id && !project?.Project_Id) {
+        throw new Error('Project ID not available');
+      }
+
+      // Create document data
+      const documentData = {
+        DocumentName: name,
+        DocumentType: template.TemplateName || 'Custom Document',
+        DocumentCategory: category === 'user' ? 'User' : 'Developer',
+        Project_Id: project.id || project.Project_Id, // Use Firestore ID or custom Project_Id
+        Template_Id: template.id || template.Template_Id,
+        User_Id: 'current-user-id', // TODO: Get from auth context
+        Content: template.TemplatePrompt || '', // Initial content from template
+        IsDraft: true
+      };
+
+      console.log('Sending document creation request:', documentData);
+
+      const response = await fetch('http://localhost:3001/api/documents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(documentData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Failed to create document: ${errorData.error || response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Document created successfully:', result.document);
+
+      // Close modal
+      setShowAddModal(false);
+      setSelectedCategory(null);
+      
+      // Reload documents to show the new document
+      const documentsResponse = await fetch(`http://localhost:3001/api/documents/project/${currentProjectId}`);
+      if (documentsResponse.ok) {
+        const documentsData = await documentsResponse.json();
+        setDocuments(documentsData.documents || []);
+      }
+      
+      alert(`Document "${name}" created successfully!`);
+      
+      // Optionally navigate to document editor
+      // navigate(`/document/${result.document.id}`);
+      
+    } catch (error) {
+      console.error('❌ Error creating document:', error);
+      alert(`Failed to create document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleCloseModal = () => {
@@ -226,7 +295,10 @@ const ProjectOverview: React.FC = () => {
 
       <EditProjectModal
         isOpen={editedProjectModalOpen}
-        initialData={project}
+        initialData={project ? {
+          name: project.ProjectName,
+          description: project.Description
+        } : undefined}
         onClose={() => setEditedProjectModalOpen(false)}
         onSubmit={(updatedProject) => {
           console.log('Updated project:', updatedProject);

@@ -33,7 +33,12 @@ const ProjectList: React.FC<ProjectListProps> = ({
       setError(null);
       
       // Use API call instead of FirestoreService (since frontend will call backend API)
-      const response = await fetch('/api/projects');
+      const response = await fetch('http://localhost:3001/api/projects');
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
       console.log('📋 ProjectList received projects:', data);
       

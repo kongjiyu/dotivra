@@ -3,6 +3,7 @@ import TipTap from "@/components/Document/TipTap";
 import AIActionContainer from "@/components/Document/AIActionContainer";
 import { useDocument } from "@/context/DocumentContext";
 import { useRef, useEffect, useState, useCallback } from "react";
+import { useParams } from "react-router-dom";
 
 import { EnhancedAIContentWriter } from '@/utils/enhancedAIContentWriter';
 import type { ContentPosition } from '@/utils/enhancedAIContentWriter';
@@ -18,118 +19,20 @@ interface AIOperation {
     position?: ContentPosition;
 }
 
-const DEFAULT_DOC = `<h1>Product Strategy 2024</h1>
 
-<h3>Executive Summary</h3>
-
-<p>Our product strategy for 2024 focuses on three key pillars: innovation, user experience, and market expansion. This document outlines our approach to achieving sustainable growth while maintaining our commitment to quality and customer satisfaction.</p>
-
-<h2>Market Analysis</h2>
-
-<p>The current market landscape presents both opportunities and challenges. We've identified several key trends:</p>
-
-<ul>
-<li><strong>AI Integration</strong>: Increasing demand for AI-powered solutions</li>
-<li><strong>Mobile-First</strong>: Continued shift towards mobile platforms</li>
-<li><strong>Sustainability</strong>: Growing emphasis on eco-friendly products</li>
-</ul>
-
-<h2>Strategic Objectives</h2>
-
-<h3>1. Product Innovation</h3>
-<ul>
-<li>Launch 3 new AI-powered features</li>
-<li>Improve existing functionality by 40%</li>
-<li>Reduce development cycle time by 25%</li>
-</ul>
-
-<h3>2. User Experience Enhancement</h3>
-<ul>
-<li>Achieve 95% user satisfaction score</li>
-<li>Reduce customer support tickets by 30%</li>
-<li>Implement personalized user journeys</li>
-</ul>
-
-<h3>3. Market Expansion</h3>
-<ul>
-<li>Enter 2 new geographic markets</li>
-<li>Partner with 5 strategic alliances</li>
-<li>Increase market share by 15%</li>
-</ul>
-
-<h2>Implementation Timeline</h2>
-
-<table>
-<thead>
-<tr>
-<th>Quarter</th>
-<th>Focus Area</th>
-<th>Key Milestones</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Q1 2024</td>
-<td>Foundation</td>
-<td>Core platform updates</td>
-</tr>
-<tr>
-<td>Q2 2024</td>
-<td>Innovation</td>
-<td>AI features launch</td>
-</tr>
-<tr>
-<td>Q3 2024</td>
-<td>Expansion</td>
-<td>New market entry</td>
-</tr>
-<tr>
-<td>Q4 2024</td>
-<td>Optimization</td>
-<td>Performance improvements</td>
-</tr>
-</tbody>
-</table>
-
-<h2>Success Metrics</h2>
-
-<p>We will measure success through the following KPIs:</p>
-
-<ul>
-<li><strong>Revenue Growth</strong>: 25% year-over-year increase</li>
-<li><strong>User Engagement</strong>: 40% improvement in daily active users</li>
-<li><strong>Customer Retention</strong>: 90% annual retention rate</li>
-<li><strong>Market Position</strong>: Top 3 in our category</li>
-</ul>
-
-<h2>Risk Assessment</h2>
-
-<h3>High Priority Risks</h3>
-<ol>
-<li><strong>Competition</strong>: New entrants with similar offerings</li>
-<li><strong>Technology</strong>: Rapid pace of AI advancement</li>
-<li><strong>Regulation</strong>: Changing data privacy laws</li>
-</ol>
-
-<h3>Mitigation Strategies</h3>
-<ul>
-<li>Continuous market monitoring</li>
-<li>Agile development methodology</li>
-<li>Compliance-first approach</li>
-</ul>
-
-<h2>Conclusion</h2>
-
-<p>This strategy provides a clear roadmap for achieving our 2024 objectives. Success depends on execution excellence, team collaboration, and customer-centric decision making.</p>`;
 
 export default function DocumentEditor() {
+    const { documentId } = useParams<{ documentId: string }>();
     const {
         documentContent,
         setDocumentContent,
         setCurrentEditor,
         onOpenChat,
         setShowAIActions,
-        chatSidebarOpen
+        chatSidebarOpen,
+        documentTitle,
+        setDocumentTitle,
+        setDocumentId
     } = useDocument();
     const documentContentRef = useRef<HTMLDivElement>(null);
 
@@ -151,11 +54,89 @@ export default function DocumentEditor() {
     const [isRegenerating, setIsRegenerating] = useState(false);
     const [beforeAIContent, setBeforeAIContent] = useState<string>("");
 
+    // Loading state for document
+    const [isLoadingDocument, setIsLoadingDocument] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
+    // Load document when documentId changes
+    useEffect(() => {
+        const loadDocument = async () => {
+            if (!documentId) {
+                // If no documentId, start with empty content
+                setDocumentContent("");
+                setDocumentTitle("Untitled Document");
+                return;
+            }
+
+            setIsLoadingDocument(true);
+            try {
+                console.log('📄 Loading document with ID:', documentId);
+                
+                // Fetch document from API
+                const response = await fetch(`http://localhost:3001/api/documents/${documentId}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to load document: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('📄 Loaded document data:', data);
+                
+                if (data.success && data.document) {
+                    setDocumentId(documentId);
+                    setDocumentTitle(data.document.DocumentName);
+                    const content = data.document.Content || "";
+                    console.log('📄 Document content from DB:', content ? `"${content.substring(0, 100)}..."` : '(empty)');
+                    console.log('📄 Using content:', content ? content : '(empty - will show blank editor)');
+                    setDocumentContent(content); // Use exact content from DB, empty if empty
+                }
+            } catch (error) {
+                console.error('❌ Error loading document:', error);
+                // Show empty editor on error
+                setDocumentContent("");
+                setDocumentTitle("Document Load Error");
+            } finally {
+                setIsLoadingDocument(false);
+            }
+        };
+
+        loadDocument();
+    }, [documentId, setDocumentContent, setDocumentTitle, setDocumentId]);
 
     const handleDocumentUpdate = useCallback((content: string) => {
         setDocumentContent(content);
-    }, [setDocumentContent]);
+        
+        // Auto-save to database if we have a documentId
+        if (documentId) {
+            // Debounce the save operation
+            clearTimeout((window as any).autoSaveTimeout);
+            (window as any).autoSaveTimeout = setTimeout(async () => {
+                try {
+                    setIsSaving(true);
+                    console.log('💾 Auto-saving document...', documentId);
+                    const response = await fetch(`http://localhost:3001/api/documents/${documentId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            Content: content,
+                            EditedBy: 'current-user', // TODO: Get actual user ID
+                        }),
+                    });
+                    
+                    if (response.ok) {
+                        console.log('💾 Document auto-saved successfully');
+                    } else {
+                        console.error('❌ Failed to auto-save document:', response.status);
+                    }
+                } catch (error) {
+                    console.error('❌ Auto-save error:', error);
+                } finally {
+                    setIsSaving(false);
+                }
+            }, 2000); // Save after 2 seconds of inactivity
+        }
+    }, [setDocumentContent, documentId]);
 
     const handleEditorReady = useCallback((editor: any) => {
         setCurrentEditor(editor);
@@ -400,12 +381,7 @@ export default function DocumentEditor() {
         }
     }, [documentContent]);
 
-    // Initialize with default content if empty (run only once)
-    useEffect(() => {
-        if (!documentContent) {
-            setDocumentContent(DEFAULT_DOC);
-        }
-    }, [setDocumentContent]); // Remove documentContent from dependencies
+    // No longer initialize with default content - let documents be empty if they're empty
 
     // Handle keyboard shortcuts
     useEffect(() => {
@@ -443,7 +419,7 @@ export default function DocumentEditor() {
         console.log('DocumentEditor onOpenChat function:', onOpenChat);
     }, [onOpenChat]);
 
-    const effectiveContent = documentContent || DEFAULT_DOC;
+    const effectiveContent = documentContent || "";
 
     return (
         <DocumentLayout showDocumentMenu={true}>
@@ -456,6 +432,14 @@ export default function DocumentEditor() {
                     onOpenChat={onOpenChat}
                     className=""
                 />
+
+                {/* Save Status Indicator */}
+                {isSaving && (
+                    <div className="fixed top-20 right-6 bg-blue-100 text-blue-800 px-3 py-2 rounded-lg shadow-lg z-50 flex items-center space-x-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        <span className="text-sm">Saving...</span>
+                    </div>
+                )}
 
                 {/* AI Action Container */}
                 <div data-ai-action-container="true">

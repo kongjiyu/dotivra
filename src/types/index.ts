@@ -1,7 +1,19 @@
-// src/types/index.ts - All type definitions
+// src/types/index.ts - All type definitions aligned with Firebase
 
-// Project related types
-export interface Project {
+// Re-export Firebase types for consistency
+export type {
+  Project,
+  User,
+  Document,
+  Template,
+  DocumentHistory,
+  ChatHistory,
+  AIGeneration,
+  ChatboxHistory
+} from '../../firestoreService';
+
+// Legacy interfaces for backward compatibility (deprecated - use Firebase types above)
+export interface LegacyProject {
   id: number;
   name: string;
   description: string;
@@ -11,8 +23,7 @@ export interface Project {
   devDocsCount: number;
 }
 
-// Template related types
-export interface Template {
+export interface LegacyTemplate {
   id: number;
   name: string;
   description: string;
@@ -20,27 +31,63 @@ export interface Template {
   category: 'user' | 'developer' | 'general';
 }
 
-// Document related types
-export interface Document {
+export interface LegacyDocument {
   id: number;
   name: string;
   lastEdited: string;
-  template: Template;
+  template: LegacyTemplate;
   category: 'user' | 'developer';
   projectId: number;
 }
 
-// Chat related types
+// Enhanced chat types for AI workflow
 export interface ChatMessage {
-  id: number;
+  id: string;
   content: string;
   sender: 'user' | 'ai';
   timestamp: string;
+  stage?: 'reasoning' | 'thinking' | 'action' | 'user';
 }
 
 export interface ChatSession {
-  id: number;
-  documentId: number;
+  id: string;
+  documentId: string;
   messages: ChatMessage[];
   isActive: boolean;
+}
+
+// Auth types from Firebase Auth integration
+export interface UserProfile {
+  uid: string;
+  email: string | null;
+  displayName: string | null;
+  photoURL: string | null;
+  provider: string;
+  createdAt: any;
+  lastLoginAt: any;
+}
+
+export interface AuthResult {
+  success: boolean;
+  user?: UserProfile;
+  error?: string;
+}
+
+// API Response types
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
+}
+
+// Import types for use in interfaces
+import type { Project, Document } from '../../firestoreService';
+
+export interface ProjectsResponse extends ApiResponse<Project[]> {
+  projects?: Project[];
+}
+
+export interface DocumentsResponse extends ApiResponse<Document[]> {
+  documents?: Document[];
 }

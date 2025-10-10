@@ -1,32 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { X, FolderPlus, FileText, Plus } from 'lucide-react';
-import type { Template, Project } from '../../types';
+import type { Template, Project, LegacyTemplate } from '../../types';
 
-// GitHub types
-interface GitHubRepository {
-  id: number;
-  name: string;
-  full_name: string;
-  html_url: string;
-  description: string | null;
-  private: boolean;
-  language: string;
-  updated_at: string;
-  owner?: {
-    login: string;
-    id: number;
-  };
-}
+// Combined template type to handle both legacy and Firebase templates
+type CombinedTemplate = Template | (LegacyTemplate & { icon?: any });
+
+// GitHub functionality temporarily disabled
 
 
 
 interface AddDocumentFromTemplateProps {
   isOpen: boolean;
-  template: Template | null;
+  template: any | null; // Use any to handle both template types
   onClose: () => void;
   onCreateDocument: (data: {
-    template: Template;
-    projectId?: number;
+    template: any;
+    projectId?: string;
     newProjectName?: string;
     newProjectDescription?: string;
     selectedRepo?: string;
@@ -46,14 +35,13 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
 }) => {
   const [step, setStep] = useState<FlowStep>('project-selection');
   const [projectOption, setProjectOption] = useState<ProjectOption>('new');
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
   const [selectedRepo, setSelectedRepo] = useState('');
   const [documentName, setDocumentName] = useState('');
   const [documentRole, setDocumentRole] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
-  const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Load existing projects when modal opens
@@ -69,61 +57,18 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
       setSelectedRepo('');
       setDocumentName('');
       setDocumentRole('');
-      // Load user's GitHub repositories immediately
-      loadUserRepositories();
+      // GitHub functionality temporarily disabled
     }
   }, [isOpen]);
 
   // Auto-fill document name based on template
   useEffect(() => {
     if (template) {
-      setDocumentName(template.name);
+      setDocumentName(template.name || template.TemplateName || 'New Document');
     }
   }, [template]);
 
-  // Load user's GitHub repositories based on their profile
-  const loadUserRepositories = async () => {
-    try {
-      setLoading(true);
-      
-      // First, get GitHub installations
-      const installResponse = await fetch('http://localhost:3001/api/github/installations');
-      if (!installResponse.ok) {
-        throw new Error('Failed to fetch GitHub installations');
-      }
-
-      const installData = await installResponse.json();
-      const installations = installData.installations || [];
-      
-      if (installations.length === 0) {
-        console.log('No GitHub installations found');
-        return;
-      }
-
-      // Get repositories for all installations
-      let allRepositories: GitHubRepository[] = [];
-      
-      for (const installation of installations) {
-        try {
-          const repoResponse = await fetch(`http://localhost:3001/api/github/repositories?installation_id=${installation.id}`);
-          if (repoResponse.ok) {
-            const repoData = await repoResponse.json();
-            allRepositories = [...allRepositories, ...(repoData.repositories || [])];
-          }
-        } catch (error) {
-          console.error(`Error fetching repositories for installation ${installation.id}:`, error);
-        }
-      }
-
-      setRepositories(allRepositories);
-      console.log(`Loaded ${allRepositories.length} repositories from user's GitHub profile`);
-      
-    } catch (error) {
-      console.error('Error loading user repositories:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  // GitHub functionality temporarily disabled
 
   const loadProjects = async () => {
     try {
@@ -160,20 +105,21 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
       projectId: projectOption === 'existing' ? selectedProjectId || undefined : undefined,
       newProjectName: projectOption === 'new' ? newProjectName : undefined,
       newProjectDescription: projectOption === 'new' ? newProjectDescription : undefined,
-      selectedRepo: projectOption === 'new' ? selectedRepo : undefined,
+      selectedRepo: projectOption === 'new' && selectedRepo ? selectedRepo : undefined,
       documentName,
       documentRole
     };
 
+    console.log('Submitting document creation data:', data);
     onCreateDocument(data);
   };
 
   const isStepValid = () => {
     if (step === 'project-selection') {
       if (projectOption === 'new') {
+        // GitHub repository is now optional, only require name and description
         return newProjectName.trim() && 
-               newProjectDescription.trim() && 
-               selectedRepo.trim();
+               newProjectDescription.trim();
       } else {
         return selectedProjectId !== null;
       }
@@ -195,13 +141,13 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div className="flex items-center space-x-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
-                <template.icon className="h-5 w-5 text-blue-600" />
+                {template.icon ? <template.icon className="h-5 w-5 text-blue-600" /> : <FileText className="h-5 w-5 text-blue-600" />}
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Create {template.name}
+                  Create {template.name || template.TemplateName}
                 </h3>
-                <p className="text-sm text-gray-600">{template.description}</p>
+                <p className="text-sm text-gray-600">{template.description || template.Description}</p>
               </div>
             </div>
             <button
@@ -294,38 +240,11 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                       />
                     </div>
                     
-                    {/* Repository Selection */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Select Repository *
-                      </label>
-                      {loading ? (
-                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
-                          <div className="flex items-center space-x-2">
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
-                            <span className="text-sm text-gray-600">Loading repositories...</span>
-                          </div>
-                        </div>
-                      ) : repositories.length > 0 ? (
-                        <select
-                          value={selectedRepo}
-                          onChange={(e) => setSelectedRepo(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          required
-                        >
-                          <option value="">Select a repository ({repositories.length} available)</option>
-                          {repositories.map((repo) => (
-                            <option key={repo.id} value={repo.full_name}>
-                              {repo.full_name}
-                              {repo.description && ` - ${repo.description}`}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
-                          <span className="text-sm text-gray-600">No repositories found. Please connect your GitHub account in your profile settings.</span>
-                        </div>
-                      )}
+                    {/* GitHub Integration - Temporarily Disabled */}
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                      <p className="text-sm text-yellow-700">
+                        📝 <strong>Note:</strong> GitHub integration is temporarily disabled. Creating Firebase-only projects for now.
+                      </p>
                     </div>
                   </div>
                 )}
@@ -357,12 +276,12 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                               name="selectedProject"
                               value={project.id}
                               checked={selectedProjectId === project.id}
-                              onChange={() => setSelectedProjectId(project.id)}
+                              onChange={() => setSelectedProjectId(project.id || null)}
                               className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                             />
                             <div className="ml-3 flex-1">
-                              <div className="font-medium text-gray-900">{project.name}</div>
-                              <div className="text-sm text-gray-600 truncate">{project.description}</div>
+                              <div className="font-medium text-gray-900">{project.ProjectName}</div>
+                              <div className="text-sm text-gray-600 truncate">{project.Description}</div>
                             </div>
                           </label>
                         ))}
@@ -410,12 +329,12 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                     {/* Template Info */}
                     <div className="bg-blue-50 p-4 rounded-lg">
                       <div className="flex items-center">
-                        <template.icon className="h-5 w-5 text-blue-600 mr-2" />
+                        {template.icon ? <template.icon className="h-5 w-5 text-blue-600 mr-2" /> : <FileText className="h-5 w-5 text-blue-600 mr-2" />}
                         <div>
-                          <div className="font-medium text-blue-900">Template: {template.name}</div>
-                          <div className="text-sm text-blue-700">{template.description}</div>
+                          <div className="font-medium text-blue-900">Template: {template.name || template.TemplateName}</div>
+                          <div className="text-sm text-blue-700">{template.description || template.Description}</div>
                           <div className="text-xs text-blue-600 mt-1 capitalize">
-                            Category: {template.category}
+                            Category: {template.category || template.Category || 'General'}
                           </div>
                         </div>
                       </div>
