@@ -1,6 +1,6 @@
 // src/components/dashboard/Dashboard.tsx - With navigation
 import React, { useState } from 'react';
-import { CircleUser, FolderOpen } from 'lucide-react';
+import Header from '../components/header/Header';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import TemplateGrid from '../components/dashboard/TemplateGrid';
@@ -8,11 +8,14 @@ import ProjectList from '../components/dashboard/ProjectList';
 import AddProjectModal from '../components/modal/addProject';
 import AddDocumentFromTemplate from '../components/modal/addDocumentFromTemplate';
 import type { Template } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { getUserDisplayInfo } from '../utils/user';
 
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
+  const { name: displayName, initials } = getUserDisplayInfo(userProfile, user);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -21,7 +24,7 @@ const Dashboard: React.FC = () => {
   console.log('🔍 Dashboard component rendered, isModalOpen:', isModalOpen);
 
   const handleTemplateClick = (template: Template) => {
-    console.log('Template clicked:', template.TemplateName);
+    console.log('Template clicked:', template.name);
     setSelectedTemplate(template);
     setIsTemplateModalOpen(true);
   };
@@ -33,7 +36,7 @@ const Dashboard: React.FC = () => {
 
   const handleCreateDocumentFromTemplate = async (data: {
     template: Template;
-    projectId?: string;
+    projectId?: number;
     newProjectName?: string;
     newProjectDescription?: string;
     selectedRepo?: string;
@@ -47,49 +50,30 @@ const Dashboard: React.FC = () => {
 
       // If creating a new project, create it first
       if (!finalProjectId && data.newProjectName && data.newProjectDescription) {
-        console.log('Creating new project...');
-        
-        // For testing, use a mock user ID if not authenticated
-        const userId = user?.uid || 'mock-user-' + Date.now();
-        if (!user?.uid) {
-          console.warn('User not authenticated, using mock user ID:', userId);
-        }
-
-        console.log('Sending project creation request:', {
-          name: data.newProjectName,
-          description: data.newProjectDescription,
-          userId: userId
-        });
-
         const projectResponse = await fetch('http://localhost:3001/api/projects', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             name: data.newProjectName,
             description: data.newProjectDescription,
-            userId: userId
-            // Removed githubLink for now
+            githubLink: data.selectedRepo || null
           }),
         });
 
-        console.log('Project creation response status:', projectResponse.status);
-
         if (!projectResponse.ok) {
-          const errorText = await projectResponse.text();
-          console.error('Project creation failed:', errorText);
-          throw new Error(`Failed to create project: ${projectResponse.status} ${projectResponse.statusText}`);
+          throw new Error('Failed to create project');
         }
 
         const projectResult = await projectResponse.json();
         finalProjectId = projectResult.project.id;
-        console.log('✅ New project created successfully:', projectResult.project);
+        console.log('✅ New project created:', projectResult.project);
       }
 
       // TODO: Create the document in the project
-      console.log(`📄 Creating document "${data.documentName}" (${data.documentRole}) in project ${finalProjectId} using template ${data.template.TemplateName}`);
+      console.log(`📄 Creating document "${data.documentName}" (${data.documentRole}) in project ${finalProjectId} using template ${data.template.name}`);
       
       // For now, show success message and navigate to project
-      alert(`Document "${data.documentName}" will be created with ${data.template.TemplateName} template!\n\nRole: ${data.documentRole}\n\n(Document creation API coming soon)`);
+      alert(`Document "${data.documentName}" will be created with ${data.template.name} template!\n\nRole: ${data.documentRole}\n\n(Document creation API coming soon)`);
       
       // Close modal and navigate to project
       setIsTemplateModalOpen(false);
@@ -106,7 +90,7 @@ const Dashboard: React.FC = () => {
 
   const handleExploreAll = () => {
     console.log('Explore all templates clicked');
-    navigate('/ai-generator');
+    navigate('/templates');
   };
 
   const handleProjectClick = (projectId: string) => {
@@ -122,47 +106,26 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <FolderOpen className="h-9 w-9 text-blue-600" />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Dotriva</h1>
-                <p className="text-gray-600 mt-1">Create and manage developer documentation with AI assistance</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate('/profile')}
-              aria-label="Open profile"
-              className="p-2 text-gray-500 rounded-full hover:text-gray-900 hover:bg-gray-100 transition-colors"
-            >
-              <CircleUser className="h-8 w-8" />
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50 text-gray-800">
+      <Header
+        userName={displayName}
+        initials={initials}
+      />
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-     
-        
-        {/* Templates Section - Top */}
+      <main className="max-w-6xl mx-auto px-6 py-6 space-y-8">
         <TemplateGrid 
           onTemplateClick={handleTemplateClick}
           onExploreAll={handleExploreAll}
+          onAddProject={handleNewProject}
         />
 
-        {/* Projects Section - Bottom */}
         <ProjectList 
           onProjectClick={handleProjectClick}
           onViewAllProjects={handleViewAllProjects}
           onNewProject={handleNewProject}
         />
-      </div>
+      </main>
 
       {/* AddProjectModal with GitHub Integration */}
       <AddProjectModal

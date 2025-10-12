@@ -34,8 +34,7 @@ interface AddProjectModalProps {
   onSubmit?: (projectData: {
     name: string;
     description: string;
-    githubLink?: string | null;
-    selectedRepo?: string | null;
+    selectedRepo?: string;
   }) => void;
 }
 
@@ -133,8 +132,9 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
       newErrors.description = 'Project description is required';
     }
 
-    // Repository selection is now optional
-    // Projects can be created with or without GitHub integration
+    if (!formData.selectedRepo.trim()) {
+      newErrors.selectedRepo = 'Please select a repository from the dropdown';
+    }
 
     setUiState(prev => ({ ...prev, errors: newErrors }));
     return Object.keys(newErrors).length === 0;
@@ -219,11 +219,11 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
       const projectData = {
         name: formData.name,
         description: formData.description,
-        githubLink: formData.selectedRepo || null, // Use selected repository or null if none selected
-        selectedRepo: formData.selectedRepo || null
+        githubLink: formData.selectedRepo, // Use selected repository as GitHub link
+        selectedRepo: formData.selectedRepo
       };
 
-      console.log('Creating project:', formData.selectedRepo ? 'with GitHub integration' : 'without GitHub integration', projectData);
+      console.log('Creating project with GitHub integration:', projectData);
       
       if (onSubmit) {
         onSubmit(projectData);
@@ -342,7 +342,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Create New Project</h3>
-                <p className="text-sm text-gray-600">Set up a new documentation project with optional GitHub integration</p>
+                <p className="text-sm text-gray-600">Set up a new documentation project with GitHub integration</p>
               </div>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -397,14 +397,11 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
               )}
             </div>
 
-            {/* Repository Selection - Optional */}
+            {/* Repository Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                GitHub Repository (Optional)
+                Select Repository *
               </label>
-              <p className="text-xs text-gray-500 mb-3">
-                Connect a GitHub repository for enhanced features, or leave blank to create a standalone project.
-              </p>
               
               {githubState.isLoadingRepositories ? (
                 <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
@@ -420,8 +417,9 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                   className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
                     uiState.errors.selectedRepo ? 'border-red-300' : 'border-gray-300'
                   }`}
+                  required
                 >
-                  <option value="">No GitHub integration (or select from {githubState.filteredRepositories.length} available repositories)</option>
+                  <option value="">Select a repository ({githubState.filteredRepositories.length} available)</option>
                   {githubState.filteredRepositories.map((repo) => (
                     <option key={repo.id} value={repo.full_name}>
                       {repo.full_name} {repo.private ? '(Private)' : '(Public)'} {repo.language ? `- ${repo.language}` : ''}
@@ -430,7 +428,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                 </select>
               ) : (
                 <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
-                  <span className="text-sm text-gray-600">No GitHub repositories found. You can still create the project without GitHub integration, or connect your GitHub account in profile settings.</span>
+                  <span className="text-sm text-gray-600">No repositories found. Please connect your GitHub account in your profile settings.</span>
                 </div>
               )}
               

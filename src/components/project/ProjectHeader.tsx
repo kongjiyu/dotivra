@@ -28,7 +28,7 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-gray-900">{project.ProjectName}</h1>
+                <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
                 {onEditProject && (
                   <button
                     type="button"
@@ -40,17 +40,17 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
                   </button>
                 )}
               </div>
-              <p className="mt-2 max-w-3xl text-base leading-relaxed text-gray-600">{project.Description}</p>
-              {project.GitHubRepo && (
+              <p className="mt-2 max-w-3xl text-base leading-relaxed text-gray-600">{project.description}</p>
+              {project.githubLink && (
                 <div className="mt-3">
                   <a
-                    href={project.GitHubRepo}
+                    href={project.githubLink}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center text-sm font-medium text-blue-600 transition-colors hover:text-blue-800"
                   >
                     <ExternalLink className="mr-2 h-4 w-4" />
-                    <span className="truncate">{project.GitHubRepo}</span>
+                    <span className="truncate">{project.githubLink}</span>
                   </a>
                 </div>
               )}

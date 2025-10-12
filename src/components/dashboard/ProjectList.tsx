@@ -1,14 +1,7 @@
 // src/components/dashboard/ProjectList.tsx
-import React, { useState, useEffect } from 'react';
-
-// For now, let's define a simple Project interface here to avoid import issues
-interface Project {
-  Project_Id?: string;
-  ProjectName: string;
-  Description: string;
-  GitHubRepo: string;
-  Created_Time: any;
-}
+import React, { useState, useEffect, useMemo } from 'react';
+import { Search, LayoutList, LayoutGrid } from 'lucide-react';
+import type { Project } from '../../types';
 
 interface ProjectListProps {
   onProjectClick: (projectId: string) => void;
@@ -16,34 +9,109 @@ interface ProjectListProps {
   onNewProject: () => void;
 }
 
-const ProjectList: React.FC<ProjectListProps> = ({ 
-  onProjectClick, 
-  onViewAllProjects, 
-  onNewProject 
+type ViewMode = 'list' | 'grid';
+
+const statusOptions = [
+  { label: 'Active', badgeClass: 'bg-green-100 text-green-700' },
+  { label: 'Draft', badgeClass: 'bg-yellow-100 text-yellow-700' },
+  { label: 'Review', badgeClass: 'bg-blue-100 text-blue-700' },
+];
+
+const avatarColors = [
+  'bg-rose-400',
+  'bg-sky-400',
+  'bg-indigo-400',
+  'bg-amber-400',
+  'bg-emerald-400',
+  'bg-purple-400',
+];
+
+const parseDate = (value: string): Date | null => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatDateOnly = (value: string): string => {
+  const date = parseDate(value);
+  if (!date) return '—';
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const getInitials = (text: string): string => {
+  if (!text) return 'PR';
+  const words = text.trim().split(/\s+/);
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
+};
+
+const ProjectList: React.FC<ProjectListProps> = ({
+  onProjectClick,
+  onViewAllProjects,
+  onNewProject,
 }) => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [searchTerm, setSearchTerm] = useState('');
+  const showViewToggle = false;
 
-  // Load projects from Firestore
   const loadProjects = async () => {
     try {
       console.log('🔄 ProjectList: Loading projects from Firestore...');
       setLoading(true);
       setError(null);
-      
-      // Use API call instead of FirestoreService (since frontend will call backend API)
-      const response = await fetch('http://localhost:3001/api/projects');
-      
+
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiBaseUrl}/api/projects`, {
+        credentials: 'include',
+        headers: {
+          'Accept': 'application/json',
+        },
+      });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        const text = await response.text();
+        throw new Error(`Projects request failed (${response.status}): ${text}`);
       }
-      
+
       const data = await response.json();
       console.log('📋 ProjectList received projects:', data);
-      
+
       if (data.success) {
-        setProjects(data.projects);
+        const normalizedProjects = (data.projects || []).map((project: any): Project => {
+          const rawCreated =
+            project.Created_Time ??
+            project.lastModified ??
+            project.updated_at ??
+            project.updatedAt ??
+            '';
+
+          const lastModified =
+            typeof rawCreated === 'string'
+              ? rawCreated
+              : rawCreated?.toDate?.()
+              ? rawCreated.toDate().toISOString()
+              : rawCreated
+              ? String(rawCreated)
+              : '';
+
+          return {
+            id: Number(project.Project_Id ?? project.id ?? Date.now()),
+            name: project.ProjectName ?? project.name ?? 'Untitled Project',
+            description: project.Description ?? project.description ?? '',
+            githubLink: project.GitHubRepo ?? project.githubLink ?? '',
+            lastModified,
+            userDocsCount: Number(project.userDocsCount ?? project.user_docs_count ?? 0),
+            devDocsCount: Number(project.devDocsCount ?? project.dev_docs_count ?? 0),
+          };
+        });
+
+        setProjects(normalizedProjects);
       } else {
         throw new Error(data.error || 'Failed to load projects');
       }
@@ -55,112 +123,294 @@ const ProjectList: React.FC<ProjectListProps> = ({
     }
   };
 
-  // Load projects on component mount
   useEffect(() => {
     loadProjects();
   }, []);
-  
-  if (loading) {
-    return (
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-800">Recent Projects</h2>
-        </div>
-        <div className="animate-pulse">
-          <div className="h-4 bg-gray-200 rounded w-3/4 mb-4"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/2 mb-4"></div>
-          <div className="h-4 bg-gray-200 rounded w-5/6"></div>
+
+  const filteredProjects = useMemo(() => {
+    if (!searchTerm.trim()) return projects;
+    const normalized = searchTerm.toLowerCase();
+    return projects.filter((project) => {
+      const name = project.name?.toLowerCase() || '';
+      const description = project.description?.toLowerCase() || '';
+      return name.includes(normalized) || description.includes(normalized);
+    });
+  }, [projects, searchTerm]);
+
+  const renderSkeleton = () => (
+    <section className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div className="px-6 pt-8 pb-6 border-b border-gray-100">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="h-4 w-32 bg-gray-200 rounded animate-pulse mb-2" />
+            <div className="h-3 w-52 bg-gray-200 rounded animate-pulse" />
+          </div>
+          <div className="hidden sm:flex gap-3">
+            <div className="h-10 w-24 bg-gray-200 rounded-full animate-pulse" />
+            <div className="h-10 w-40 bg-gray-200 rounded-full animate-pulse" />
+          </div>
         </div>
       </div>
-    );
+      <div className="px-6 py-8 space-y-4">
+        {[1, 2, 3].map((item) => (
+          <div key={item} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
+        ))}
+      </div>
+    </section>
+  );
+
+  if (loading) {
+    return renderSkeleton();
   }
 
   if (error) {
-    return (
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-800">Recent Projects</h2>
+  return (
+    <section className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="px-6 pt-8 pb-6 border-b border-gray-100">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-800">Recent Projects</h2>
+              <p className="text-sm text-gray-500">
+                Access your recent projects and collaborate with your team
+              </p>
+            </div>
+          </div>
         </div>
-        <div className="text-red-600 text-center py-4">
-          <p>{error}</p>
-          <button 
+        <div className="px-6 py-12 text-center">
+          <p className="text-red-600 font-medium">{error}</p>
+          <button
             onClick={loadProjects}
-            className="mt-2 text-blue-600 hover:text-blue-800 underline"
+            className="mt-3 inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-full hover:bg-blue-50 transition-colors"
           >
             Try again
           </button>
         </div>
-      </div>
+      </section>
     );
   }
 
-  return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-semibold text-gray-800">Recent Projects</h2>
-        <button
-          onClick={onNewProject}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          New Project
-        </button>
-      </div>
+  const getStatusForIndex = (index: number) => statusOptions[index % statusOptions.length];
 
-      {projects.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          <p className="mb-4">No projects yet</p>
-          <button
-            onClick={onNewProject}
-            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
+  const renderTeamStack = (name: string, index: number) => {
+    const initials = getInitials(name);
+    const members = [0, 1, 2].map((offset) => ({
+      initials,
+      color: avatarColors[(index + offset) % avatarColors.length],
+    }));
+
+    return (
+      <div className="flex items-center -space-x-1">
+        {members.map((member, idx) => (
+          <div
+            key={`${member.initials}-${idx}`}
+            className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-medium ${member.color}`}
+            title={name}
           >
-            Create Your First Project
-          </button>
+            {member.initials}
+          </div>
+        ))}
+        <div className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-gray-600 text-xs font-medium bg-gray-200">
+          +2
         </div>
-      ) : (
-        <>
-          <div className="space-y-3">
-            {projects.slice(0, 3).map((project) => (
-              <div
-                key={project.Project_Id}
-                className="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                onClick={() => onProjectClick(project.Project_Id || '')}
-              >
-                <div>
-                  <h3 className="font-medium text-gray-900">{project.ProjectName}</h3>
-                  <p className="text-sm text-gray-600 truncate max-w-md">
-                    {project.Description}
-                  </p>
-                  {project.GitHubRepo && (
-                    <p className="text-xs text-blue-600 mt-1">
-                      {project.GitHubRepo}
-                    </p>
-                  )}
-                </div>
-                <div className="text-right text-sm text-gray-500">
-                  <p>
-                    {typeof project.Created_Time === 'string' 
-                      ? new Date(project.Created_Time).toLocaleDateString()
-                      : project.Created_Time?.toDate?.().toLocaleDateString() || 'N/A'
-                    }
-                  </p>
+      </div>
+    );
+  };
+
+  const renderListView = () => (
+    <div className="px-6 pb-6">
+      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <table className="min-w-full divide-y divide-gray-100 text-left">
+          <thead className="bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
+            <tr>
+              <th className="px-6 py-3">Project</th>
+              <th className="px-6 py-3">Status</th>
+              <th className="px-6 py-3">Team</th>
+              <th className="px-6 py-3">Last updated</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
+            {filteredProjects.map((project, index) => {
+            const status = getStatusForIndex(index);
+            const formattedDate = formatDateOnly(project.lastModified);
+
+              return (
+                <tr
+                  key={project.id || `${project.name}-${index}`}
+                  className="hover:bg-blue-50/40 cursor-pointer transition-colors"
+                  onClick={() => onProjectClick(String(project.id))}
+                >
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-medium shadow">
+                        {getInitials(project.name)}
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-medium text-gray-900 truncate">
+                          {project.name || 'Untitled Project'}
+                        </h3>
+                        <p className="text-xs text-gray-500 truncate">
+                          {project.description || 'Documentation workspace'}
+                        </p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span
+                      className={`inline-flex items-center px-3 py-1 text-xs font-medium rounded-full ${status.badgeClass}`}
+                    >
+                      {status.label}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    {renderTeamStack(project.name, index)}
+                  </td>
+                  <td className="px-6 py-4 text-gray-500">
+                    {formattedDate}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+
+  const renderGridView = () => (
+    <div className="px-6 py-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+        {filteredProjects.map((project, index) => {
+          const status = getStatusForIndex(index);
+          const formattedDate = formatDateOnly(project.lastModified);
+
+          return (
+            <button
+              key={project.id || `${project.name}-${index}`}
+              onClick={() => onProjectClick(String(project.id))}
+              className="relative text-left bg-white border border-gray-200 rounded-2xl shadow-sm hover:border-blue-200 hover:shadow-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 flex flex-col"
+            >
+              <div className="absolute top-4 right-4">
+                <span
+                  className={`inline-flex items-center px-3 py-1 text-xs font-medium rounded-full ${status.badgeClass}`}
+                >
+                  {status.label}
+                </span>
+              </div>
+              <div className="h-32 bg-gray-50 border-b border-gray-100 flex items-center justify-center">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-semibold shadow">
+                  {getInitials(project.name)}
                 </div>
               </div>
-            ))}
-          </div>
+              <div className="p-5 space-y-4 flex-1 flex flex-col">
+                <div className="space-y-1">
+                  <h3 className="font-medium text-gray-900">
+                    {project.name || 'Untitled Project'}
+                  </h3>
+                  <p className="text-xs text-gray-500 leading-snug h-[36px] overflow-hidden">
+                    {project.description || 'Documentation workspace'}
+                  </p>
+                </div>
+                <div className="flex items-center justify-between text-xs text-gray-500 mt-auto">
+                  <span>{formattedDate}</span>
+                  <span className="flex items-center gap-1 text-blue-600">
+                    {project.githubLink ? 'Repo linked' : 'No repo'}
+                  </span>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 
-          {projects.length > 3 && (
-            <div className="mt-4 text-center">
+  return (
+    <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <div className="px-6 pt-6 pb-5 border-b border-gray-100 space-y-4">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800">Recent projects</h2>
+            <p className="text-gray-500 text-sm">
+              Access your recent projects and collaborate with your team
+            </p>
+          </div>
+          <div className="relative w-full lg:w-72">
+            <Search className="h-4 w-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search projects..."
+              className="w-full pl-11 pr-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100"
+            />
+          </div>
+        </div>
+
+        {showViewToggle && (
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-xs text-gray-500">
+              Showing {filteredProjects.length} project{filteredProjects.length === 1 ? '' : 's'}
+            </span>
+            <div className="flex items-center bg-white border border-gray-300 rounded-full overflow-hidden shadow-sm">
               <button
-                onClick={onViewAllProjects}
-                className="text-blue-600 hover:text-blue-800 font-medium"
+                type="button"
+                onClick={() => setViewMode('list')}
+                className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors ${
+                  viewMode === 'list'
+                    ? 'bg-blue-600 text-white shadow-inner'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
               >
-                View All Projects ({projects.length})
+                <LayoutList className="h-4 w-4" />
+                List
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('grid')}
+                className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors ${
+                  viewMode === 'grid'
+                    ? 'bg-blue-600 text-white shadow-inner'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <LayoutGrid className="h-4 w-4" />
+                Cards
               </button>
             </div>
-          )}
-        </>
+          </div>
+        )}
+      </div>
+
+      {filteredProjects.length === 0 ? (
+  <div className="px-6 py-10 text-center">
+          <h3 className="text-lg font-medium text-gray-800 mb-2">No projects found</h3>
+          <p className="text-sm text-gray-500 mb-6">
+            Create a new project to start building documentation with your team.
+          </p>
+          <button
+            type="button"
+            onClick={onNewProject}
+            className="inline-flex items-center px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors"
+          >
+            Create project
+          </button>
+        </div>
+      ) : viewMode === 'list' ? (
+        renderListView()
+      ) : (
+        <div className="min-h-[360px]">{renderGridView()}</div>
       )}
-    </div>
+
+      <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-center">
+        <button
+          type="button"
+          onClick={onViewAllProjects}
+          className="text-sm font-medium text-blue-600 hover:text-blue-700"
+        >
+          View all projects
+        </button>
+      </div>
+    </section>
   );
 };
 

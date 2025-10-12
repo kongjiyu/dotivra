@@ -5,8 +5,6 @@ dotenv.config();
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import http from 'http';
-import { WebSocketServer } from 'ws';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 
@@ -17,7 +15,6 @@ import {
   collection, 
   addDoc, 
   getDocs, 
-  getDoc,
   query, 
   where, 
   orderBy, 
@@ -36,13 +33,9 @@ app.use(helmet({
   contentSecurityPolicy: false,
 }));
 
-// CORS configuration - allow both common dev ports
+// CORS configuration
 app.use(cors({
-  origin: [
-    'http://localhost:5173', 
-    'http://localhost:5174',
-    process.env.FRONTEND_URL || 'http://localhost:5173'
-  ],
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   credentials: true,
 }));
 
@@ -253,23 +246,16 @@ app.get('/api/github/repository/:owner/:repo/file', async (req, res) => {
 app.post('/api/projects', async (req, res) => {
   try {
     console.log('🔥 POST /api/projects received:', req.body);
-    const { name, description, userId } = req.body;
+    const { name, description, githubLink, selectedRepo, installationId, userId } = req.body;
     
     // Validate required fields
     if (!name || !description || !userId) {
       console.log('❌ Validation failed: missing required fields');
-      console.log('Received - name:', name, 'description:', description, 'userId:', userId);
-      return res.status(400).json({ 
-        error: 'Name, description, and userId are required',
-        received: { name: !!name, description: !!description, userId: !!userId }
-      });
+      return res.status(400).json({ error: 'Name, description, and userId are required' });
     }
-
-    console.log('✅ Validation passed, creating project...');
 
     // Generate Project ID matching FirestoreService format
     const projectId = generateProjectId();
-    console.log('Generated Project ID:', projectId);
 
     // Create the project object matching FirestoreService interface
     const project = {
@@ -277,38 +263,27 @@ app.post('/api/projects', async (req, res) => {
       ProjectName: name.trim(),
       User_Id: userId,
       Description: description.trim(),
-      GitHubRepo: '', // Empty for now, focusing on Firebase only
+      GitHubRepo: githubLink || '',
       Created_Time: Timestamp.now() // Regular Firebase Timestamp
     };
-
-    console.log('Creating project in Firestore:', project);
 
     // Add to Firestore Projects collection
     const docRef = await addDoc(collection(firestore, 'Projects'), project);
     
-    console.log('✅ Project created with Firestore ID:', docRef.id);
-    console.log('✅ Project created with custom ID:', projectId);
-    
-    const responseProject = {
-      ...project,
-      id: docRef.id, // Add Firestore document ID
-      Project_Id: projectId, // Keep custom project ID for compatibility
-      Created_Time: project.Created_Time.toDate().toISOString()
-    };
-
-    console.log('Sending response:', responseProject);
+    console.log('✅ Project created with ID:', projectId);
     
     res.status(201).json({
       success: true,
-      project: responseProject
+      project: {
+        ...project,
+        Created_Time: project.Created_Time.toDate().toISOString()
+      }
     });
   } catch (error) {
-    console.error('❌ Error creating project:', error);
-    console.error('Error stack:', error.stack);
+    console.error('Error creating project:', error);
     res.status(500).json({
       error: 'Failed to create project',
-      details: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      details: error.message
     });
   }
 });
@@ -322,7 +297,6 @@ app.get('/api/projects', async (req, res) => {
     const querySnapshot = await getDocs(q);
     
     const projects = querySnapshot.docs.map(doc => ({
-      id: doc.id, // Include Firestore document ID for navigation
       ...doc.data(),
       Created_Time: doc.data().Created_Time?.toDate?.()?.toISOString() || new Date().toISOString()
     }));
