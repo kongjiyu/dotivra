@@ -134,7 +134,7 @@ const ProjectOverview: React.FC = () => {
     alert(`Delete "${document.name}"? (This is just a demo)`);
   };
 
-  const handleCreateDocument = ({
+  const handleCreateDocument = async ({
     template,
     category,
     name,

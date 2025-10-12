@@ -63,6 +63,20 @@ const firestore = getFirestore(firebaseApp);
 
 console.log('✅ Firebase initialized successfully');
 
+// Utility functions - Match existing Firebase format
+function generateProjectId() {
+  const now = new Date();
+  const dateStr = now.getFullYear().toString().slice(-2) + 
+                  String(now.getMonth() + 1).padStart(2, '0') + 
+                  String(now.getDate()).padStart(2, '0');
+  const sequence = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+  return "P" + dateStr + sequence;
+}
+
+function generateUserId() {
+  return "USER_" + Math.random().toString(36).substring(2, 15);
+}
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -438,6 +452,192 @@ app.delete('/api/projects/:id', async (req, res) => {
 });
 
 // ============================================================================
+// DOCUMENTS MANAGEMENT ENDPOINTS
+// ============================================================================
+
+// Create document
+app.post('/api/documents', async (req, res) => {
+  try {
+    console.log('🔥 POST /api/documents received:', req.body);
+    const { 
+      DocumentName, 
+      DocumentType, 
+      DocumentCategory, 
+      Project_Id, 
+      Template_Id, 
+      User_Id, 
+      Content, 
+      IsDraft 
+    } = req.body;
+    
+    // Validate required fields
+    if (!DocumentName || !DocumentType || !DocumentCategory || !Project_Id || !User_Id) {
+      console.log('❌ Document validation failed: missing required fields');
+      return res.status(400).json({ 
+        error: 'DocumentName, DocumentType, DocumentCategory, Project_Id, and User_Id are required',
+        received: { 
+          DocumentName: !!DocumentName, 
+          DocumentType: !!DocumentType, 
+          DocumentCategory: !!DocumentCategory, 
+          Project_Id: !!Project_Id, 
+          User_Id: !!User_Id 
+        }
+      });
+    }
+
+    console.log('✅ Document validation passed, creating document...');
+
+    // Create the document object
+    const document = {
+      DocumentName: DocumentName.trim(),
+      DocumentType: DocumentType.trim(),
+      DocumentCategory: DocumentCategory,
+      Project_Id: Project_Id,
+      Template_Id: Template_Id || null,
+      User_Id: User_Id,
+      Content: Content || '',
+      Created_Time: Timestamp.now(),
+      Updated_Time: Timestamp.now(),
+      IsDraft: IsDraft !== undefined ? IsDraft : true,
+      EditedBy: User_Id,
+      Hash: null // Will be calculated when content is saved
+    };
+
+    console.log('Creating document in Firestore:', document);
+
+    // Add to Firestore Documents collection
+    const docRef = await addDoc(collection(firestore, 'Documents'), document);
+    
+    console.log('✅ Document created with Firestore ID:', docRef.id);
+    
+    const responseDocument = {
+      ...document,
+      id: docRef.id, // Add Firestore document ID
+      Created_Time: document.Created_Time.toDate().toISOString(),
+      Updated_Time: document.Updated_Time.toDate().toISOString()
+    };
+
+    console.log('Sending document response:', responseDocument);
+    
+    res.status(201).json({
+      success: true,
+      document: responseDocument
+    });
+  } catch (error) {
+    console.error('❌ Error creating document:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({
+      error: 'Failed to create document',
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Get documents for a project
+app.get('/api/documents/project/:projectId', async (req, res) => {
+  try {
+    const projectId = req.params.projectId;
+    console.log('📋 GET /api/documents/project/' + projectId);
+    
+    const q = query(
+      collection(firestore, 'Documents'),
+      where('Project_Id', '==', projectId)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    const documents = querySnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+      Created_Time: doc.data().Created_Time?.toDate?.()?.toISOString() || new Date().toISOString(),
+      Updated_Time: doc.data().Updated_Time?.toDate?.()?.toISOString() || new Date().toISOString()
+    }));
+
+    console.log('📋 Returning', documents.length, 'documents for project', projectId);
+    
+    res.json({
+      success: true,
+      documents
+    });
+  } catch (error) {
+    console.error('Error fetching project documents:', error);
+    res.status(500).json({
+      error: 'Failed to fetch project documents',
+      details: error.message
+    });
+  }
+});
+
+// Get single document by ID
+app.get('/api/documents/:documentId', async (req, res) => {
+  try {
+    const documentId = req.params.documentId;
+    console.log('📄 GET /api/documents/' + documentId);
+    
+    const docRef = doc(firestore, 'Documents', documentId);
+    const docSnap = await getDoc(docRef);
+    
+    if (!docSnap.exists()) {
+      console.log('❌ Document not found:', documentId);
+      return res.status(404).json({
+        success: false,
+        error: 'Document not found'
+      });
+    }
+    
+    const document = {
+      id: docSnap.id,
+      ...docSnap.data(),
+      Created_Time: docSnap.data().Created_Time?.toDate?.()?.toISOString() || new Date().toISOString(),
+      Updated_Time: docSnap.data().Updated_Time?.toDate?.()?.toISOString() || new Date().toISOString()
+    };
+
+    console.log('📄 Returning document:', document.DocumentName);
+    
+    res.json({
+      success: true,
+      document
+    });
+  } catch (error) {
+    console.error('Error fetching document:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch document',
+      details: error.message
+    });
+  }
+});
+
+// Update document by ID
+app.put('/api/documents/:documentId', async (req, res) => {
+  try {
+    const documentId = req.params.documentId;
+    const updateData = req.body;
+    console.log('📝 PUT /api/documents/' + documentId, 'Updates:', Object.keys(updateData));
+    
+    // Add timestamp for update
+    updateData.Updated_Time = Timestamp.now();
+    
+    const docRef = doc(firestore, 'Documents', documentId);
+    await updateDoc(docRef, updateData);
+    
+    console.log('📝 Document updated successfully');
+    
+    res.json({
+      success: true,
+      message: 'Document updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating document:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update document',
+      details: error.message
+    });
+  }
+});
+
+// ============================================================================
 // USER MANAGEMENT ENDPOINTS
 // ============================================================================
 
@@ -642,4 +842,252 @@ app.listen(PORT, () => {
   console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL}`);
   console.log(`🔑 GitHub App ID: ${process.env.GITHUB_APP_ID}`);
   console.log(`🔥 Firebase Project: ${process.env.VITE_FIREBASE_PROJECT_ID}`);
+});
+
+/* ------------------ Utility ------------------ */
+function hashJSON(obj) {
+  return "sha256:" + crypto.createHash("sha256").update(JSON.stringify(obj)).digest("hex");
+}
+
+/* ------------------ Document APIs ------------------ */
+
+// ✅ Get all documents for a project
+app.get("/api/project/:projectId/documents", async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const docsRef = firestore.collection("Document");
+    const snapshot = await docsRef.where("ProjectID", "==", projectId).get();
+
+    const documents = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ documents });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Get single document
+app.get("/api/document/editor/content/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const docSnap = await firestore.collection("Document").doc(docId).get();
+
+    if (!docSnap.exists) return res.status(404).json({ error: "NOT_FOUND" });
+    res.json({ id: docSnap.id, ...docSnap.data() });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Update document content
+app.put("/api/document/editor/content/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const { content, isDraft } = req.body;
+
+    await firestore.collection("Document").doc(docId).update({
+      Content: content,
+      IsDraft: isDraft,
+      UpdatedAt: new Date().toISOString(),
+      Hash: hashJSON(content),
+    });
+
+    res.json({ status: "ok" });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Delete document (and related history + chat)
+app.delete("/api/document/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+
+    await firestore.collection("Document").doc(docId).delete();
+
+    // cleanup related records
+    const batch = firestore.batch();
+
+    const chatSnap = await firestore.collection("ChatHistory").where("DocID", "==", docId).get();
+    chatSnap.forEach((d) => batch.delete(d.ref));
+
+    const histSnap = await firestore.collection("DocumentHistory").where("DocID", "==", docId).get();
+    histSnap.forEach((d) => batch.delete(d.ref));
+
+    await batch.commit();
+
+    res.json({ status: "deleted", docId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Document version history
+app.get("/api/document/editor/history/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const historyRef = firestore.collection("DocumentHistory");
+    const snapshot = await historyRef.where("DocID", "==", docId).orderBy("Version", "desc").get();
+
+    const versions = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ versions });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Latest summary (assistant reply)
+app.get("/api/document/editor/summary/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const chatRef = firestore.collection("ChatHistory");
+    const snapshot = await chatRef
+      .where("DocID", "==", docId)
+      .where("Role", "==", "assistant")
+      .orderBy("CreatedAt", "desc")
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) return res.json({ summary: null });
+
+    const summary = snapshot.docs[0].data();
+    res.json({ summary: summary.Message });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+/* ------------------ Chat APIs ------------------ */
+
+// ✅ Get normal chat history
+app.get("/api/document/chat/history/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const chatsRef = firestore.collection("ChatHistory");
+    const snapshot = await chatsRef.where("DocID", "==", docId).orderBy("CreatedAt", "asc").get();
+
+    const messages = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ messages });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Add chat message (user/assistant)
+app.post("/api/document/chat/prompt", async (req, res) => {
+  try {
+    const { userId, docId, message, role } = req.body;
+
+    const newMsg = {
+      UserID: userId || null,
+      DocID: docId,
+      Message: message,
+      Role: role || "user", // 'user' or 'assistant'
+      CreatedAt: new Date().toISOString(),
+    };
+
+    const ref = await firestore.collection("ChatHistory").add(newMsg);
+    res.status(201).json({ id: ref.id, ...newMsg });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+/* ------------------ AI Agent Workflow ------------------ */
+
+// ✅ Get workflow messages (reasoning → thinking → action)
+app.get("/api/document/chat/agent/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const chatsRef = firestore.collection("ChatHistory");
+    const snapshot = await chatsRef
+      .where("DocID", "==", docId)
+      .orderBy("CreatedAt", "asc")
+      .get();
+
+    const messages = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ workflow: messages });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Add AI agent step
+app.post("/api/document/chat/agent", async (req, res) => {
+  try {
+    const { docId, stage, message, userId } = req.body;
+
+    if (!["reasoning", "thinking", "action", "user"].includes(stage)) {
+      return res.status(400).json({ error: "INVALID_STAGE" });
+    }
+
+    const newMsg = {
+      UserID: userId || null,
+      DocID: docId,
+      Stage: stage, // reasoning | thinking | action | user
+      Message: message,
+      Role: stage === "user" ? "user" : "assistant",
+      CreatedAt: new Date().toISOString(),
+    };
+
+    const ref = await firestore.collection("ChatHistory").add(newMsg);
+
+    // auto-log Action step to DocumentHistory
+    if (stage === "action") {
+      await firestore.collection("DocumentHistory").add({
+        DocID: docId,
+        ActionID: ref.id,
+        Content: message,
+        CreatedAt: new Date().toISOString(),
+        Version: Date.now(), // naive version tracking
+      });
+    }
+
+    res.status(201).json({ id: ref.id, ...newMsg });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ✅ Get latest Action only
+app.get("/api/document/chat/agent/action/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const snapshot = await firestore.collection("ChatHistory")
+      .where("DocID", "==", docId)
+      .where("Stage", "==", "action")
+      .orderBy("CreatedAt", "desc")
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) return res.json({ action: null });
+
+    const action = snapshot.docs[0].data();
+    res.json({ action });
+  } catch (err) {
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+/* ------------------ WebSocket ------------------ */
+const wss = new WebSocketServer({ noServer: true });
+
+wss.on("connection", (ws) => {
+  console.log("Client connected ✅");
+
+  ws.on("message", (msg) => {
+    console.log("Received:", msg.toString());
+  });
+
+  ws.send(JSON.stringify({ status: "connected" }));
+});
+
+const server = http.createServer(app);
+
+server.on("upgrade", (req, socket, head) => {
+  wss.handleUpgrade(req, socket, head, (ws) => {
+    wss.emit("connection", ws, req);
+  });
 });

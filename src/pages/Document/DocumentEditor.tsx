@@ -129,7 +129,10 @@ export default function DocumentEditor() {
         setCurrentEditor,
         onOpenChat,
         setShowAIActions,
-        chatSidebarOpen
+        chatSidebarOpen,
+        documentTitle,
+        setDocumentTitle,
+        setDocumentId
     } = useDocument();
     const documentContentRef = useRef<HTMLDivElement>(null);
 
@@ -151,11 +154,89 @@ export default function DocumentEditor() {
     const [isRegenerating, setIsRegenerating] = useState(false);
     const [beforeAIContent, setBeforeAIContent] = useState<string>("");
 
+    // Loading state for document
+    const [isLoadingDocument, setIsLoadingDocument] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
+    // Load document when documentId changes
+    useEffect(() => {
+        const loadDocument = async () => {
+            if (!documentId) {
+                // If no documentId, start with empty content
+                setDocumentContent("");
+                setDocumentTitle("Untitled Document");
+                return;
+            }
+
+            setIsLoadingDocument(true);
+            try {
+                console.log('📄 Loading document with ID:', documentId);
+                
+                // Fetch document from API
+                const response = await fetch(`http://localhost:3001/api/documents/${documentId}`);
+                if (!response.ok) {
+                    throw new Error(`Failed to load document: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('📄 Loaded document data:', data);
+                
+                if (data.success && data.document) {
+                    setDocumentId(documentId);
+                    setDocumentTitle(data.document.DocumentName);
+                    const content = data.document.Content || "";
+                    console.log('📄 Document content from DB:', content ? `"${content.substring(0, 100)}..."` : '(empty)');
+                    console.log('📄 Using content:', content ? content : '(empty - will show blank editor)');
+                    setDocumentContent(content); // Use exact content from DB, empty if empty
+                }
+            } catch (error) {
+                console.error('❌ Error loading document:', error);
+                // Show empty editor on error
+                setDocumentContent("");
+                setDocumentTitle("Document Load Error");
+            } finally {
+                setIsLoadingDocument(false);
+            }
+        };
+
+        loadDocument();
+    }, [documentId, setDocumentContent, setDocumentTitle, setDocumentId]);
 
     const handleDocumentUpdate = useCallback((content: string) => {
         setDocumentContent(content);
-    }, [setDocumentContent]);
+        
+        // Auto-save to database if we have a documentId
+        if (documentId) {
+            // Debounce the save operation
+            clearTimeout((window as any).autoSaveTimeout);
+            (window as any).autoSaveTimeout = setTimeout(async () => {
+                try {
+                    setIsSaving(true);
+                    console.log('💾 Auto-saving document...', documentId);
+                    const response = await fetch(`http://localhost:3001/api/documents/${documentId}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            Content: content,
+                            EditedBy: 'current-user', // TODO: Get actual user ID
+                        }),
+                    });
+                    
+                    if (response.ok) {
+                        console.log('💾 Document auto-saved successfully');
+                    } else {
+                        console.error('❌ Failed to auto-save document:', response.status);
+                    }
+                } catch (error) {
+                    console.error('❌ Auto-save error:', error);
+                } finally {
+                    setIsSaving(false);
+                }
+            }, 2000); // Save after 2 seconds of inactivity
+        }
+    }, [setDocumentContent, documentId]);
 
     const handleEditorReady = useCallback((editor: any) => {
         setCurrentEditor(editor);
@@ -400,12 +481,7 @@ export default function DocumentEditor() {
         }
     }, [documentContent]);
 
-    // Initialize with default content if empty (run only once)
-    useEffect(() => {
-        if (!documentContent) {
-            setDocumentContent(DEFAULT_DOC);
-        }
-    }, [setDocumentContent]); // Remove documentContent from dependencies
+    // No longer initialize with default content - let documents be empty if they're empty
 
     // Handle keyboard shortcuts
     useEffect(() => {
@@ -443,7 +519,7 @@ export default function DocumentEditor() {
         console.log('DocumentEditor onOpenChat function:', onOpenChat);
     }, [onOpenChat]);
 
-    const effectiveContent = documentContent || DEFAULT_DOC;
+    const effectiveContent = documentContent || "";
 
     return (
         <DocumentLayout showDocumentMenu={true}>
@@ -456,6 +532,14 @@ export default function DocumentEditor() {
                     onOpenChat={onOpenChat}
                     className=""
                 />
+
+                {/* Save Status Indicator */}
+                {isSaving && (
+                    <div className="fixed top-20 right-6 bg-blue-100 text-blue-800 px-3 py-2 rounded-lg shadow-lg z-50 flex items-center space-x-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        <span className="text-sm">Saving...</span>
+                    </div>
+                )}
 
                 {/* AI Action Container */}
                 <div data-ai-action-container="true">

@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import Header from '../components/header/Header';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import TemplateGrid from '../components/dashboard/TemplateGrid';
 import ProjectList from '../components/dashboard/ProjectList';
 import AddProjectModal from '../components/modal/addProject';

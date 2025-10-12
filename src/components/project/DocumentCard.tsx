@@ -1,5 +1,6 @@
 // src/components/project/DocumentCard.tsx
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { FileText, Clock, MoreHorizontal, Edit, Trash2 } from 'lucide-react';
 import type { Document } from '../../types';
 
@@ -11,6 +12,7 @@ interface DocumentCardProps {
 
 const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete }) => {
   const [showDropdown, setShowDropdown] = useState(false);
+  const navigate = useNavigate();
 
   const handleEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -25,8 +27,10 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
   };
 
   const handleCardClick = () => {
-    console.log('Opening document:', document.name);
-    // TODO: Navigate to document editor
+    console.log('Opening document:', document.DocumentName, 'ID:', document.id);
+    if (document.id) {
+      navigate(`/document/${document.id}`);
+    }
   };
 
   return (
