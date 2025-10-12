@@ -1,4 +1,14 @@
 // src/components/dashboard/ProjectList.tsx
+import { API_ENDPOINTS } from '@/lib/apiConfig';
+
+// For now, let's define a simple Project interface here to avoid import issues
+interface Project {
+  Project_Id?: string;
+  ProjectName: string;
+  Description: string;
+  GitHubRepo: string;
+  Created_Time: any;
+}
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, LayoutList, LayoutGrid } from 'lucide-react';
 import type { Project } from '../../types';
@@ -66,14 +76,10 @@ const ProjectList: React.FC<ProjectListProps> = ({
       console.log('🔄 ProjectList: Loading projects from Firestore...');
       setLoading(true);
       setError(null);
-
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiBaseUrl}/api/projects`, {
-        credentials: 'include',
-        headers: {
-          'Accept': 'application/json',
-        },
-      });
+      
+      // Use centralized API configuration
+      const response = await fetch(API_ENDPOINTS.projects());
+      
       if (!response.ok) {
         const text = await response.text();
         throw new Error(`Projects request failed (${response.status}): ${text}`);

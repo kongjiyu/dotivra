@@ -1,19 +1,19 @@
 // src/components/project/AddDocumentModal.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { X, FileText } from 'lucide-react';
 import { templates } from '../../utils/mockData';
 import type { Template } from '../../types';
 
 interface CreateDocumentArgs {
   template: Template;
-  category: 'user' | 'developer';
+  category: 'user' | 'developer' | 'general';
   name: string;
   role: string;
 }
 
 interface AddDocumentModalProps {
   isOpen: boolean;
-  category: 'user' | 'developer' | null;
+  category: 'user' | 'developer' | 'general' | null;
   onClose: () => void;
   onCreateDocument: (args: CreateDocumentArgs) => void;
 }
@@ -34,7 +34,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
 
   const [documentName, setDocumentName] = useState('');
   const [selectedRole, setSelectedRole] = useState(roleOptions[0]?.value ?? 'author');
-  const [selectedTemplateId, setSelectedTemplateId] = useState<number | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
   // Show all templates regardless of category
   const relevantTemplates = useMemo(
@@ -54,7 +54,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
   }, []);
 
   const handleTemplateClick = (template: Template) => {
-    setSelectedTemplateId(template.id);
+    setSelectedTemplateId(template.id || null);
   };
 
   const handleCreate = () => {
@@ -149,7 +149,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                 <h4 className="text-sm font-semibold text-gray-700 mb-3">Document Template</h4>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-h-96 overflow-y-auto pr-2">
                   {relevantTemplates.map((template) => {
-                    const Icon = template.icon;
+                    const Icon = FileText; // Default icon for all templates
                     const isSelected = selectedTemplateId === template.id;
                     return (
                       <div
@@ -182,10 +182,10 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                               <h4 className={`font-semibold text-base mb-1 transition-colors ${
                                 isSelected ? 'text-blue-900' : 'text-gray-900 group-hover:text-blue-900'
                               }`}>
-                                {template.name}
+                                {template.TemplateName}
                               </h4>
                               <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">
-                                {template.description}
+                                {template.Description}
                               </p>
                             </div>
                           </div>
@@ -193,13 +193,13 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                           {/* Category Badge */}
                           <div className="flex items-center justify-between">
                             <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border ${
-                              template.category === 'user'
+                              template.Category === 'user'
                                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : template.category === 'developer'
+                                : template.Category === 'developer'
                                 ? 'bg-purple-50 text-purple-700 border-purple-200'
                                 : 'bg-gray-50 text-gray-700 border-gray-200'
                             }`}>
-                              {template.category}
+                              {template.Category}
                             </span>
                             {isSelected && (
                               <span className="inline-flex items-center text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
@@ -229,7 +229,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
               {selectedTemplate && (
                 <div className="text-sm text-gray-600">
                   Selected template:
-                  <span className="ml-1 font-medium text-gray-900">{selectedTemplate.name}</span>
+                  <span className="ml-1 font-medium text-gray-900">{selectedTemplate.TemplateName}</span>
                 </div>
               )}
               <div className="flex gap-3">

@@ -3,6 +3,7 @@ import React from 'react';
 import { Plus, Expand } from 'lucide-react';
 import { templates } from '../../utils/mockData';
 import type { Template } from '../../types';
+import { FileText, Code, BookOpen, Settings } from 'lucide-react';
 
 interface TemplateGridProps {
   onTemplateClick: (template: Template) => void;
@@ -63,28 +64,48 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
         </div>
 
         {featuredTemplates.map((template, index) => {
-          const Icon = template.icon;
+          // Get icon based on category or template name
+          const getIcon = () => {
+            if (template.Category === 'developer') {
+              return template.TemplateName?.includes('API') ? Code : Settings;
+            } else if (template.Category === 'user') {
+              return BookOpen;
+            } else {
+              return FileText;
+            }
+          };
+          const Icon = getIcon();
+          
           return (
-            <div key={template.id} className="flex-shrink-0 w-64">
-              <button
-                type="button"
-                onClick={() => onTemplateClick(template)}
-                className="group w-full bg-white border border-gray-200 rounded-lg px-4 py-4 text-left transition-all hover:border-blue-500 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 h-44 flex flex-col justify-between"
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`flex h-14 w-14 p-1 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${gradientStyles[index % gradientStyles.length]} text-white shadow-sm transition-transform group-hover:scale-105`}>
-                    <Icon className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{template.name}</p>
-                    <p className="text-xs text-gray-400 uppercase tracking-wide mt-0.5">{template.category}</p>
+            <div
+              key={template.id}
+              onClick={() => onTemplateClick(template)}
+              className="bg-white border border-gray-200 rounded-lg p-5 hover:shadow-md hover:border-blue-200 transition-all cursor-pointer group"
+            >
+              <div className="flex items-start space-x-4">
+                <div className="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-colors">
+                  <Icon className="h-5 w-5 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-gray-900 mb-1">
+                    {template.TemplateName}
+                  </h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">
+                    {template.Description}
+                  </p>
+                  <div className="mt-2">
+                    <span className={`inline-block px-2 py-1 rounded-full text-xs ${
+                      template.Category === 'user' 
+                        ? 'bg-green-100 text-green-700'
+                        : template.Category === 'developer'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {template.Category}
+                    </span>
                   </div>
                 </div>
-
-                <p className="text-xs text-gray-500 leading-relaxed max-h-10 overflow-hidden mt-3">
-                  {template.description}
-                </p>
-              </button>
+              </div>
             </div>
           );
         })}

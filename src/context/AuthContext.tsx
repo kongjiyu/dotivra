@@ -31,17 +31,23 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   useEffect(() => {
     const unsubscribe = authService.onAuthStateChange(async (user) => {
-      setUser(user);
-      
-      if (user) {
-        // Fetch user profile from Firestore
-        const profile = await authService.getUserProfile(user.uid);
-        setUserProfile(profile);
-      } else {
+      try {
+        setUser(user);
+        
+        if (user) {
+          // Fetch user profile from Firestore
+          const profile = await authService.getUserProfile(user.uid);
+          setUserProfile(profile);
+        } else {
+          setUserProfile(null);
+        }
+      } catch (error) {
+        console.error('Error in auth state change:', error);
+        setUser(null);
         setUserProfile(null);
+      } finally {
+        setLoading(false);
       }
-      
-      setLoading(false);
     });
 
     return () => unsubscribe();

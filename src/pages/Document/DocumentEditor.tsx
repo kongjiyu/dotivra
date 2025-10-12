@@ -3,6 +3,8 @@ import TipTap from "@/components/Document/TipTap";
 import AIActionContainer from "@/components/Document/AIActionContainer";
 import { useDocument } from "@/context/DocumentContext";
 import { useRef, useEffect, useState, useCallback } from "react";
+import { useParams } from "react-router-dom";
+import { API_ENDPOINTS } from "@/lib/apiConfig";
 
 import { EnhancedAIContentWriter } from '@/utils/enhancedAIContentWriter';
 import type { ContentPosition } from '@/utils/enhancedAIContentWriter';
@@ -123,6 +125,7 @@ const DEFAULT_DOC = `<h1>Product Strategy 2024</h1>
 <p>This strategy provides a clear roadmap for achieving our 2024 objectives. Success depends on execution excellence, team collaboration, and customer-centric decision making.</p>`;
 
 export default function DocumentEditor() {
+    const { documentId } = useParams<{ documentId: string }>();
     const {
         documentContent,
         setDocumentContent,
@@ -173,7 +176,7 @@ export default function DocumentEditor() {
                 console.log('📄 Loading document with ID:', documentId);
                 
                 // Fetch document from API
-                const response = await fetch(`http://localhost:3001/api/documents/${documentId}`);
+                const response = await fetch(API_ENDPOINTS.document(documentId));
                 if (!response.ok) {
                     throw new Error(`Failed to load document: ${response.status}`);
                 }
@@ -181,13 +184,20 @@ export default function DocumentEditor() {
                 const data = await response.json();
                 console.log('📄 Loaded document data:', data);
                 
-                if (data.success && data.document) {
+                // Handle both API response formats: direct document data or wrapped in success/document
+                const documentData = data.success ? data.document : data;
+                
+                if (documentData && documentData.id) {
                     setDocumentId(documentId);
-                    setDocumentTitle(data.document.DocumentName);
-                    const content = data.document.Content || "";
+                    setDocumentTitle(documentData.Title || documentData.DocumentName || "Untitled Document");
+                    const content = documentData.Content || "";
                     console.log('📄 Document content from DB:', content ? `"${content.substring(0, 100)}..."` : '(empty)');
                     console.log('📄 Using content:', content ? content : '(empty - will show blank editor)');
                     setDocumentContent(content); // Use exact content from DB, empty if empty
+                } else {
+                    console.warn('📄 No document data found in response:', data);
+                    setDocumentContent("");
+                    setDocumentTitle("Document Not Found");
                 }
             } catch (error) {
                 console.error('❌ Error loading document:', error);
@@ -213,21 +223,23 @@ export default function DocumentEditor() {
                 try {
                     setIsSaving(true);
                     console.log('💾 Auto-saving document...', documentId);
-                    const response = await fetch(`http://localhost:3001/api/documents/${documentId}`, {
+                    console.log('💾 Content to save (first 100 chars):', content.substring(0, 100) + '...');
+                    const response = await fetch(API_ENDPOINTS.document(documentId), {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            Content: content,
+                            content: content,  // Use lowercase to match API expectation
                             EditedBy: 'current-user', // TODO: Get actual user ID
                         }),
                     });
                     
                     if (response.ok) {
-                        console.log('💾 Document auto-saved successfully');
+                        const result = await response.json();
+                        console.log('💾 Document auto-saved successfully:', result.UpdatedAt);
                     } else {
-                        console.error('❌ Failed to auto-save document:', response.status);
+                        console.error('❌ Failed to auto-save document:', response.status, await response.text());
                     }
                 } catch (error) {
                     console.error('❌ Auto-save error:', error);

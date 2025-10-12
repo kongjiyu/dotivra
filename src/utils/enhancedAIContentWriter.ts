@@ -70,6 +70,10 @@ export class EnhancedAIContentWriter {
       color: 'rgba(34, 197, 94, 0.3)' // Green highlight for additions
     });
 
+    // Force update event to trigger auto-save
+    this.editor.commands.blur();
+    this.editor.commands.focus();
+
     // Store the change for later accept/reject (store both original and processed)
     this.activeChanges.set(changeId, {
       position: { ...position, to: newTo },

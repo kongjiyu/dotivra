@@ -1,0 +1,138 @@
+// src/services/aiService.ts
+import { GoogleGenerativeAI } from '@google/generative-ai';
+
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyBlRfTwZ7HAQ3Yv_sCWvNKiHdZyR2yTPe8';
+
+class AIService {
+    private genAI: GoogleGenerativeAI;
+    private model: any;
+
+    constructor() {
+        this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+        this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    }
+
+    async generateContent(prompt: string, context?: string): Promise<string> {
+        try {
+            const fullPrompt = context ? `Context: ${context}\n\nRequest: ${prompt}` : prompt;
+            const result = await this.model.generateContent(fullPrompt);
+            const response = await result.response;
+            return response.text();
+        } catch (error) {
+            console.error('❌ AI Generation Error:', error);
+            throw new Error('Failed to generate AI content');
+        }
+    }
+
+    async improveText(text: string, instruction: string): Promise<string> {
+        const prompt = `
+Improve the following text based on this instruction: "${instruction}"
+
+Original text:
+${text}
+
+Please provide only the improved text without any explanations or additional commentary.
+        `;
+        return this.generateContent(prompt);
+    }
+
+    async expandContent(text: string, topic: string): Promise<string> {
+        const prompt = `
+Expand the following content about "${topic}". Add more detailed information, examples, and relevant points while maintaining the same writing style and tone.
+
+Current content:
+${text}
+
+Please provide only the expanded content without any explanations.
+        `;
+        return this.generateContent(prompt);
+    }
+
+    async summarizeContent(text: string): Promise<string> {
+        const prompt = `
+Create a concise summary of the following content. Keep the key points and main ideas.
+
+Content to summarize:
+${text}
+
+Please provide only the summary without any explanations.
+        `;
+        return this.generateContent(prompt);
+    }
+
+    async generateFromPrompt(prompt: string, documentContext?: string): Promise<string> {
+        let fullPrompt = `
+Generate professional content based on this request: "${prompt}"
+
+The content should be:
+- Well-structured and professional
+- In plain text with minimal formatting (use simple HTML tags only: <h1>, <h2>, <h3>, <p>, <strong>, <em>, <ul>, <ol>, <li>)
+- Include appropriate headings and paragraphs
+- Be comprehensive but concise
+- Do not use complex HTML structures, tables, or nested elements
+        `;
+
+        if (documentContext) {
+            fullPrompt += `\n\nDocument context for reference:\n${documentContext}`;
+        }
+
+        fullPrompt += '\n\nProvide only the content without any explanations or additional text.';
+
+        return this.generateContent(fullPrompt);
+    }
+
+    async chatResponse(message: string, documentContent?: string): Promise<string> {
+        let prompt = `
+You are an AI assistant helping with document editing and writing. Respond to this message: "${message}"
+
+Be helpful, concise, and professional. If the user asks for content generation or editing, provide specific actionable suggestions.
+        `;
+
+        if (documentContent) {
+            prompt += `\n\nCurrent document content for context:\n${documentContent.substring(0, 2000)}`;
+        }
+
+        return this.generateContent(prompt);
+    }
+
+    async analyzeAndSuggest(selectedText: string, documentContext: string): Promise<{
+        improvements: string[];
+        alternatives: string[];
+        expansions: string[];
+    }> {
+        const prompt = `
+Analyze this selected text and provide suggestions:
+
+Selected text: "${selectedText}"
+
+Document context: ${documentContext.substring(0, 1000)}
+
+Please provide:
+1. Improvements (grammar, clarity, style)
+2. Alternative phrasings
+3. Ways to expand or elaborate
+
+Format your response as JSON with the structure:
+{
+  "improvements": ["suggestion1", "suggestion2"],
+  "alternatives": ["alternative1", "alternative2"],
+  "expansions": ["expansion1", "expansion2"]
+}
+        `;
+
+        try {
+            const response = await this.generateContent(prompt);
+            return JSON.parse(response);
+        } catch (error) {
+            console.error('❌ Error parsing AI suggestions:', error);
+            return {
+                improvements: ['Improve clarity and readability'],
+                alternatives: ['Consider alternative phrasing'],
+                expansions: ['Add more detail and examples']
+            };
+        }
+    }
+}
+
+export const aiService = new AIService();
+export default aiService;

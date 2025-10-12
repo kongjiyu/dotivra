@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, FolderPlus, AlertCircle } from 'lucide-react';
+import { API_BASE_URL } from '../../lib/apiConfig';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -43,12 +44,12 @@ interface AddProjectModalProps {
 // ============================================================================
 
 const API_CONFIG = {
-  BASE_URL: 'http://localhost:3001/api',
+  BASE_URL: `${API_BASE_URL}/api`,
   ENDPOINTS: {
     INSTALLATIONS: '/github/installations',
     REPOSITORIES: '/github/repositories'
   }
-} as const;
+};
 
 const AddProjectModal: React.FC<AddProjectModalProps> = ({
   isOpen,
