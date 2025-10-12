@@ -1,13 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import AllProjectsHeader from '../components/allProject/AllProjectHeader';
 import ProjectsGridView from '../components/allProject/ProjectGridLayout';
 import type { Project } from '../types';
 import AddProjectModal from '../components/modal/addProject';
-import { Plus } from 'lucide-react';
+import { Plus, Search } from 'lucide-react';
+import Header from '../components/header/Header';
+import { useAuth } from '../context/AuthContext';
+import { getUserDisplayInfo } from '../utils/user';
 
 const Projects: React.FC = () => {
   const navigate = useNavigate();
+  const { user, userProfile } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
@@ -25,7 +28,8 @@ const Projects: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const response = await fetch('http://localhost:3001/api/projects');
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiBaseUrl}/api/projects`);
       console.log('📡 API Response status:', response.status);
       
       if (!response.ok) {
@@ -34,8 +38,36 @@ const Projects: React.FC = () => {
       
       const data = await response.json();
       console.log('📋 Received projects data:', data);
-      console.log('📦 Setting projects:', data.projects || []);
-      setAllProjects(data.projects || []);
+      const normalizedProjects = (data.projects || []).map((project: any): Project => {
+        const rawCreated =
+          project.Created_Time ??
+          project.lastModified ??
+          project.updated_at ??
+          project.updatedAt ??
+          '';
+
+        const lastModified =
+          typeof rawCreated === 'string'
+            ? rawCreated
+            : rawCreated?.toDate?.()
+            ? rawCreated.toDate().toISOString()
+            : rawCreated
+            ? String(rawCreated)
+            : '';
+
+        return {
+          id: Number(project.Project_Id ?? project.id ?? Date.now()),
+          name: project.ProjectName ?? project.name ?? 'Untitled Project',
+          description: project.Description ?? project.description ?? '',
+          githubLink: project.GitHubRepo ?? project.githubLink ?? '',
+          lastModified,
+          userDocsCount: Number(project.userDocsCount ?? project.user_docs_count ?? 0),
+          devDocsCount: Number(project.devDocsCount ?? project.dev_docs_count ?? 0),
+        };
+      });
+
+      console.log('📦 Setting projects:', normalizedProjects);
+      setAllProjects(normalizedProjects);
     } catch (err) {
       console.error('❌ Error loading projects:', err);
       setError(err instanceof Error ? err.message : 'Failed to load projects');
@@ -53,10 +85,11 @@ const Projects: React.FC = () => {
   const filteredProjects = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return allProjects;
-    return allProjects.filter(project => 
-      project.name.toLowerCase().includes(query) ||
-      project.description.toLowerCase().includes(query)
-    );
+    return allProjects.filter(project => {
+      const name = (project.name || '').toLowerCase();
+      const description = (project.description || '').toLowerCase();
+      return name.includes(query) || description.includes(query);
+    });
   }, [searchQuery, allProjects]);
 
   // Debug filtered projects
@@ -79,25 +112,34 @@ const Projects: React.FC = () => {
     console.log('Delete project:', project.name);
   };
 
+  const projectSubtitle = `${filteredProjects.length} project${filteredProjects.length === 1 ? '' : 's'} • Manage and organize your documentation`;
+  const { name: displayName, initials } = getUserDisplayInfo(userProfile, user);
+
   return (
     <div className="min-h-screen bg-gray-50">
-      <AllProjectsHeader 
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
-        projectCount={filteredProjects.length}
-      />
+      <Header title="All Projects" subtitle={projectSubtitle} userName={displayName} initials={initials} />
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-       
-        {/* Add Project Button */}
-        <div className="mb-6 flex justify-end">
-          <button
-            onClick={handleNewProject}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-          >
-            <Plus className="w-4 h-4" />
-            <span>New Project</span>
-          </button>
+      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="relative w-full md:w-96">
+            <Search className="h-4 w-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search projects..."
+              className="w-full pl-11 pr-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 bg-white shadow-sm"
+            />
+          </div>
+          <div className="flex justify-end">
+            <button
+              onClick={handleNewProject}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>New Project</span>
+            </button>
+          </div>
         </div>
 
         {loading ? (

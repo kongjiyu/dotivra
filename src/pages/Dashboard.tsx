@@ -1,16 +1,20 @@
 // src/components/dashboard/Dashboard.tsx - With navigation
 import React, { useState } from 'react';
-import { CircleUser, FolderOpen } from 'lucide-react';
+import Header from '../components/header/Header';
 import { useNavigate } from 'react-router-dom';
 import TemplateGrid from '../components/dashboard/TemplateGrid';
 import ProjectList from '../components/dashboard/ProjectList';
 import AddProjectModal from '../components/modal/addProject';
 import AddDocumentFromTemplate from '../components/modal/addDocumentFromTemplate';
 import type { Template } from '../types';
+import { useAuth } from '../context/AuthContext';
+import { getUserDisplayInfo } from '../utils/user';
 
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
+  const { user, userProfile } = useAuth();
+  const { name: displayName, initials } = getUserDisplayInfo(userProfile, user);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -85,7 +89,7 @@ const Dashboard: React.FC = () => {
 
   const handleExploreAll = () => {
     console.log('Explore all templates clicked');
-    navigate('/ai-generator');
+    navigate('/templates');
   };
 
   const handleProjectClick = (projectId: string) => {
@@ -101,47 +105,26 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <FolderOpen className="h-9 w-9 text-blue-600" />
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Dotriva</h1>
-                <p className="text-gray-600 mt-1">Create and manage developer documentation with AI assistance</p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate('/profile')}
-              aria-label="Open profile"
-              className="p-2 text-gray-500 rounded-full hover:text-gray-900 hover:bg-gray-100 transition-colors"
-            >
-              <CircleUser className="h-8 w-8" />
-            </button>
-          </div>
-        </div>
-      </div>
+    <div className="min-h-screen bg-gray-50 text-gray-800">
+      <Header
+        userName={displayName}
+        initials={initials}
+      />
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-     
-        
-        {/* Templates Section - Top */}
+      <main className="max-w-6xl mx-auto px-6 py-6 space-y-8">
         <TemplateGrid 
           onTemplateClick={handleTemplateClick}
           onExploreAll={handleExploreAll}
+          onAddProject={handleNewProject}
         />
 
-        {/* Projects Section - Bottom */}
         <ProjectList 
           onProjectClick={handleProjectClick}
           onViewAllProjects={handleViewAllProjects}
           onNewProject={handleNewProject}
         />
-      </div>
+      </main>
 
       {/* AddProjectModal with GitHub Integration */}
       <AddProjectModal
