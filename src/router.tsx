@@ -61,7 +61,7 @@ const router = createBrowserRouter([
   },
   {
     path: "/ai-generator",
-    element: <ProtectedRoute><AIGenerator /></ProtectedRoute>,
+    element: <ProtectedRoute><AllTemplate /></ProtectedRoute>,
     errorElement: <ErrorPage />
   },
   {

@@ -26,7 +26,7 @@ interface AddDocumentFromTemplateProps {
   onClose: () => void;
   onCreateDocument: (data: {
     template: Template;
-    projectId?: number;
+    projectId?: string;
     newProjectName?: string;
     newProjectDescription?: string;
     selectedRepo?: string;
@@ -46,7 +46,7 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
 }) => {
   const [step, setStep] = useState<FlowStep>('project-selection');
   const [projectOption, setProjectOption] = useState<ProjectOption>('new');
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
   const [selectedRepo, setSelectedRepo] = useState('');
@@ -77,7 +77,7 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
   // Auto-fill document name based on template
   useEffect(() => {
     if (template) {
-      setDocumentName(template.name);
+      setDocumentName(template.TemplateName);
     }
   }, [template]);
 
@@ -195,13 +195,13 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div className="flex items-center space-x-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50">
-                <template.icon className="h-5 w-5 text-blue-600" />
+                <FileText className="h-5 w-5 text-blue-600" />
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Create {template.name}
+                  Create {template.TemplateName}
                 </h3>
-                <p className="text-sm text-gray-600">{template.description}</p>
+                <p className="text-sm text-gray-600">{template.Description}</p>
               </div>
             </div>
             <button
@@ -355,14 +355,14 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                             <input
                               type="radio"
                               name="selectedProject"
-                              value={project.id}
-                              checked={selectedProjectId === project.id}
-                              onChange={() => setSelectedProjectId(project.id)}
+                              value={project.id || project.Project_Id}
+                              checked={selectedProjectId === (project.id || project.Project_Id)}
+                              onChange={() => setSelectedProjectId(project.id || project.Project_Id || null)}
                               className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                             />
                             <div className="ml-3 flex-1">
-                              <div className="font-medium text-gray-900">{project.name}</div>
-                              <div className="text-sm text-gray-600 truncate">{project.description}</div>
+                              <div className="font-medium text-gray-900">{project.ProjectName}</div>
+                              <div className="text-sm text-gray-600 truncate">{project.Description}</div>
                             </div>
                           </label>
                         ))}
@@ -410,12 +410,12 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                     {/* Template Info */}
                     <div className="bg-blue-50 p-4 rounded-lg">
                       <div className="flex items-center">
-                        <template.icon className="h-5 w-5 text-blue-600 mr-2" />
+                        <FileText className="h-5 w-5 text-blue-600 mr-2" />
                         <div>
-                          <div className="font-medium text-blue-900">Template: {template.name}</div>
-                          <div className="text-sm text-blue-700">{template.description}</div>
+                          <div className="font-medium text-blue-900">Template: {template.TemplateName}</div>
+                          <div className="text-sm text-blue-700">{template.Description}</div>
                           <div className="text-xs text-blue-600 mt-1 capitalize">
-                            Category: {template.category}
+                            Category: {template.Category}
                           </div>
                         </div>
                       </div>

@@ -81,7 +81,7 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
             </div>
 
             <p className="text-sm text-gray-600 leading-relaxed line-clamp-3 min-h-[3.5rem]">
-              {project.description || 'No description provided.'}
+              {project.Description || 'No description provided.'}
             </p>
 
             <div className="flex items-center justify-between text-xs text-gray-500 bg-gray-50/70 rounded-lg px-3 py-2">
@@ -95,22 +95,22 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
               <div className="flex items-center gap-4 text-sm text-gray-600">
                 <div className="flex items-center gap-1">
                   <FileText className="h-4 w-4 text-emerald-600" />
-                  <span>{project.userDocsCount}</span>
+                  <span>0</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <Code className="h-4 w-4 text-purple-600" />
-                  <span>{project.devDocsCount}</span>
+                  <span>0</span>
                 </div>
               </div>
               <span className="text-xs text-gray-500">
-                {project.userDocsCount + project.devDocsCount} total docs
+                0 total docs
               </span>
             </div>
 
-            {project.githubLink && (
+            {project.GitHubRepo && (
               <div className="pt-3 border-t border-gray-100">
                 <a
-                  href={project.githubLink}
+                  href={project.GitHubRepo}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}

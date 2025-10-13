@@ -1,16 +1,7 @@
 // src/components/dashboard/ProjectList.tsx
-import { API_ENDPOINTS } from '@/lib/apiConfig';
-
-// For now, let's define a simple Project interface here to avoid import issues
-interface Project {
-  Project_Id?: string;
-  ProjectName: string;
-  Description: string;
-  GitHubRepo: string;
-  Created_Time: any;
-}
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, LayoutList, LayoutGrid } from 'lucide-react';
+import { API_ENDPOINTS } from '@/lib/apiConfig';
 import type { Project } from '../../types';
 
 interface ProjectListProps {
@@ -36,13 +27,15 @@ const avatarColors = [
   'bg-purple-400',
 ];
 
-const parseDate = (value: string): Date | null => {
+const parseDate = (value: any): Date | null => {
   if (!value) return null;
+  // Handle Firestore Timestamp
+  if (value?.toDate) return value.toDate();
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const formatDateOnly = (value: string): string => {
+const formatDateOnly = (value: any): string => {
   const date = parseDate(value);
   if (!date) return '—';
   return date.toLocaleDateString(undefined, {
@@ -89,31 +82,16 @@ const ProjectList: React.FC<ProjectListProps> = ({
       console.log('📋 ProjectList received projects:', data);
 
       if (data.success) {
+        // Keep the raw Project data for Firebase compatibility
         const normalizedProjects = (data.projects || []).map((project: any): Project => {
-          const rawCreated =
-            project.Created_Time ??
-            project.lastModified ??
-            project.updated_at ??
-            project.updatedAt ??
-            '';
-
-          const lastModified =
-            typeof rawCreated === 'string'
-              ? rawCreated
-              : rawCreated?.toDate?.()
-              ? rawCreated.toDate().toISOString()
-              : rawCreated
-              ? String(rawCreated)
-              : '';
-
           return {
-            id: Number(project.Project_Id ?? project.id ?? Date.now()),
-            name: project.ProjectName ?? project.name ?? 'Untitled Project',
-            description: project.Description ?? project.description ?? '',
-            githubLink: project.GitHubRepo ?? project.githubLink ?? '',
-            lastModified,
-            userDocsCount: Number(project.userDocsCount ?? project.user_docs_count ?? 0),
-            devDocsCount: Number(project.devDocsCount ?? project.dev_docs_count ?? 0),
+            id: project.id,
+            Project_Id: project.Project_Id ?? project.id,
+            ProjectName: project.ProjectName ?? project.name ?? 'Untitled Project',
+            Description: project.Description ?? project.description ?? '',
+            GitHubRepo: project.GitHubRepo ?? project.githubLink ?? '',
+            Created_Time: project.Created_Time ?? project.lastModified,
+            User_Id: project.User_Id ?? 'unknown',
           };
         });
 
@@ -137,8 +115,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
     if (!searchTerm.trim()) return projects;
     const normalized = searchTerm.toLowerCase();
     return projects.filter((project) => {
-      const name = project.name?.toLowerCase() || '';
-      const description = project.description?.toLowerCase() || '';
+      const name = project.ProjectName?.toLowerCase() || '';
+      const description = project.Description?.toLowerCase() || '';
       return name.includes(normalized) || description.includes(normalized);
     });
   }, [projects, searchTerm]);
@@ -237,25 +215,25 @@ const ProjectList: React.FC<ProjectListProps> = ({
           <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
             {filteredProjects.map((project, index) => {
             const status = getStatusForIndex(index);
-            const formattedDate = formatDateOnly(project.lastModified);
+            const formattedDate = formatDateOnly(project.Created_Time);
 
               return (
                 <tr
-                  key={project.id || `${project.name}-${index}`}
+                  key={project.id || `${project.ProjectName}-${index}`}
                   className="hover:bg-blue-50/40 cursor-pointer transition-colors"
-                  onClick={() => onProjectClick(String(project.id))}
+                  onClick={() => onProjectClick(String(project.id || project.Project_Id))}
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-medium shadow">
-                        {getInitials(project.name)}
+                        {getInitials(project.ProjectName)}
                       </div>
                       <div className="min-w-0">
                         <h3 className="font-medium text-gray-900 truncate">
-                          {project.name || 'Untitled Project'}
+                          {project.ProjectName || 'Untitled Project'}
                         </h3>
                         <p className="text-xs text-gray-500 truncate">
-                          {project.description || 'Documentation workspace'}
+                          {project.Description || 'Documentation workspace'}
                         </p>
                       </div>
                     </div>
@@ -268,7 +246,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    {renderTeamStack(project.name, index)}
+                    {renderTeamStack(project.ProjectName, index)}
                   </td>
                   <td className="px-6 py-4 text-gray-500">
                     {formattedDate}
@@ -287,12 +265,12 @@ const ProjectList: React.FC<ProjectListProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {filteredProjects.map((project, index) => {
           const status = getStatusForIndex(index);
-          const formattedDate = formatDateOnly(project.lastModified);
+          const formattedDate = formatDateOnly(project.Created_Time);
 
           return (
             <button
-              key={project.id || `${project.name}-${index}`}
-              onClick={() => onProjectClick(String(project.id))}
+              key={project.id || `${project.ProjectName}-${index}`}
+              onClick={() => onProjectClick(String(project.id || project.Project_Id))}
               className="relative text-left bg-white border border-gray-200 rounded-2xl shadow-sm hover:border-blue-200 hover:shadow-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 flex flex-col"
             >
               <div className="absolute top-4 right-4">
@@ -304,22 +282,22 @@ const ProjectList: React.FC<ProjectListProps> = ({
               </div>
               <div className="h-32 bg-gray-50 border-b border-gray-100 flex items-center justify-center">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-semibold shadow">
-                  {getInitials(project.name)}
+                  {getInitials(project.ProjectName)}
                 </div>
               </div>
               <div className="p-5 space-y-4 flex-1 flex flex-col">
                 <div className="space-y-1">
                   <h3 className="font-medium text-gray-900">
-                    {project.name || 'Untitled Project'}
+                    {project.ProjectName || 'Untitled Project'}
                   </h3>
                   <p className="text-xs text-gray-500 leading-snug h-[36px] overflow-hidden">
-                    {project.description || 'Documentation workspace'}
+                    {project.Description || 'Documentation workspace'}
                   </p>
                 </div>
                 <div className="flex items-center justify-between text-xs text-gray-500 mt-auto">
                   <span>{formattedDate}</span>
                   <span className="flex items-center gap-1 text-blue-600">
-                    {project.githubLink ? 'Repo linked' : 'No repo'}
+                    {project.GitHubRepo ? 'Repo linked' : 'No repo'}
                   </span>
                 </div>
               </div>
