@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FileText, Code } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import ProjectHeader from '../components/project/ProjectHeader';
 import DocumentSection from '../components/project/DocumentSection';
 import AddDocumentModal from '../components/project/AddDocumentModal';
@@ -18,6 +19,7 @@ type CreateDocumentPayload = {
 const ProjectOverview: React.FC = () => {
   const navigate = useNavigate();
   const { projectId } = useParams<{ projectId: string }>();
+  const { user, userProfile } = useAuth();
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [editedProjectModalOpen, setEditedProjectModalOpen] = useState(false);
@@ -206,16 +208,18 @@ const ProjectOverview: React.FC = () => {
         throw new Error('Project ID not available');
       }
 
-      // Create document data
+      if (!user || !userProfile) {
+        throw new Error('User must be logged in to create documents');
+      }
+
+      // Create document data matching API expectations
       const documentData = {
-        DocumentName: name,
-        DocumentType: template.TemplateName || 'Custom Document',
-        DocumentCategory: category === 'user' ? 'User' : 'Developer',
-        Project_Id: project.id || project.Project_Id, // Use Firestore ID or custom Project_Id
-        Template_Id: template.id || template.Template_Id,
-        User_Id: 'current-user-id', // TODO: Get from auth context
-        Content: template.TemplatePrompt || '', // Initial content from template
-        IsDraft: true
+        title: name, // Backend expects 'title' field (lowercase)
+        content: template.TemplatePrompt || '', // Initial content from template
+        projectId: project.Project_Id || project.id, // Backend expects 'projectId' field
+        userId: user.uid || userProfile.uid, // Backend expects 'userId' field
+        templateId: template.id || template.Template_Id, // Backend expects 'templateId'
+        documentCategory: category === 'user' ? 'User' : category === 'developer' ? 'Developer' : 'General',
       };
 
       console.log('Sending document creation request:', documentData);
