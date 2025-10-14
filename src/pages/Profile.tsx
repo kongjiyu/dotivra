@@ -2,7 +2,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/header/Header';
+import { LogOut } from 'lucide-react';
 import { ProfileInfoCard, RecentProjectsCard, DangerZoneCard } from '../components/profile';
+import GitHubConnectionCard from '../components/profile/GitHubConnectionCard';
 import { useAuth } from '../context/AuthContext';
 import { getUserDisplayInfo } from '../utils/user';
 import type { Project } from '../types';
@@ -107,6 +109,11 @@ const Profile: React.FC = () => {
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
         {/* Profile Information */}
         <ProfileInfoCard user={user} />
+
+        {/* GitHub Integration */}
+        <GitHubConnectionCard onConnectionChange={(connected) => {
+          console.log('GitHub connection status changed:', connected);
+        }} />
 
         {/* Recent Projects */}
         <RecentProjectsCard

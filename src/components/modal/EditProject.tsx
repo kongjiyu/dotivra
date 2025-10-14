@@ -97,7 +97,7 @@ const EditProjectModal: React.FC<EditProjectModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto" style={{ zIndex: 9999 }}>
-      <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose} />
+      <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={onClose} />
 
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative w-full max-w-lg transform overflow-hidden rounded-xl bg-white shadow-xl">

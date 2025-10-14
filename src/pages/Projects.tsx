@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import ProjectsGridView from '../components/allProject/ProjectGridLayout';
 import type { Project } from '../types';
 import AddProjectModal from '../components/modal/addProject';
+import { API_ENDPOINTS } from '../lib/apiConfig';
 import { Plus, Search } from 'lucide-react';
 import Header from '../components/header/Header';
 import { useAuth } from '../context/AuthContext';
@@ -28,8 +29,7 @@ const Projects: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001';
-      const response = await fetch(`${apiBaseUrl}/api/projects`);
+      const response = await fetch(API_ENDPOINTS.projects());
       console.log('📡 API Response status:', response.status);
       
       if (!response.ok) {
@@ -56,13 +56,13 @@ const Projects: React.FC = () => {
             : '';
 
         return {
-          id: Number(project.Project_Id ?? project.id ?? Date.now()),
-          name: project.ProjectName ?? project.name ?? 'Untitled Project',
-          description: project.Description ?? project.description ?? '',
-          githubLink: project.GitHubRepo ?? project.githubLink ?? '',
-          lastModified,
-          userDocsCount: Number(project.userDocsCount ?? project.user_docs_count ?? 0),
-          devDocsCount: Number(project.devDocsCount ?? project.dev_docs_count ?? 0),
+          id: String(project.Project_Id ?? project.id ?? Date.now()),
+          ProjectName: project.ProjectName ?? project.name ?? 'Untitled Project',
+          Description: project.Description ?? project.description ?? '',
+          GitHubRepo: project.GitHubRepo ?? project.githubLink ?? '',
+          User_Id: project.User_Id ?? 'unknown',
+          Created_Time: rawCreated,
+          Updated_Time: rawCreated,
         };
       });
 
@@ -86,8 +86,8 @@ const Projects: React.FC = () => {
     const query = searchQuery.trim().toLowerCase();
     if (!query) return allProjects;
     return allProjects.filter(project => {
-      const name = (project.name || '').toLowerCase();
-      const description = (project.description || '').toLowerCase();
+      const name = (project.ProjectName || '').toLowerCase();
+      const description = (project.Description || '').toLowerCase();
       return name.includes(query) || description.includes(query);
     });
   }, [searchQuery, allProjects]);
@@ -105,11 +105,11 @@ const Projects: React.FC = () => {
   };
 
   const handleProjectEdit = (project: Project) => {
-    console.log('Edit project:', project.name);
+    console.log('Edit project:', project.ProjectName);
   };
 
   const handleProjectDelete = (project: Project) => {
-    console.log('Delete project:', project.name);
+    console.log('Delete project:', project.ProjectName);
   };
 
   const projectSubtitle = `${filteredProjects.length} project${filteredProjects.length === 1 ? '' : 's'} • Manage and organize your documentation`;
@@ -177,9 +177,10 @@ const Projects: React.FC = () => {
             </p>
             <button
               onClick={handleNewProject}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
             >
-              Create Project
+              <Plus className="w-4 h-4" />
+              <span>Create Project</span>
             </button>
           </div>
         )}
@@ -193,7 +194,7 @@ const Projects: React.FC = () => {
           try {
             console.log('Creating project:', projectData);
             
-            const response = await fetch('http://localhost:3001/api/projects', {
+            const response = await fetch(API_ENDPOINTS.projects(), {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',

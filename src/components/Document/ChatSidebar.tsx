@@ -8,6 +8,8 @@ import type { Editor } from "@tiptap/react";
 import { useDocument } from "@/context/DocumentContext";
 import { EnhancedAIContentWriter } from "@/utils/enhancedAIContentWriter";
 import type { ContentPosition } from "@/utils/enhancedAIContentWriter";
+import { aiService } from "@/services/aiService";
+import { useAuth } from "@/context/AuthContext";
 
 export type ChatMessage = {
     id: string;
@@ -24,6 +26,7 @@ interface ChatSidebarProps {
     suggestions?: string[];
     editor?: Editor; // Add editor prop for AI content integration
     initialMessage?: string; // Add initial message prop
+    repositoryInfo?: { owner: string; repo: string }; // GitHub repository context
 }
 
 export default function ChatSidebar({
@@ -34,6 +37,7 @@ export default function ChatSidebar({
     suggestions,
     editor,
     initialMessage,
+    repositoryInfo,
 }: ChatSidebarProps) {
     const [input, setInput] = useState("");
     const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([]);
@@ -59,15 +63,23 @@ export default function ChatSidebar({
     // Add initial hello message when chat opens
     useEffect(() => {
         if (open && !externalMessages && internalMessages.length === 0) {
+            let content = 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content.\n\n**Special AI Operations:**\n• Type `*add` to add new content\n• Type `*remove` to mark content for removal\n• Type `*edit` to replace existing content\n\nThese operations will show highlighted changes in your document with accept/reject options.';
+            
+            if (repositoryInfo) {
+                content += `\n\n**🚀 Repository Integration Active!**\n📂 Connected to: \`${repositoryInfo.owner}/${repositoryInfo.repo}\`\n\n**Repository Commands:**\n• "Analyze code in [filename]" - Explain specific files\n• "Improve the React components" - Code improvements\n• "Debug the authentication flow" - Find issues\n• "Explain how routing works" - Understand patterns\n• "Document the API endpoints" - Generate docs\n\nI have access to your repository structure, README, and key files to provide contextual assistance!`;
+            }
+            
+            content += '\n\nHow can I assist you today?';
+            
             const helloMsg: ChatMessage = {
                 id: 'hello-msg',
                 role: 'assistant',
-                content: 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content.\n\n**Special AI Operations:**\n• Type `*add` to add new content\n• Type `*remove` to mark content for removal\n• Type `*edit` to replace existing content\n\nThese operations will show highlighted changes in your document with accept/reject options. How can I assist you today?',
+                content,
                 timestamp: Date.now(),
             };
             setInternalMessages([helloMsg]);
         }
-    }, [open, externalMessages, internalMessages.length]);
+    }, [open, externalMessages, internalMessages.length, repositoryInfo]);
 
     // Initialize AI Writer when editor is available
     useEffect(() => {
@@ -188,138 +200,89 @@ export default function ChatSidebar({
 
     // AI Content Generation Functions
     const generateAIContent = async (prompt: string): Promise<string> => {
-        // Enhanced AI content generation based on user input
-        return new Promise((resolve) => {
-            setTimeout(() => {
-                const lowerPrompt = prompt.toLowerCase();
-                let content = '';
-
-                // Generate contextual content based on keywords in the prompt
-                if (lowerPrompt.includes('summary') || lowerPrompt.includes('summarize')) {
-                    content = `## Document Summary\n\nThis comprehensive document outlines our strategic approach and key initiatives. The main focus areas include:\n\n### Key Highlights:\n- **Strategic Vision**: Clear direction for 2024 and beyond\n- **Implementation Framework**: Structured approach to execution\n- **Success Metrics**: Measurable outcomes and KPIs\n- **Risk Management**: Proactive mitigation strategies\n\n### Recommendations:\n1. Proceed with implementation as outlined\n2. Monitor progress against defined metrics\n3. Adjust strategies based on market feedback`;
-
-                } else if (lowerPrompt.includes('conclusion') || lowerPrompt.includes('ending') || lowerPrompt.includes('wrap up')) {
-                    content = `## Final Thoughts\n\nAs we move forward with this strategic initiative, it's essential to maintain focus on our core objectives while remaining agile enough to adapt to changing circumstances.\n\n### Next Steps:\n- **Immediate Actions**: Begin implementation of Phase 1 initiatives\n- **Short-term Goals**: Establish baseline metrics and monitoring systems\n- **Long-term Vision**: Position for sustained growth and market leadership\n\n### Call to Action:\nThe success of this strategy depends on coordinated effort across all teams. We encourage active participation and continuous feedback to ensure optimal outcomes.\n\n*"Strategy without execution is hallucination. Execution without strategy is chaos."* - Let's ensure we have both.`;
-
-                } else if (lowerPrompt.includes('next steps') || lowerPrompt.includes('action') || lowerPrompt.includes('todo')) {
-                    content = `## Action Items & Next Steps\n\n### Immediate Actions (Next 30 Days):\n- [ ] Finalize resource allocation and team assignments\n- [ ] Establish communication protocols and reporting structure\n- [ ] Set up monitoring dashboards and success metrics\n- [ ] Conduct stakeholder alignment sessions\n\n### Short-term Goals (Next 90 Days):\n- [ ] Launch pilot programs in selected markets\n- [ ] Implement feedback collection mechanisms\n- [ ] Optimize processes based on initial results\n- [ ] Prepare for full-scale rollout\n\n### Long-term Milestones (6-12 Months):\n- [ ] Achieve target performance metrics\n- [ ] Expand to additional markets or segments\n- [ ] Conduct comprehensive strategy review\n- [ ] Plan for next strategic cycle`;
-
-                } else if (lowerPrompt.includes('improve') || lowerPrompt.includes('enhance') || lowerPrompt.includes('better')) {
-                    content = `## Enhancement Recommendations
-
-### Content Improvements:
-- **Add Supporting Data**: Include relevant statistics and benchmarks
-- **Visual Elements**: Consider adding charts, graphs, or infographics  
-- **Case Studies**: Include real-world examples and success stories
-- **Expert Quotes**: Add insights from industry leaders or stakeholders
-
-### Structure Enhancements:
-1. **Executive Summary**: Add a concise overview at the beginning
-2. **Appendices**: Include detailed data and supporting materials
-3. **Glossary**: Define technical terms and acronyms
-4. **Reference Section**: Add citations and further reading
-
-### Code Examples:
-Here's how to implement \`structured data\`:
-
-\`\`\`javascript
-const enhancedData = {
-  title: "Document Enhancement",
-  methods: ["analysis", "optimization", "validation"]
-};
-\`\`\`
-
-### Style Recommendations:
-- Use *active voice* for clarity and impact
-- Vary **sentence length** for better readability
-- Include ***transition sentences*** between sections
-- Strengthen conclusions with specific recommendations
-
-> "The best way to improve documentation is through continuous iteration and user feedback."
-
-### Reference Table:
-| Aspect | Current | Enhanced | Impact |
-|--------|---------|----------|--------|
-| Structure | Basic | Advanced | High |
-| Content | Good | Excellent | Medium |
-| Style | Standard | Professional | High |`;
-
-                } else if (lowerPrompt.includes('risk') || lowerPrompt.includes('challenge') || lowerPrompt.includes('mitigation')) {
-                    content = `## Risk Assessment & Mitigation\n\n### Identified Risks:\n\n#### High Priority:\n1. **Market Volatility**: Economic uncertainties may impact demand\n   - *Mitigation*: Diversify market exposure and maintain flexible pricing\n\n2. **Resource Constraints**: Limited availability of skilled personnel\n   - *Mitigation*: Invest in training programs and strategic partnerships\n\n3. **Technology Disruption**: Rapid pace of technological change\n   - *Mitigation*: Continuous innovation and agile development practices\n\n#### Medium Priority:\n- Regulatory changes in target markets\n- Competitive response to our initiatives\n- Supply chain disruptions\n\n### Monitoring Framework:\n- Monthly risk assessment reviews\n- Quarterly strategy adjustments\n- Annual comprehensive risk audit`;
-
-                } else if (lowerPrompt.includes('metric') || lowerPrompt.includes('kpi') || lowerPrompt.includes('measure')) {
-                    content = `## Key Performance Indicators\n\n### Primary Success Metrics:\n\n#### Financial Performance:\n- **Revenue Growth**: 25% year-over-year increase\n- **Profit Margins**: Maintain or improve current levels\n- **ROI**: Achieve minimum 20% return on strategic investments\n- **Cost Efficiency**: Reduce operational costs by 15%\n\n#### Operational Excellence:\n- **Customer Satisfaction**: 95% satisfaction score\n- **Quality Metrics**: <2% defect rate\n- **Delivery Performance**: 98% on-time delivery\n- **Process Efficiency**: 30% reduction in cycle time\n\n#### Growth Indicators:\n- **Market Share**: Increase by 5 percentage points\n- **Customer Acquisition**: 40% increase in new customers\n- **Employee Engagement**: 90% satisfaction score\n- **Innovation Pipeline**: 5 new products/services launched\n\n### Reporting Schedule:\n- Daily operational dashboards\n- Weekly performance reviews\n- Monthly executive summaries\n- Quarterly strategic assessments`;
-
-                } else {
-                    // Generate contextual content based on the user's specific request
-                    const topics = [
-                        'implementation strategy',
-                        'market analysis',
-                        'competitive positioning',
-                        'resource planning',
-                        'stakeholder engagement',
-                        'technology roadmap',
-                        'performance optimization'
-                    ];
-
-                    const randomTopic = topics[Math.floor(Math.random() * topics.length)];
-
-                    content = `# Additional Insights: ${prompt}
-
-## Context:
-Based on your request **"${prompt}"**, here are some relevant considerations and recommendations with mixed *markdown* and <strong>HTML</strong> formatting:
-
-### Key Points:
-- **Strategic Alignment**: Ensure this initiative aligns with overall business objectives
-- ***Resource Requirements***: Consider the necessary personnel, budget, and timeline  
-- **Success Criteria**: Define clear, measurable outcomes and milestones
-- <em>Risk Factors</em>: Identify potential challenges and mitigation strategies
-
-### Code Implementation:
-\`\`\`typescript
-interface ProjectInsights {
-  topic: string;
-  priority: "high" | "medium" | "low";
-  timeline: number;
-}
-
-const insight: ProjectInsights = {
-  topic: "${randomTopic}",
-  priority: "high", 
-  timeline: 30
-};
-\`\`\`
-
-### Detailed Analysis:
-This topic relates to our broader **${randomTopic}** and should be integrated into our comprehensive approach. Consider the following:
-
-1. **Current State Assessment**: Where are we today?
-2. **Desired Outcomes**: What specific results are we targeting?  
-3. **Action Steps**: What concrete steps will move us forward?
-4. **Success Metrics**: How will we measure progress and success?
-
-> "Success is not final, failure is not fatal: it is the courage to continue that counts." - Winston Churchill
-
-### Comparison Matrix:
-| Aspect | Before | After | Impact Level |
-|--------|--------|--------|--------------|
-| Efficiency | 60% | 85% | <strong>High</strong> |
-| Quality | Good | *Excellent* | Medium |  
-| Speed | Standard | **Fast** | High |
-
-### Recommendations:
-- Conduct stakeholder consultation to validate approach
-- Develop detailed implementation timeline
-- Establish clear accountability and governance structure  
-- Create feedback loops for continuous improvement
-
-### Links and References:
-Check out [our methodology](https://example.com/methodology) and \`inline code examples\` for more details.`;
+        try {
+            console.log('🤖 Generating AI content for prompt:', prompt);
+            
+            // Determine the type of AI operation based on the prompt
+            const lowerPrompt = prompt.toLowerCase();
+            
+            // Get user for repository operations (only when needed)
+            const { user } = useAuth();
+            
+            // Check for repository-specific commands
+            if (repositoryInfo && user && (
+                lowerPrompt.includes('analyze code') || 
+                lowerPrompt.includes('explain file') || 
+                lowerPrompt.includes('improve code') || 
+                lowerPrompt.includes('debug') ||
+                lowerPrompt.includes('repository') ||
+                lowerPrompt.includes('codebase') ||
+                lowerPrompt.includes('.js') || lowerPrompt.includes('.ts') || 
+                lowerPrompt.includes('.tsx') || lowerPrompt.includes('.py') || 
+                lowerPrompt.includes('.java') || lowerPrompt.includes('.cpp')
+            )) {
+                console.log('🔍 Repository-aware request detected, using repository context');
+                
+                // Check if user is asking about a specific file
+                const fileMatch = prompt.match(/([a-zA-Z0-9_-]+\.[a-zA-Z]+)/);
+                if (fileMatch) {
+                    const fileName = fileMatch[1];
+                    try {
+                        const analysis = lowerPrompt.includes('improve') ? 'improve' :
+                                       lowerPrompt.includes('debug') ? 'debug' :
+                                       lowerPrompt.includes('document') ? 'document' : 'explain';
+                        
+                        const result = await aiService.analyzeRepositoryCode(user, repositoryInfo, fileName, analysis);
+                        return `<h2>Repository Analysis: ${fileName}</h2>\n${result}`;
+                    } catch (error) {
+                        console.log('Could not find specific file, using general repository context');
+                    }
                 }
-
-                resolve(content);
-            }, 1500);
-        });
+                
+                // General repository-aware generation
+                const result = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, documentContent);
+                return `<h2>Repository-Aware Response</h2>\n${result}`;
+            }
+            
+            if (lowerPrompt.includes('summarize') || lowerPrompt.includes('summary')) {
+                // Generate summary of current document
+                const summary = await aiService.summarizeContent(documentContent || '');
+                return `<h2>Document Summary</h2>\n${summary}`;
+            } else if (lowerPrompt.includes('improve') || lowerPrompt.includes('enhance')) {
+                // Get selected text or current paragraph
+                const selectedText = editor?.state.selection.empty ? '' : editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to);
+                if (selectedText) {
+                    const improved = await aiService.improveText(selectedText, prompt);
+                    return `<h3>Improved Version:</h3>\n${improved}`;
+                } else {
+                    return `<p>Please select some text first, then ask me to improve it.</p>`;
+                }
+            } else if (lowerPrompt.includes('expand') || lowerPrompt.includes('elaborate')) {
+                // Expand on current content
+                const selectedText = editor?.state.selection.empty ? '' : editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to);
+                if (selectedText) {
+                    const expanded = await aiService.expandContent(selectedText, prompt);
+                    return expanded;
+                } else {
+                    const expanded = await aiService.expandContent(documentContent || '', prompt);
+                    return `<h2>Expanded Content</h2>\n${expanded}`;
+                }
+            } else {
+                // Check if we have repository context for better general generation
+                if (repositoryInfo && user) {
+                    console.log('🎯 Using repository context for general generation');
+                    const generated = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, documentContent);
+                    return generated;
+                } else {
+                    // Fallback to regular generation
+                    const generated = await aiService.generateFromPrompt(prompt, documentContent);
+                    return generated;
+                }
+            }
+        } catch (error) {
+            console.error('❌ AI Content Generation Error:', error);
+            return `<p>I apologize, but I encountered an error while generating content. Please try rephrasing your request or try again later.</p>`;
+        }
     };
 
     // Regular AI content generation now uses EnhancedAIContentWriter for consistency
@@ -622,13 +585,19 @@ Check out [our methodology](https://example.com/methodology) and \`inline code e
                     {(suggestions?.length ?? 0) > 0 && input.length === 0 && !messages.some(m => m.role === 'user') && (
                         <div className="px-3 pb-2">
                             <div className="flex flex-wrap justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                {(suggestions ?? [
+                                {(suggestions ?? (repositoryInfo ? [
+                                    "*add",
+                                    "*remove", 
+                                    "*edit",
+                                    "Analyze repository",
+                                    "Explain codebase",
+                                ] : [
                                     "*add",
                                     "*remove",
-                                    "*edit",
+                                    "*edit", 
                                     "Improve content",
                                     "Add summary",
-                                ]).slice(0, 5).map((s, idx) => (
+                                ])).slice(0, 5).map((s, idx) => (
                                     <Button
                                         key={`${idx}-${s.slice(0, 12)}`}
                                         variant="outline"

@@ -7,6 +7,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
+import { WebSocketServer } from 'ws';
+import http from 'http';
 
 // Import regular Firebase
 import { initializeApp } from 'firebase/app';
@@ -1068,6 +1070,128 @@ app.get("/api/document/chat/agent/action/:docId", async (req, res) => {
     res.json({ action });
   } catch (err) {
     res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+/* ------------------ GitHub OAuth ------------------ */
+// GitHub OAuth token exchange endpoint
+app.post('/api/github/oauth/token', async (req, res) => {
+  try {
+    const { code, client_id, redirect_uri } = req.body;
+    
+    if (!code || !client_id) {
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    // Use client secret from server environment variables for security
+    const client_secret = process.env.GITHUB_CLIENT_SECRET;
+    if (!client_secret) {
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
+
+    // Exchange code for access token with GitHub
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Dotivra-App'
+      },
+      body: JSON.stringify({
+        client_id,
+        client_secret,
+        code,
+        redirect_uri
+      })
+    });
+
+    if (!tokenResponse.ok) {
+      throw new Error(`GitHub API error: ${tokenResponse.status}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+
+    if (tokenData.error) {
+      return res.status(400).json({ 
+        error: tokenData.error, 
+        error_description: tokenData.error_description 
+      });
+    }
+
+    // Return the token data
+    res.json(tokenData);
+  } catch (error) {
+    console.error('GitHub OAuth error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error.message 
+    });
+  }
+});
+
+// GitHub API proxy endpoint for authenticated requests
+app.get('/api/github/user/repos', async (req, res) => {
+  try {
+    const authorization = req.headers.authorization;
+    if (!authorization) {
+      return res.status(401).json({ error: 'Authorization header required' });
+    }
+
+    const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=100', {
+      headers: {
+        'Authorization': authorization,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'Dotivra-App'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    const repos = await response.json();
+    res.json(repos);
+  } catch (error) {
+    console.error('GitHub repos fetch error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch repositories', 
+      message: error.message 
+    });
+  }
+});
+
+// GitHub repository contents endpoint
+app.get('/api/github/repos/:owner/:repo/contents/*', async (req, res) => {
+  try {
+    const { owner, repo } = req.params;
+    const path = req.params[0] || '';
+    const authorization = req.headers.authorization;
+    
+    if (!authorization) {
+      return res.status(401).json({ error: 'Authorization header required' });
+    }
+
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': authorization,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'Dotivra-App'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    const contents = await response.json();
+    res.json(contents);
+  } catch (error) {
+    console.error('GitHub contents fetch error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch repository contents', 
+      message: error.message 
+    });
   }
 });
 

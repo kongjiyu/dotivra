@@ -53,16 +53,16 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="font-medium text-gray-900 truncate group-hover:text-blue-700 transition-colors">
-                  {document.name}
+                  {document.DocumentName}
                 </h3>
                 <div className="flex items-center space-x-2 mt-1">
-                  <span className={`inline-block px-2 py-1 rounded-full text-xs ${document.template.category === 'user'
+                  <span className={`inline-block px-2 py-1 rounded-full text-xs ${document.DocumentCategory === 'User'
                     ? 'bg-green-100 text-green-700'
-                    : document.template.category === 'developer'
+                    : document.DocumentCategory === 'Developer'
                       ? 'bg-purple-100 text-purple-700'
                       : 'bg-gray-100 text-gray-700'
                     }`}>
-                    {document.template.name}
+                    {document.DocumentType}
                   </span>
                 </div>
               </div>
@@ -114,25 +114,25 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
           <div className="p-4 space-y-2">
             {/* Document Title */}
             <h3 className="font-medium text-gray-900 group-hover:text-blue-700 transition-colors">
-              {document.name}
+              {document.DocumentName}
             </h3>
 
             {/* Template Badge */}
             <div>
-              <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${document.template.category === 'user'
+              <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${document.DocumentCategory === 'User'
                 ? 'bg-blue-50 text-blue-700'
-                : document.template.category === 'developer'
+                : document.DocumentCategory === 'Developer'
                   ? 'bg-purple-50 text-purple-700'
                   : 'bg-gray-50 text-gray-700'
                 }`}>
-                {document.template.name}
+                {document.DocumentType}
               </span>
             </div>
 
             {/* Last Edited */}
             <div className="flex items-center text-sm text-gray-500">
               <Clock className="h-3 w-3 mr-1" />
-              <span>Edited {document.lastEdited}</span>
+              <span>Edited {document.Updated_Time ? new Date(document.Updated_Time).toLocaleDateString() : 'Never'}</span>
             </div>
 
             {/* Open Button */}

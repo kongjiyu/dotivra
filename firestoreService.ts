@@ -20,8 +20,8 @@ const TEMPLATES_COLLECTION = 'Templates';
 const USERS_COLLECTION = 'Users';
 const DOCUMENT_HISTORY_COLLECTION = 'Document History';
 const CHATBOX_HISTORY_COLLECTION = 'Chatbox History';
-const CHAT_HISTORY_COLLECTION = 'ChatHistory';
-const AI_GENERATION_COLLECTION = 'AI';
+// const CHAT_HISTORY_COLLECTION = 'ChatHistory';
+// const AI_GENERATION_COLLECTION = 'AI';
 
 // Updated interfaces - using Firestore auto-generated IDs as primary keys and foreign keys
 export interface Project {

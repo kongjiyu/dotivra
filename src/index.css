@@ -84,18 +84,10 @@ h1 {
   line-height: 1.1;
 }
 
+/* Remove global button styles that interfere with Tailwind utilities */
 button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
 }
 button:focus,
 button:focus-visible {
@@ -110,9 +102,7 @@ button:focus-visible {
   a:hover {
     color: #747bff;
   }
-  button {
-    background-color: #f9f9f9;
-  }
+  /* Remove button background override that interferes with Tailwind */
 }
 
 @theme inline {
@@ -193,6 +183,48 @@ button:focus-visible {
   }
   body {
     @apply bg-background text-foreground;
+  }
+  
+  /* Ensure button text colors are properly inherited - Comprehensive fix */
+  
+  /* Tailwind utility classes */
+  .bg-blue-600.text-white,
+  .bg-green-600.text-white,
+  .bg-red-600.text-white,
+  .bg-blue-700.text-white,
+  .bg-green-700.text-white,
+  .bg-red-700.text-white {
+    color: white !important;
+  }
+  
+  /* Direct button elements with background colors */
+  button.bg-blue-600,
+  button.bg-green-600,
+  button.bg-red-600,
+  button.bg-blue-700,
+  button.bg-green-700,
+  button.bg-red-700 {
+    color: white !important;
+  }
+  
+  /* Span elements inside colored buttons */
+  .bg-blue-600 > span,
+  .bg-green-600 > span,
+  .bg-red-600 > span,
+  .bg-blue-700 > span,
+  .bg-green-700 > span,
+  .bg-red-700 > span {
+    color: white !important;
+  }
+  
+  /* ShadCN UI button variants */
+  button[data-slot="button"].bg-primary {
+    color: var(--color-primary-foreground) !important;
+  }
+  
+  /* Override any global color inheritance */
+  button:not(.ghost):not(.outline):not(.link) {
+    color: inherit !important;
   }
 }
 
