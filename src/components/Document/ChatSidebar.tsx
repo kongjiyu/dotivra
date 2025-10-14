@@ -198,9 +198,6 @@ export default function ChatSidebar({
         return changeId;
     };
 
-    // Get user for repository operations
-    const { user } = useAuth();
-
     // AI Content Generation Functions
     const generateAIContent = async (prompt: string): Promise<string> => {
         try {
@@ -208,6 +205,9 @@ export default function ChatSidebar({
             
             // Determine the type of AI operation based on the prompt
             const lowerPrompt = prompt.toLowerCase();
+            
+            // Get user for repository operations (only when needed)
+            const { user } = useAuth();
             
             // Check for repository-specific commands
             if (repositoryInfo && user && (

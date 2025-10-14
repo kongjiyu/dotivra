@@ -23,7 +23,6 @@ interface GitHubUser {
 
 class GitHubOAuthService {
   private readonly CLIENT_ID = import.meta.env.VITE_GITHUB_CLIENT_ID;
-  private readonly CLIENT_SECRET = import.meta.env.VITE_GITHUB_CLIENT_SECRET;
   private readonly REDIRECT_URI = import.meta.env.VITE_GITHUB_REDIRECT_URI || `${window.location.origin}/profile?github_callback=true`;
   private readonly SCOPE = 'repo,user:email,read:user';
 
@@ -65,7 +64,6 @@ class GitHubOAuthService {
       body: JSON.stringify({
         code,
         client_id: this.CLIENT_ID,
-        client_secret: this.CLIENT_SECRET,
         redirect_uri: this.REDIRECT_URI
       })
     });

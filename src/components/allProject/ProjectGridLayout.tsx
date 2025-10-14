@@ -2,6 +2,7 @@
 import React from 'react';
 import { FolderOpen, Calendar, FileText, Code, ExternalLink } from 'lucide-react';
 import type { Project } from '../../types';
+import { getProjectName, getProjectCreatedTime } from '../../utils/projectUtils';
 
 interface ProjectsGridViewProps {
   projects: Project[];
@@ -14,16 +15,7 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
   projects,
   onProjectClick,
 }) => {
-  const formatDate = (value: string) => {
-    if (!value) return '—';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
+  
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -44,13 +36,11 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
               </div>
               <div className="min-w-0 flex-1 space-y-1">
                 <h3 className="font-semibold text-gray-900 truncate group-hover:text-blue-700">
-                  {/* @ts-ignore - Temporary fix for property access */}
-                {project.ProjectName || project.name || 'Untitled Project' || 'Untitled Project'}
+                {getProjectName(project)}
                 </h3>
                 <div className="flex items-center gap-2 text-xs text-gray-500">
                   <Calendar className="h-3 w-3" />
-                  {/* @ts-ignore - Temporary fix for property access */}
-                <span>{formatDate(project.Created_Time || project.lastModified) || 'No date'}</span>
+                <span>{getProjectCreatedTime(project)}</span>
                 </div>
               </div>
             </div>

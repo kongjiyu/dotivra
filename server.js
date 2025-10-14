@@ -1077,10 +1077,16 @@ app.get("/api/document/chat/agent/action/:docId", async (req, res) => {
 // GitHub OAuth token exchange endpoint
 app.post('/api/github/oauth/token', async (req, res) => {
   try {
-    const { code, client_id, client_secret, redirect_uri } = req.body;
+    const { code, client_id, redirect_uri } = req.body;
     
-    if (!code || !client_id || !client_secret) {
+    if (!code || !client_id) {
       return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    // Use client secret from server environment variables for security
+    const client_secret = process.env.GITHUB_CLIENT_SECRET;
+    if (!client_secret) {
+      return res.status(500).json({ error: 'Server configuration error' });
     }
 
     // Exchange code for access token with GitHub

@@ -125,7 +125,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
 
   useEffect(() => {
     loadProjects();
-  }, []);
+  }, [user]);
 
   const filteredProjects = useMemo(() => {
     if (!searchTerm.trim()) return projects;

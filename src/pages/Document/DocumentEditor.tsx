@@ -5,6 +5,7 @@ import { useDocument } from "@/context/DocumentContext";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "@/lib/apiConfig";
+import { useAuth } from "@/context/AuthContext";
 
 import { EnhancedAIContentWriter } from '@/utils/enhancedAIContentWriter';
 import type { ContentPosition } from '@/utils/enhancedAIContentWriter';
@@ -126,6 +127,7 @@ const DEFAULT_DOC = `<h1>Product Strategy 2024</h1>
 
 export default function DocumentEditor() {
     const { documentId } = useParams<{ documentId: string }>();
+    const { user } = useAuth();
     const {
         setDocumentContent,
         setDocumentTitle,
@@ -267,7 +269,7 @@ export default function DocumentEditor() {
                         },
                         body: JSON.stringify({
                             content: content,  // Use lowercase to match API expectation
-                            EditedBy: 'current-user', // TODO: Get actual user ID
+                            EditedBy: user?.uid || 'anonymous', // Use actual user ID from auth
                         }),
                     });
                     
