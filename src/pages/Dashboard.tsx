@@ -36,7 +36,7 @@ const Dashboard: React.FC = () => {
 
   const handleCreateDocumentFromTemplate = async (data: {
     template: Template;
-    projectId?: number;
+    projectId?: string;
     newProjectName?: string;
     newProjectDescription?: string;
     selectedRepo?: string;
@@ -61,7 +61,8 @@ const Dashboard: React.FC = () => {
         console.log('Sending project creation request:', {
           name: data.newProjectName,
           description: data.newProjectDescription,
-          userId: userId
+          userId: userId,
+          githubLink: data.selectedRepo
         });
 
         const projectResponse = await fetch(API_ENDPOINTS.projects(), {
@@ -70,6 +71,7 @@ const Dashboard: React.FC = () => {
           body: JSON.stringify({
             name: data.newProjectName,
             description: data.newProjectDescription,
+            userId: userId,
             githubLink: data.selectedRepo || null
           }),
         });
@@ -179,7 +181,7 @@ const Dashboard: React.FC = () => {
       />
 
       {/* Main Content */}
-      <main className="max-w-6xl mx-auto px-6 py-6 space-y-8">
+      <main className="max-w-7xl mx-auto px-6 py-6 space-y-8">
         <TemplateGrid 
           onTemplateClick={handleTemplateClick}
           onExploreAll={handleExploreAll}
@@ -201,12 +203,20 @@ const Dashboard: React.FC = () => {
           try {
             console.log('Creating dashboard project:', projectData);
             
+            // Add userId to project data
+            const projectDataWithUser = {
+              ...projectData,
+              userId: user?.uid || 'anonymous-user-' + Date.now()
+            };
+            
+            console.log('Project data with user ID:', projectDataWithUser);
+            
             const response = await fetch(API_ENDPOINTS.projects(), {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify(projectData),
+              body: JSON.stringify(projectDataWithUser),
             });
 
             if (!response.ok) {

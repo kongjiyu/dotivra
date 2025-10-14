@@ -9,6 +9,7 @@ import { useDocument } from "@/context/DocumentContext";
 import { EnhancedAIContentWriter } from "@/utils/enhancedAIContentWriter";
 import type { ContentPosition } from "@/utils/enhancedAIContentWriter";
 import { aiService } from "@/services/aiService";
+import { useAuth } from "@/context/AuthContext";
 
 export type ChatMessage = {
     id: string;
@@ -25,6 +26,7 @@ interface ChatSidebarProps {
     suggestions?: string[];
     editor?: Editor; // Add editor prop for AI content integration
     initialMessage?: string; // Add initial message prop
+    repositoryInfo?: { owner: string; repo: string }; // GitHub repository context
 }
 
 export default function ChatSidebar({
@@ -35,6 +37,7 @@ export default function ChatSidebar({
     suggestions,
     editor,
     initialMessage,
+    repositoryInfo,
 }: ChatSidebarProps) {
     const [input, setInput] = useState("");
     const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([]);
@@ -60,15 +63,23 @@ export default function ChatSidebar({
     // Add initial hello message when chat opens
     useEffect(() => {
         if (open && !externalMessages && internalMessages.length === 0) {
+            let content = 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content.\n\n**Special AI Operations:**\n• Type `*add` to add new content\n• Type `*remove` to mark content for removal\n• Type `*edit` to replace existing content\n\nThese operations will show highlighted changes in your document with accept/reject options.';
+            
+            if (repositoryInfo) {
+                content += `\n\n**🚀 Repository Integration Active!**\n📂 Connected to: \`${repositoryInfo.owner}/${repositoryInfo.repo}\`\n\n**Repository Commands:**\n• "Analyze code in [filename]" - Explain specific files\n• "Improve the React components" - Code improvements\n• "Debug the authentication flow" - Find issues\n• "Explain how routing works" - Understand patterns\n• "Document the API endpoints" - Generate docs\n\nI have access to your repository structure, README, and key files to provide contextual assistance!`;
+            }
+            
+            content += '\n\nHow can I assist you today?';
+            
             const helloMsg: ChatMessage = {
                 id: 'hello-msg',
                 role: 'assistant',
-                content: 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content.\n\n**Special AI Operations:**\n• Type `*add` to add new content\n• Type `*remove` to mark content for removal\n• Type `*edit` to replace existing content\n\nThese operations will show highlighted changes in your document with accept/reject options. How can I assist you today?',
+                content,
                 timestamp: Date.now(),
             };
             setInternalMessages([helloMsg]);
         }
-    }, [open, externalMessages, internalMessages.length]);
+    }, [open, externalMessages, internalMessages.length, repositoryInfo]);
 
     // Initialize AI Writer when editor is available
     useEffect(() => {
@@ -187,6 +198,9 @@ export default function ChatSidebar({
         return changeId;
     };
 
+    // Get user for repository operations
+    const { user } = useAuth();
+
     // AI Content Generation Functions
     const generateAIContent = async (prompt: string): Promise<string> => {
         try {
@@ -194,6 +208,41 @@ export default function ChatSidebar({
             
             // Determine the type of AI operation based on the prompt
             const lowerPrompt = prompt.toLowerCase();
+            
+            // Check for repository-specific commands
+            if (repositoryInfo && user && (
+                lowerPrompt.includes('analyze code') || 
+                lowerPrompt.includes('explain file') || 
+                lowerPrompt.includes('improve code') || 
+                lowerPrompt.includes('debug') ||
+                lowerPrompt.includes('repository') ||
+                lowerPrompt.includes('codebase') ||
+                lowerPrompt.includes('.js') || lowerPrompt.includes('.ts') || 
+                lowerPrompt.includes('.tsx') || lowerPrompt.includes('.py') || 
+                lowerPrompt.includes('.java') || lowerPrompt.includes('.cpp')
+            )) {
+                console.log('🔍 Repository-aware request detected, using repository context');
+                
+                // Check if user is asking about a specific file
+                const fileMatch = prompt.match(/([a-zA-Z0-9_-]+\.[a-zA-Z]+)/);
+                if (fileMatch) {
+                    const fileName = fileMatch[1];
+                    try {
+                        const analysis = lowerPrompt.includes('improve') ? 'improve' :
+                                       lowerPrompt.includes('debug') ? 'debug' :
+                                       lowerPrompt.includes('document') ? 'document' : 'explain';
+                        
+                        const result = await aiService.analyzeRepositoryCode(user, repositoryInfo, fileName, analysis);
+                        return `<h2>Repository Analysis: ${fileName}</h2>\n${result}`;
+                    } catch (error) {
+                        console.log('Could not find specific file, using general repository context');
+                    }
+                }
+                
+                // General repository-aware generation
+                const result = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, documentContent);
+                return `<h2>Repository-Aware Response</h2>\n${result}`;
+            }
             
             if (lowerPrompt.includes('summarize') || lowerPrompt.includes('summary')) {
                 // Generate summary of current document
@@ -219,9 +268,16 @@ export default function ChatSidebar({
                     return `<h2>Expanded Content</h2>\n${expanded}`;
                 }
             } else {
-                // General content generation
-                const generated = await aiService.generateFromPrompt(prompt, documentContent);
-                return generated;
+                // Check if we have repository context for better general generation
+                if (repositoryInfo && user) {
+                    console.log('🎯 Using repository context for general generation');
+                    const generated = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, documentContent);
+                    return generated;
+                } else {
+                    // Fallback to regular generation
+                    const generated = await aiService.generateFromPrompt(prompt, documentContent);
+                    return generated;
+                }
             }
         } catch (error) {
             console.error('❌ AI Content Generation Error:', error);
@@ -529,13 +585,19 @@ export default function ChatSidebar({
                     {(suggestions?.length ?? 0) > 0 && input.length === 0 && !messages.some(m => m.role === 'user') && (
                         <div className="px-3 pb-2">
                             <div className="flex flex-wrap justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                {(suggestions ?? [
+                                {(suggestions ?? (repositoryInfo ? [
+                                    "*add",
+                                    "*remove", 
+                                    "*edit",
+                                    "Analyze repository",
+                                    "Explain codebase",
+                                ] : [
                                     "*add",
                                     "*remove",
-                                    "*edit",
+                                    "*edit", 
                                     "Improve content",
                                     "Add summary",
-                                ]).slice(0, 5).map((s, idx) => (
+                                ])).slice(0, 5).map((s, idx) => (
                                     <Button
                                         key={`${idx}-${s.slice(0, 12)}`}
                                         variant="outline"

@@ -1,33 +1,15 @@
 import React, { useState } from 'react';
 import { X, FolderPlus, AlertCircle } from 'lucide-react';
-import { API_BASE_URL } from '../../lib/apiConfig';
+import { useAuth } from '../../context/AuthContext';
+import { githubRepoService, type GitHubRepository as ServiceGitHubRepository } from '../../services/githubRepoService';
 
 // ============================================================================
 // TYPES & INTERFACES
 // ============================================================================
 
-interface GitHubRepository {
-  id: number;
-  name: string;
-  full_name: string;
-  html_url: string;
-  description: string | null;
-  private: boolean;
-  language: string;
-  updated_at: string;
-}
 
-interface Installation {
-  id: number;
-  account: {
-    login: string;
-    type: string;
-    avatar_url: string;
-  };
-  repository_selection: string;
-  created_at: string;
-  updated_at: string;
-}
+
+
 
 interface AddProjectModalProps {
   isOpen: boolean;
@@ -43,19 +25,14 @@ interface AddProjectModalProps {
 // CONFIGURATION & CONSTANTS
 // ============================================================================
 
-const API_CONFIG = {
-  BASE_URL: `${API_BASE_URL}/api`,
-  ENDPOINTS: {
-    INSTALLATIONS: '/github/installations',
-    REPOSITORIES: '/github/repositories'
-  }
-};
+
 
 const AddProjectModal: React.FC<AddProjectModalProps> = ({
   isOpen,
   onClose,
   onSubmit
 }) => {
+  const { user } = useAuth();
   // ============================================================================
   // STATE MANAGEMENT - ALL HOOKS MUST BE CALLED CONSISTENTLY
   // ============================================================================
@@ -67,11 +44,8 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   });
 
   const [githubState, setGithubState] = useState({
-    installations: [] as Installation[],
-    repositories: [] as GitHubRepository[],
-    filteredRepositories: [] as GitHubRepository[],
-    currentInstallationId: null as number | null,
-    isLoadingInstallations: false,
+    repositories: [] as ServiceGitHubRepository[],
+    filteredRepositories: [] as ServiceGitHubRepository[],
     isLoadingRepositories: false,
     showRepoDropdown: false
   });
@@ -86,33 +60,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   // GITHUB API FUNCTIONS
   // ============================================================================
 
-  const fetchGitHubInstallations = async () => {
-    setGithubState(prev => ({ ...prev, isLoadingInstallations: true }));
-    
-    try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.INSTALLATIONS}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        const installations = data.installations || [];
-        console.log('✅ GitHub installations loaded:', installations.length);
-        setGithubState(prev => ({ 
-          ...prev, 
-          installations: installations as Installation[],
-          isLoadingInstallations: false 
-        }));
-        return installations as Installation[];
-      } else {
-        console.warn('❌ Failed to fetch GitHub installations:', response.status);
-        setGithubState(prev => ({ ...prev, isLoadingInstallations: false }));
-        return [];
-      }
-    } catch (error) {
-      console.warn('❌ GitHub API not available:', error);
-      setGithubState(prev => ({ ...prev, isLoadingInstallations: false }));
-      return [];
-    }
-  };
+
 
 
 
@@ -133,7 +81,8 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
       newErrors.description = 'Project description is required';
     }
 
-    if (!formData.selectedRepo.trim()) {
+    // Only require repository if repositories are available
+    if (githubState.filteredRepositories.length > 0 && !formData.selectedRepo.trim()) {
       newErrors.selectedRepo = 'Please select a repository from the dropdown';
     }
 
@@ -165,33 +114,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
 
 
-  const fetchRepositories = async (installationId: number) => {
-    setGithubState(prev => ({ ...prev, isLoadingRepositories: true }));
-    
-    try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}${API_CONFIG.ENDPOINTS.REPOSITORIES}?installation_id=${installationId}`);
-      
-      if (response.ok) {
-        const data = await response.json();
-        const repositories = data.repositories || [];
-        console.log('✅ GitHub repositories loaded:', repositories.length);
-        setGithubState(prev => ({ 
-          ...prev, 
-          repositories: repositories as GitHubRepository[],
-          isLoadingRepositories: false 
-        }));
-        return repositories as GitHubRepository[];
-      } else {
-        console.warn('❌ Failed to fetch GitHub repositories:', response.status);
-        setGithubState(prev => ({ ...prev, isLoadingRepositories: false }));
-        return [];
-      }
-    } catch (error) {
-      console.warn('❌ GitHub repositories API not available:', error);
-      setGithubState(prev => ({ ...prev, isLoadingRepositories: false }));
-      return [];
-    }
-  };
+
 
   const handleRepoSelect = (repoFullName: string) => {
     setFormData(prev => ({ ...prev, selectedRepo: repoFullName }));
@@ -237,7 +160,6 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
         showRepoDropdown: false,
         repositories: [],
         filteredRepositories: [],
-        currentInstallationId: null,
         isLoadingRepositories: false
       }));
       setUiState(prev => ({ 
@@ -270,39 +192,42 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
     }
   }, [isOpen]);
 
-  // Load user's GitHub repositories based on their profile
+  // Load user's GitHub repositories using OAuth with proper authentication
   const loadUserRepositories = async () => {
     setGithubState(prev => ({ ...prev, isLoadingRepositories: true }));
     
     try {
-      const installations = await fetchGitHubInstallations();
+      console.log('🔄 Loading GitHub repositories via OAuth with authentication...');
       
-      if (!installations || installations.length === 0) {
-        console.warn('No GitHub installations found');
-        setGithubState(prev => ({ ...prev, isLoadingRepositories: false }));
+      if (!user) {
+        console.warn('User not authenticated, cannot load repositories');
+        setGithubState(prev => ({ 
+          ...prev, 
+          filteredRepositories: [],
+          isLoadingRepositories: false 
+        }));
         return;
       }
-
-      // Collect all repositories from all installations
-      let allRepositories: GitHubRepository[] = [];
-
-      for (const installation of installations) {
-        const repositories = await fetchRepositories(installation.id);
-        allRepositories = [...allRepositories, ...repositories];
-      }
-
-      console.log('📊 Total repositories loaded:', allRepositories.length);
       
-      // Show all repositories in dropdown
+      // Use the existing githubRepoService which handles authentication properly
+      const repositories = await githubRepoService.getUserRepositories(user);
+      
+      console.log('📊 Total repositories loaded via OAuth:', repositories.length);
+      
       setGithubState(prev => ({
         ...prev,
-        filteredRepositories: allRepositories,
+        filteredRepositories: repositories,
         isLoadingRepositories: false
       }));
       
     } catch (error) {
-      console.error('Error loading user repositories:', error);
-      setGithubState(prev => ({ ...prev, isLoadingRepositories: false }));
+      console.error('Error loading GitHub repositories via OAuth:', error);
+      console.warn('This might mean the user has not connected their GitHub account yet.');
+      setGithubState(prev => ({ 
+        ...prev, 
+        filteredRepositories: [],
+        isLoadingRepositories: false 
+      }));
     }
   };
 
@@ -331,7 +256,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto" style={{ zIndex: 9999 }}>
-      <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose} />
+      <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={onClose} />
       
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative w-full max-w-lg transform overflow-hidden rounded-xl bg-white shadow-xl">
@@ -343,7 +268,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Create New Project</h3>
-                <p className="text-sm text-gray-600">Set up a new documentation project with GitHub integration</p>
+                <p className="text-sm text-gray-600">Set up a new documentation project with GitHub OAuth integration</p>
               </div>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -401,7 +326,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
             {/* Repository Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Select Repository *
+                GitHub Repository {githubState.filteredRepositories.length > 0 ? '*' : '(Optional)'}
               </label>
               
               {githubState.isLoadingRepositories ? (
@@ -428,8 +353,19 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                   ))}
                 </select>
               ) : (
-                <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
-                  <span className="text-sm text-gray-600">No repositories found. Please connect your GitHub account in your profile settings.</span>
+                <div className="space-y-2">
+                  <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                    <span className="text-sm text-gray-600">
+                      No GitHub repositories found. Please connect your GitHub account via OAuth in your profile settings, or you can create the project without GitHub integration.
+                    </span>
+                  </div>
+                  <input
+                    type="text"
+                    value={formData.selectedRepo}
+                    onChange={(e) => handleInputChange('selectedRepo', e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Or enter GitHub repository URL manually (optional)"
+                  />
                 </div>
               )}
               

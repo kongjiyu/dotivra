@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Search, LayoutList, LayoutGrid } from 'lucide-react';
 import { API_ENDPOINTS } from '@/lib/apiConfig';
+import { useAuth } from '../../context/AuthContext';
 import type { Project } from '../../types';
 
 interface ProjectListProps {
@@ -57,6 +58,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
   onViewAllProjects,
   onNewProject,
 }) => {
+  const { user } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +71,13 @@ const ProjectList: React.FC<ProjectListProps> = ({
       console.log('🔄 ProjectList: Loading projects from Firestore...');
       setLoading(true);
       setError(null);
+      
+      if (!user) {
+        console.warn('⚠️ User not authenticated, cannot load user projects');
+        setProjects([]);
+        setLoading(false);
+        return;
+      }
       
       // Use centralized API configuration
       const response = await fetch(API_ENDPOINTS.projects());
@@ -83,7 +92,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
 
       if (data.success) {
         // Keep the raw Project data for Firebase compatibility
-        const normalizedProjects = (data.projects || []).map((project: any): Project => {
+        const allProjects = (data.projects || []).map((project: any): Project => {
           return {
             id: project.id,
             Project_Id: project.Project_Id ?? project.id,
@@ -95,7 +104,14 @@ const ProjectList: React.FC<ProjectListProps> = ({
           };
         });
 
-        setProjects(normalizedProjects);
+        // Filter projects to show only current user's projects
+        const userProjects = allProjects.filter((project: Project) => {
+          const projectUserId = project.User_Id;
+          return projectUserId === user.uid;
+        });
+
+        console.log('📋 ProjectList filtered user projects:', userProjects.length, 'out of', allProjects.length, 'total projects');
+        setProjects(userProjects);
       } else {
         throw new Error(data.error || 'Failed to load projects');
       }

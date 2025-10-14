@@ -1,22 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { X, FolderPlus, FileText, Plus } from 'lucide-react';
+import { API_ENDPOINTS } from '../../lib/apiConfig';
+import { useAuth } from '../../context/AuthContext';
+import { githubRepoService, type GitHubRepository as ServiceGitHubRepository } from '../../services/githubRepoService';
 import type { Template, Project } from '../../types';
 
-// GitHub types
-interface GitHubRepository {
-  id: number;
-  name: string;
-  full_name: string;
-  html_url: string;
-  description: string | null;
-  private: boolean;
-  language: string;
-  updated_at: string;
-  owner?: {
-    login: string;
-    id: number;
-  };
-}
+
 
 
 
@@ -44,6 +33,7 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
   onClose,
   onCreateDocument
 }) => {
+  const { user } = useAuth();
   const [step, setStep] = useState<FlowStep>('project-selection');
   const [projectOption, setProjectOption] = useState<ProjectOption>('new');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -53,7 +43,7 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
   const [documentName, setDocumentName] = useState('');
   const [documentRole, setDocumentRole] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
-  const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
+  const [repositories, setRepositories] = useState<ServiceGitHubRepository[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Load existing projects when modal opens
@@ -86,40 +76,23 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
     try {
       setLoading(true);
       
-      // First, get GitHub installations
-      const installResponse = await fetch('http://localhost:3001/api/github/installations');
-      if (!installResponse.ok) {
-        throw new Error('Failed to fetch GitHub installations');
-      }
-
-      const installData = await installResponse.json();
-      const installations = installData.installations || [];
+      console.log('🔄 Loading GitHub repositories via OAuth with authentication...');
       
-      if (installations.length === 0) {
-        console.log('No GitHub installations found');
+      if (!user) {
+        console.warn('User not authenticated, cannot load repositories');
+        setRepositories([]);
         return;
       }
-
-      // Get repositories for all installations
-      let allRepositories: GitHubRepository[] = [];
       
-      for (const installation of installations) {
-        try {
-          const repoResponse = await fetch(`http://localhost:3001/api/github/repositories?installation_id=${installation.id}`);
-          if (repoResponse.ok) {
-            const repoData = await repoResponse.json();
-            allRepositories = [...allRepositories, ...(repoData.repositories || [])];
-          }
-        } catch (error) {
-          console.error(`Error fetching repositories for installation ${installation.id}:`, error);
-        }
-      }
-
-      setRepositories(allRepositories);
-      console.log(`Loaded ${allRepositories.length} repositories from user's GitHub profile`);
+      // Use the existing githubRepoService which handles authentication properly
+      const repositories = await githubRepoService.getUserRepositories(user);
       
+      console.log('📊 Total repositories loaded via OAuth:', repositories.length);
+      setRepositories(repositories);
     } catch (error) {
-      console.error('Error loading user repositories:', error);
+      console.warn('Failed to load GitHub repositories via OAuth:', error);
+      console.warn('This might mean the user has not connected their GitHub account yet.');
+      setRepositories([]);
     } finally {
       setLoading(false);
     }
@@ -128,13 +101,47 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
   const loadProjects = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3001/api/projects');
+      
+      if (!user) {
+        console.warn('⚠️ User not authenticated, cannot load projects');
+        setProjects([]);
+        return;
+      }
+      
+      const userId = user.uid;
+      console.log('🔄 Loading all projects from API:', API_ENDPOINTS.projects());
+      
+      const response = await fetch(API_ENDPOINTS.projects());
+      console.log('📡 Projects API response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
-        setProjects(data.projects || []);
+        console.log('📋 All projects data received:', data);
+        
+        if (!data || (!data.projects && !Array.isArray(data))) {
+          console.warn('⚠️ Unexpected API response format:', data);
+          setProjects([]);
+          return;
+        }
+        
+        const allProjects = data.projects || data || [];
+        
+        // Filter projects for the current user on the client side
+        const userProjects = allProjects.filter((project: any) => {
+          const projectUserId = project.User_Id || project.userId || project.user_id;
+          return projectUserId === userId;
+        });
+        
+        console.log('📋 Filtered user projects:', userProjects.length, 'out of', allProjects.length, 'total projects');
+        console.log('📋 Setting user projects list:', userProjects);
+        setProjects(userProjects);
+      } else {
+        console.error('❌ Failed to load projects:', response.status, response.statusText);
+        setProjects([]);
       }
     } catch (error) {
-      console.error('Error loading projects:', error);
+      console.error('❌ Error loading projects:', error);
+      setProjects([]);
     } finally {
       setLoading(false);
     }
@@ -187,7 +194,7 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose} />
+      <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={onClose} />
       
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative w-full max-w-2xl transform overflow-hidden rounded-xl bg-white shadow-xl">

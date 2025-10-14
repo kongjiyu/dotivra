@@ -14,6 +14,7 @@ type CreateDocumentPayload = {
   category: 'user' | 'developer' | 'general';
   name: string;
   role: string;
+  githubRepo?: string;
 };
 
 const ProjectOverview: React.FC = () => {
@@ -199,7 +200,8 @@ const ProjectOverview: React.FC = () => {
     template,
     category,
     name,
-    role
+    role,
+    githubRepo
   }: CreateDocumentPayload) => {
     try {
       console.log('Creating document with template:', template.TemplateName, 'for category:', category, 'name:', name, 'role:', role);
@@ -220,6 +222,7 @@ const ProjectOverview: React.FC = () => {
         userId: user.uid || userProfile.uid, // Backend expects 'userId' field
         templateId: template.id || template.Template_Id, // Backend expects 'templateId'
         documentCategory: category === 'user' ? 'User' : category === 'developer' ? 'Developer' : 'General',
+        githubRepository: githubRepo || undefined, // Optional GitHub integration
       };
 
       console.log('Sending document creation request:', documentData);
@@ -314,7 +317,7 @@ const ProjectOverview: React.FC = () => {
 
       {showCategoryModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="fixed inset-0 bg-black bg-opacity-50" onClick={() => setShowCategoryModal(false)} />
+          <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={() => setShowCategoryModal(false)} />
           <div className="flex min-h-full items-center justify-center p-4">
             <div className="relative w-full max-w-md transform overflow-hidden rounded-xl bg-white shadow-xl">
               <div className="p-6">
@@ -368,6 +371,7 @@ const ProjectOverview: React.FC = () => {
         category={selectedCategory}
         onClose={handleCloseModal}
         onCreateDocument={handleCreateDocument}
+        projectGithubRepo={project?.GitHubRepo || undefined}
       />
 
       <EditProjectModal

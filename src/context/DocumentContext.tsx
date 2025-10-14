@@ -14,6 +14,10 @@ interface DocumentContextType {
     setIsDocumentModified: (modified: boolean) => void;
     documentId?: string;
     setDocumentId: (id: string) => void;
+    projectId?: string;
+    setProjectId: (id: string) => void;
+    repositoryInfo?: { owner: string; repo: string };
+    setRepositoryInfo: (info: { owner: string; repo: string } | undefined) => void;
     onOpenChat?: (message?: string) => void;
     setOnOpenChat: (fn: (message?: string) => void) => void;
     showAIActions?: (content: string, beforeContent: string) => void;
@@ -35,6 +39,8 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
     const [currentEditor, setCurrentEditor] = useState<any>(null);
     const [isDocumentModified, setIsDocumentModified] = useState<boolean>(false);
     const [documentId, setDocumentId] = useState<string>('');
+    const [projectId, setProjectId] = useState<string>('');
+    const [repositoryInfo, setRepositoryInfo] = useState<{ owner: string; repo: string } | undefined>(undefined);
     const [onOpenChat, setOnOpenChat] = useState<((message?: string) => void) | undefined>(undefined);
     const [showAIActions, setShowAIActions] = useState<((content: string, beforeContent: string) => void) | undefined>(undefined);
     const [chatSidebarOpen, setChatSidebarOpen] = useState<boolean>(false);
@@ -77,6 +83,10 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
         setIsDocumentModified,
         documentId,
         setDocumentId,
+        projectId,
+        setProjectId,
+        repositoryInfo,
+        setRepositoryInfo,
         onOpenChat,
         setOnOpenChat,
         showAIActions,

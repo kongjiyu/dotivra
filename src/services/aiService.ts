@@ -1,5 +1,7 @@
 // src/services/aiService.ts
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { repositoryContextService, type RepositoryContext } from './repositoryContextService';
+import type { User } from 'firebase/auth';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyBlRfTwZ7HAQ3Yv_sCWvNKiHdZyR2yTPe8';
 
@@ -130,6 +132,210 @@ Format your response as JSON with the structure:
                 alternatives: ['Consider alternative phrasing'],
                 expansions: ['Add more detail and examples']
             };
+        }
+    }
+
+    /**
+     * Generate content with repository context
+     */
+    async generateWithRepositoryContext(
+        prompt: string, 
+        user: User, 
+        repositoryInfo: { owner: string; repo: string },
+        documentContext?: string
+    ): Promise<string> {
+        try {
+            // Get repository context
+            const repoContext = await repositoryContextService.getRepositoryContext(
+                user, 
+                repositoryInfo.owner, 
+                repositoryInfo.repo
+            );
+
+            let fullPrompt = `You are an AI assistant with access to the repository: ${repositoryInfo.owner}/${repositoryInfo.repo}
+
+USER REQUEST: "${prompt}"
+`;
+
+            if (repoContext) {
+                const contextFormatted = repositoryContextService.formatContextForAI(repoContext);
+                fullPrompt += `\n${contextFormatted}`;
+            }
+
+            if (documentContext) {
+                fullPrompt += `\n### Current Document Context\n${documentContext.substring(0, 1500)}`;
+            }
+
+            fullPrompt += `
+
+INSTRUCTIONS:
+- Use the repository context to provide accurate, specific suggestions
+- Reference actual files, code patterns, and project structure when relevant
+- If suggesting code changes, show specific file paths and line references
+- Maintain consistency with the existing codebase style and patterns
+- Provide actionable, implementable suggestions
+- Use markdown formatting for code snippets with appropriate language tags
+
+Generate a helpful response that leverages the repository knowledge:`;
+
+            return await this.generateContent(fullPrompt);
+        } catch (error) {
+            console.error('❌ Error generating with repository context:', error);
+            // Fallback to regular generation without repository context
+            return this.generateFromPrompt(prompt, documentContext);
+        }
+    }
+
+    /**
+     * Analyze code from repository
+     */
+    async analyzeRepositoryCode(
+        user: User,
+        repositoryInfo: { owner: string; repo: string },
+        filePath: string,
+        analysis: 'explain' | 'improve' | 'debug' | 'document'
+    ): Promise<string> {
+        try {
+            const fileContent = await repositoryContextService.getFileWithContext(
+                user,
+                repositoryInfo.owner,
+                repositoryInfo.repo,
+                filePath
+            );
+
+            if (!fileContent) {
+                throw new Error(`File not found: ${filePath}`);
+            }
+
+            let prompt = '';
+            
+            switch (analysis) {
+                case 'explain':
+                    prompt = `Explain what this code does and how it works:
+
+**File: ${filePath}**
+\`\`\`${fileContent.language?.toLowerCase() || 'text'}
+${fileContent.content}
+\`\`\`
+
+Provide a clear explanation including:
+- Purpose and functionality
+- Key components and their roles
+- How it fits into the larger project
+- Notable patterns or techniques used`;
+                    break;
+                    
+                case 'improve':
+                    prompt = `Analyze this code and suggest improvements:
+
+**File: ${filePath}**
+\`\`\`${fileContent.language?.toLowerCase() || 'text'}
+${fileContent.content}
+\`\`\`
+
+Suggest improvements for:
+- Code quality and readability
+- Performance optimizations
+- Best practices
+- Error handling
+- Maintainability`;
+                    break;
+                    
+                case 'debug':
+                    prompt = `Help debug this code and identify potential issues:
+
+**File: ${filePath}**
+\`\`\`${fileContent.language?.toLowerCase() || 'text'}
+${fileContent.content}
+\`\`\`
+
+Look for:
+- Potential bugs or errors
+- Edge cases that might cause issues
+- Performance bottlenecks
+- Security concerns
+- Logic issues`;
+                    break;
+                    
+                case 'document':
+                    prompt = `Generate documentation for this code:
+
+**File: ${filePath}**
+\`\`\`${fileContent.language?.toLowerCase() || 'text'}
+${fileContent.content}
+\`\`\`
+
+Create comprehensive documentation including:
+- Function/class descriptions
+- Parameter and return value documentation
+- Usage examples
+- Important notes or warnings`;
+                    break;
+            }
+
+            // Add repository context for better analysis
+            const repoContext = await repositoryContextService.getRepositoryContext(
+                user,
+                repositoryInfo.owner,
+                repositoryInfo.repo
+            );
+
+            if (repoContext) {
+                prompt += `\n\n### Repository Context\n${repositoryContextService.formatContextForAI(repoContext)}`;
+            }
+
+            return await this.generateContent(prompt);
+        } catch (error) {
+            console.error('❌ Error analyzing repository code:', error);
+            throw new Error(`Failed to analyze ${filePath}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    /**
+     * Search and explain repository concepts
+     */
+    async explainRepositoryConcept(
+        user: User,
+        repositoryInfo: { owner: string; repo: string },
+        concept: string
+    ): Promise<string> {
+        try {
+            const repoContext = await repositoryContextService.getRepositoryContext(
+                user,
+                repositoryInfo.owner,
+                repositoryInfo.repo
+            );
+
+            if (!repoContext) {
+                throw new Error('Could not load repository context');
+            }
+
+            // Search for relevant files
+            const relevantFiles = await repositoryContextService.searchFiles(
+                user,
+                repositoryInfo.owner,
+                repositoryInfo.repo,
+                concept
+            );
+
+            const prompt = `Explain the concept "${concept}" in the context of the repository ${repositoryInfo.owner}/${repositoryInfo.repo}.
+
+${repositoryContextService.formatContextForAI(repoContext)}
+
+### Relevant Files Found:
+${relevantFiles.slice(0, 10).map(file => `- ${file.path} (${file.language})`).join('\n')}
+
+Please explain:
+- How this concept is implemented in the repository
+- Which files are most relevant
+- Key patterns and approaches used
+- How different parts work together
+- Usage examples from the codebase`;
+
+            return await this.generateContent(prompt);
+        } catch (error) {
+            console.error('❌ Error explaining repository concept:', error);
+            throw new Error(`Failed to explain concept "${concept}": ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 }

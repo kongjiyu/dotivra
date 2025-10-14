@@ -127,15 +127,18 @@ const DEFAULT_DOC = `<h1>Product Strategy 2024</h1>
 export default function DocumentEditor() {
     const { documentId } = useParams<{ documentId: string }>();
     const {
-        documentContent,
         setDocumentContent,
-        setCurrentEditor,
-        onOpenChat,
-        setShowAIActions,
-        chatSidebarOpen,
-        documentTitle,
         setDocumentTitle,
-        setDocumentId
+        currentEditor,
+        setCurrentEditor,
+        showAIActions,
+        setShowAIActions,
+        documentContent,
+        chatSidebarOpen,
+        setDocumentId,
+        setProjectId,
+        setRepositoryInfo,
+        onOpenChat
     } = useDocument();
     const documentContentRef = useRef<HTMLDivElement>(null);
 
@@ -151,7 +154,7 @@ export default function DocumentEditor() {
     const [currentOperationId, setCurrentOperationId] = useState<string | null>(null);
 
     const [aiWriter, setAiWriter] = useState<EnhancedAIContentWriter | null>(null);
-    const [currentEditor, setCurrentEditorLocal] = useState<any>(null);
+    const [currentEditorLocal, setCurrentEditorLocal] = useState<any>(null);
 
     // Legacy AI state (for backward compatibility)
     const [isRegenerating, setIsRegenerating] = useState(false);
@@ -194,6 +197,39 @@ export default function DocumentEditor() {
                     console.log('📄 Document content from DB:', content ? `"${content.substring(0, 100)}..."` : '(empty)');
                     console.log('📄 Using content:', content ? content : '(empty - will show blank editor)');
                     setDocumentContent(content); // Use exact content from DB, empty if empty
+                    
+                    // Load project information if document has a project ID
+                    const projectIdFromDoc = documentData.Project_Id || documentData.ProjectId;
+                    if (projectIdFromDoc) {
+                        console.log('📂 Loading project information for project:', projectIdFromDoc);
+                        setProjectId(projectIdFromDoc);
+                        
+                        // Load project details to get repository information
+                        try {
+                            const projectResponse = await fetch(API_ENDPOINTS.project(projectIdFromDoc));
+                            if (projectResponse.ok) {
+                                const projectData = await projectResponse.json();
+                                const project = projectData.success ? projectData.project : projectData;
+                                
+                                if (project && project.GitHubRepo) {
+                                    console.log('🔗 Found GitHub repository:', project.GitHubRepo);
+                                    
+                                    // Parse GitHub repository URL to get owner/repo
+                                    const repoMatch = project.GitHubRepo.match(/github\.com\/([^\/]+\/[^\/]+)/) || 
+                                                    project.GitHubRepo.match(/^([^\/]+\/[^\/]+)$/);
+                                    
+                                    if (repoMatch) {
+                                        const fullName = repoMatch[1];
+                                        const [owner, repo] = fullName.split('/');
+                                        setRepositoryInfo({ owner, repo });
+                                        console.log('✅ Repository context set:', { owner, repo });
+                                    }
+                                }
+                            }
+                        } catch (projectError) {
+                            console.warn('Could not load project information:', projectError);
+                        }
+                    }
                 } else {
                     console.warn('📄 No document data found in response:', data);
                     setDocumentContent("");

@@ -1,14 +1,27 @@
 // src/components/project/AddDocumentModal.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { X, FileText } from 'lucide-react';
+import { X, FileText, Github } from 'lucide-react';
 import { templates } from '../../utils/mockData';
 import type { Template } from '../../types';
+
+// GitHub types
+interface GitHubRepository {
+  id: number;
+  name: string;
+  full_name: string;
+  html_url: string;
+  description: string | null;
+  private: boolean;
+  language: string;
+  updated_at: string;
+}
 
 interface CreateDocumentArgs {
   template: Template;
   category: 'user' | 'developer' | 'general';
   name: string;
   role: string;
+  githubRepo?: string; // Optional GitHub repository
 }
 
 interface AddDocumentModalProps {
@@ -16,6 +29,7 @@ interface AddDocumentModalProps {
   category: 'user' | 'developer' | 'general' | null;
   onClose: () => void;
   onCreateDocument: (args: CreateDocumentArgs) => void;
+  projectGithubRepo?: string; // GitHub repo linked to the project
 }
 
 const roleOptions = [
@@ -28,13 +42,17 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
   isOpen,
   category,
   onClose,
-  onCreateDocument
+  onCreateDocument,
+  projectGithubRepo
 }) => {
   if (!isOpen || !category) return null;
 
   const [documentName, setDocumentName] = useState('');
   const [selectedRole, setSelectedRole] = useState(roleOptions[0]?.value ?? 'author');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [selectedRepo, setSelectedRepo] = useState('');
+  const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // Show all templates regardless of category
   const relevantTemplates = useMemo(
@@ -51,7 +69,47 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
     setDocumentName('');
     setSelectedTemplateId(null);
     setSelectedRole(roleOptions[0]?.value ?? 'author');
+    setSelectedRepo('');
   }, []);
+
+  // Load GitHub repositories (project repo + OAuth repositories)
+  const loadGitHubRepositories = async () => {
+    try {
+      setLoading(true);
+      let allRepositories: GitHubRepository[] = [];
+      
+      // If project has a linked GitHub repo, add it first
+      if (projectGithubRepo) {
+        // Extract repo info from URL or full_name
+        const repoMatch = projectGithubRepo.match(/github\.com\/([^\/]+\/[^\/]+)/) || projectGithubRepo.match(/^([^\/]+\/[^\/]+)$/);
+        if (repoMatch) {
+          const fullName = repoMatch[1];
+          const name = fullName.split('/')[1];
+          
+          // Create a repository object for the project's linked repo
+          allRepositories.push({
+            id: Date.now(), // Mock ID
+            name: name,
+            full_name: fullName,
+            html_url: `https://github.com/${fullName}`,
+            description: `Project linked repository`,
+            private: false,
+            language: 'Unknown',
+            updated_at: new Date().toISOString()
+          });
+          
+          // Auto-select the project's repository
+          setSelectedRepo(fullName);
+        }
+      }
+
+      setRepositories(allRepositories);
+    } catch (error) {
+      console.warn('Failed to load GitHub repositories:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleTemplateClick = (template: Template) => {
     setSelectedTemplateId(template.id || null);
@@ -66,7 +124,8 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
       template: selectedTemplate,
       category,
       name: documentName.trim(),
-      role: selectedRole
+      role: selectedRole,
+      githubRepo: selectedRepo || undefined
     });
 
     resetForm();
@@ -81,6 +140,8 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       resetForm();
+      // Load GitHub repositories as optional enhancement
+      loadGitHubRepositories();
     }
   }, [isOpen, category, resetForm]);
 
@@ -89,7 +150,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
   return (
     <>
       {/* Backdrop */}
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm flex items-center justify-center p-4 z-50">
         <div className="bg-white rounded-lg max-w-4xl w-full max-h-[85vh] overflow-hidden">
           {/* Modal Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -142,6 +203,47 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* GitHub Repository Selection - Optional */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="github-repo">
+                    GitHub Repository (Optional)
+                  </label>
+                  {loading ? (
+                    <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                      <div className="flex items-center space-x-2">
+                        <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-600 border-t-transparent"></div>
+                        <span className="text-xs text-gray-600">Loading repositories...</span>
+                      </div>
+                    </div>
+                  ) : repositories.length > 0 ? (
+                    <div>
+                      <select
+                        id="github-repo"
+                        value={selectedRepo}
+                        onChange={(event) => setSelectedRepo(event.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">No repository (create standalone document)</option>
+                        {repositories.map((repo) => (
+                          <option key={repo.id} value={repo.full_name}>
+                            {repo.name} - {repo.description || 'No description'}
+                          </option>
+                        ))}
+                      </select>
+                      {projectGithubRepo && selectedRepo && (
+                        <p className="text-xs text-blue-600 mt-1">
+                          ✓ Using project's linked repository
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 flex items-center space-x-2">
+                      <Github className="h-4 w-4 text-gray-400" />
+                      <span className="text-sm text-gray-600">No repositories found. Connect GitHub in your profile.</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
