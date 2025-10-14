@@ -3,6 +3,7 @@ import React from 'react';
 import { FolderOpen, Calendar, ExternalLink, Pencil, Trash2, MoreVertical } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "../ui/dropdown-menu";
 import type { Project } from '../../types';
+import { getProjectName, getProjectCreatedTime } from '../../utils/projectUtils';
 
 interface ProjectsGridViewProps {
   projects: Project[];
@@ -14,19 +15,8 @@ interface ProjectsGridViewProps {
 const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
   projects,
   onProjectClick,
-  onProjectEdit,
-  onProjectDelete,
 }) => {
-  const formatDate = (value: string) => {
-    if (!value) return '—';
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return '—';
-    return date.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
-  };
+  
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">

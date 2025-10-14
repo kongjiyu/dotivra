@@ -53,6 +53,125 @@ app.get("/api/health", (req, res) => {
   res.json({status: "ok", timestamp: new Date().toISOString()});
 });
 
+// ============================================================================
+// GITHUB OAUTH ENDPOINTS
+// ============================================================================
+
+// GitHub OAuth token exchange endpoint
+app.post('/api/github/oauth/token', async (req, res) => {
+  try {
+    const { code, client_id, client_secret, redirect_uri } = req.body;
+    
+    if (!code || !client_id || !client_secret) {
+      return res.status(400).json({ error: 'Missing required parameters' });
+    }
+
+    // Exchange code for access token with GitHub
+    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'User-Agent': 'Dotivra-App'
+      },
+      body: JSON.stringify({
+        client_id,
+        client_secret,
+        code,
+        redirect_uri
+      })
+    });
+
+    if (!tokenResponse.ok) {
+      throw new Error(`GitHub API error: ${tokenResponse.status}`);
+    }
+
+    const tokenData = await tokenResponse.json();
+
+    if (tokenData.error) {
+      return res.status(400).json({ 
+        error: tokenData.error, 
+        error_description: tokenData.error_description 
+      });
+    }
+
+    // Return the token data
+    res.json(tokenData);
+  } catch (error) {
+    logger.error('GitHub OAuth error:', error);
+    res.status(500).json({ 
+      error: 'Internal server error', 
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GitHub API proxy endpoint for authenticated requests
+app.get('/api/github/user/repos', async (req, res) => {
+  try {
+    const authorization = req.headers.authorization;
+    if (!authorization) {
+      return res.status(401).json({ error: 'Authorization header required' });
+    }
+
+    const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=100', {
+      headers: {
+        'Authorization': authorization,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'Dotivra-App'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    const repos = await response.json();
+    res.json(repos);
+  } catch (error) {
+    logger.error('GitHub repos fetch error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch repositories', 
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// GitHub repository contents endpoint
+app.get('/api/github/repos/:owner/:repo/contents/*', async (req, res) => {
+  try {
+    const { owner, repo } = req.params;
+    const path = req.params[0] || '';
+    const authorization = req.headers.authorization;
+    
+    if (!authorization) {
+      return res.status(401).json({ error: 'Authorization header required' });
+    }
+
+    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': authorization,
+        'Accept': 'application/vnd.github.v3+json',
+        'User-Agent': 'Dotivra-App'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitHub API error: ${response.status}`);
+    }
+
+    const contents = await response.json();
+    res.json(contents);
+  } catch (error) {
+    logger.error('GitHub contents fetch error:', error);
+    res.status(500).json({ 
+      error: 'Failed to fetch repository contents', 
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Get GitHub App info and install URL
 app.get("/api/github/install-url", async (req, res) => {
   try {
@@ -519,6 +638,132 @@ app.get("/api/users/email/:email", async (req, res) => {
       error: "Failed to fetch user",
       details: error instanceof Error ? error.message : "Unknown error",
     });
+  }
+});
+
+// ============================================================================
+// DOCUMENT MANAGEMENT ENDPOINTS
+// ============================================================================
+
+// Get document by ID
+app.get('/api/documents/:documentId', async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    
+    const docRef = db.collection('Documents').doc(documentId);
+    const doc = await docRef.get();
+    
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    
+    const data = doc.data();
+    res.json({
+      id: doc.id,
+      ...data,
+      CreatedAt: data?.CreatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+      UpdatedAt: data?.UpdatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error fetching document:', error);
+    res.status(500).json({ error: 'Failed to fetch document' });
+  }
+});
+
+// Update document
+app.put('/api/documents/:documentId', async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    const { content, title } = req.body;
+    
+    const docRef = db.collection('Documents').doc(documentId);
+    const doc = await docRef.get();
+    
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    
+    const updateData: any = {
+      UpdatedAt: admin.firestore.Timestamp.now()
+    };
+    
+    if (content !== undefined) updateData.Content = content;
+    if (title !== undefined) updateData.Title = title;
+    
+    await docRef.update(updateData);
+    
+    const updatedDoc = await docRef.get();
+    const data = updatedDoc.data();
+    
+    res.json({
+      id: updatedDoc.id,
+      ...data,
+      CreatedAt: data?.CreatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+      UpdatedAt: data?.UpdatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error updating document:', error);
+    res.status(500).json({ error: 'Failed to update document' });
+  }
+});
+
+// Get documents by project ID
+app.get('/api/documents/project/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    
+    const querySnapshot = await db.collection('Documents')
+      .where('ProjectId', '==', projectId)
+      .get();
+    
+    const documents = querySnapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        CreatedAt: data?.CreatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
+        UpdatedAt: data?.UpdatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+      };
+    }).sort((a, b) => new Date(b.CreatedAt).getTime() - new Date(a.CreatedAt).getTime());
+    
+    res.json(documents);
+  } catch (error) {
+    logger.error('Error fetching project documents:', error);
+    res.status(500).json({ error: 'Failed to fetch project documents' });
+  }
+});
+
+// Create new document
+app.post('/api/documents', async (req, res) => {
+  try {
+    const { title, content, projectId, userId, templateId, documentCategory } = req.body;
+    
+    if (!title || !projectId || !userId) {
+      return res.status(400).json({ error: 'Title, projectId, and userId are required' });
+    }
+    
+    const docData = {
+      Title: title,
+      Content: content || '',
+      ProjectId: projectId,
+      UserId: userId,
+      TemplateId: templateId || null,
+      DocumentCategory: documentCategory || 'General',
+      CreatedAt: admin.firestore.Timestamp.now(),
+      UpdatedAt: admin.firestore.Timestamp.now()
+    };
+    
+    const docRef = await db.collection('Documents').add(docData);
+    
+    res.status(201).json({
+      id: docRef.id,
+      ...docData,
+      CreatedAt: docData.CreatedAt.toDate().toISOString(),
+      UpdatedAt: docData.UpdatedAt.toDate().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error creating document:', error);
+    res.status(500).json({ error: 'Failed to create document' });
   }
 });
 
