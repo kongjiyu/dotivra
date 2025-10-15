@@ -1,5 +1,5 @@
 import React from 'react';
-import type { Template } from '../../types';
+import type { LegacyTemplate as Template } from '../../types';
 
 interface Props {
   template: Template;
