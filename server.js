@@ -243,9 +243,7 @@ app.get('/api/github/repository/:owner/:repo/file', async (req, res) => {
 });
 
 
-// ============================================================================
-// TEMPLATE OPERATIONS ENDPOINTS
-// ============================================================================
+// TEMPLATE OPERATIONS ENDPOINTS 
 
 // Get all templates
 app.get('/api/templates', async (req, res) => {
@@ -260,12 +258,6 @@ app.get('/api/templates', async (req, res) => {
     });
   }
 });
-
-// Helper to fetch all templates from Firestore
-async function getAllTemplates() {
-  const snapshot = await getDocs(query(collection(firestore, 'Templates')));
-  return snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-}
 
 // ============================================================================
 // PROJECT MANAGEMENT ENDPOINTS (Updated for regular Firebase)

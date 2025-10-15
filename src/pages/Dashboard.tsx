@@ -11,6 +11,7 @@ import type { Template } from '../types';
 import { getUserDisplayInfo } from '../utils/user';
 import { useAuth } from '../context/AuthContext';
 
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user, userProfile } = useAuth();
