@@ -1,17 +1,13 @@
 // src/pages/Profile.tsx - Main profile page with real user data
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
 import Header from '../components/header/Header';
-import { LogOut } from 'lucide-react';
-import { ProfileInfoCard, RecentProjectsCard, DangerZoneCard } from '../components/profile';
+import { ProfileInfoCard, DangerZoneCard } from '../components/profile';
 import GitHubConnectionCard from '../components/profile/GitHubConnectionCard';
 import { useAuth } from '../context/AuthContext';
 import { getUserDisplayInfo } from '../utils/user';
-import type { Project } from '../types';
 
 const Profile: React.FC = () => {
   const { user: firebaseUser, userProfile, loading } = useAuth();
-  const navigate = useNavigate();
 
   // Show loading state while fetching user data
   if (loading) {
@@ -65,18 +61,6 @@ const Profile: React.FC = () => {
 
   const { name: headerName, initials: headerInitials } = getUserDisplayInfo(userProfile, firebaseUser);
 
-  // Recent projects (will be loaded from real data)
-  const recentProjects: Project[] = [];
-
-  // Event handlers
-  const handleViewAllProjects = () => {
-    navigate('/projects');
-  };
-
-  const handleProjectClick = (project: Project) => {
-    navigate(`/project/${project.id}`);
-  };
-
   // Logout is handled via the global header dropdown
 
   const handleDeleteAccount = async () => {
@@ -114,13 +98,6 @@ const Profile: React.FC = () => {
         <GitHubConnectionCard onConnectionChange={(connected) => {
           console.log('GitHub connection status changed:', connected);
         }} />
-
-        {/* Recent Projects */}
-        <RecentProjectsCard
-          projects={recentProjects}
-          onViewAllProjects={handleViewAllProjects}
-          onProjectClick={handleProjectClick}
-        />
 
         {/* Danger Zone */}
         <DangerZoneCard onDeleteAccount={handleDeleteAccount} />

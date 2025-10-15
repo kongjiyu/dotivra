@@ -28,7 +28,7 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
   const featuredTemplates = templates.slice(0, 5);
 
   return (
-    <section className="space-y-6 py-4">
+    <section className="space-y-3   ">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="space-y-1">
           <h2 className="text-sm font-semibold text-gray-800">Start a new project</h2>
@@ -47,7 +47,7 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
       </div>
 
       {/* Horizontal scroll container with better styling */}
-      <div className="relative py-4">
+      <div className="relative">
         <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide snap-x snap-mandatory">
           {/* Add Project Card */}
           <div className="flex-shrink-0 w-72 snap-start p-2">
@@ -140,7 +140,7 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
         </div>
       </div>
 
-      <div className="h-px bg-gray-200 mt-8" aria-hidden="true" />
+      <div className="h-px bg-gray-200 " aria-hidden="true" />
     </section>
   );
 };

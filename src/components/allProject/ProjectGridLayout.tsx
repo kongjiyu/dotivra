@@ -3,7 +3,7 @@ import React from 'react';
 import { FolderOpen, Calendar, ExternalLink, Pencil, Trash2, MoreVertical } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "../ui/dropdown-menu";
 import type { Project } from '../../types';
-import { getProjectName, getProjectCreatedTime } from '../../utils/projectUtils';
+import { getProjectCreatedTime } from '../../utils/projectUtils';
 
 interface ProjectsGridViewProps {
   projects: Project[];
@@ -15,6 +15,8 @@ interface ProjectsGridViewProps {
 const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
   projects,
   onProjectClick,
+  onProjectEdit,
+  onProjectDelete,
 }) => {
   
 
@@ -35,11 +37,11 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
                 </div>
                 <div className="space-y-1">
                   <h3 className="font-semibold text-gray-900 leading-tight">
-                    {project.name || 'Untitled Project'}
+                    {project.ProjectName || 'Untitled Project'}
                   </h3>
                   <div className="flex items-center gap-1.5 text-xs text-gray-500">
                     <Calendar className="h-3.5 w-3.5" />
-                    <span>{formatDate(project.lastModified)}</span>
+                    <span>{getProjectCreatedTime(project.Updated_Time)}</span>
                   </div>
                 </div>
               </div>
@@ -69,7 +71,7 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
                     variant="destructive"
                     onClick={(e) => {
                       e.stopPropagation();
-                      const confirmDelete = window.confirm(`Delete project \"${project.name}\"? This cannot be undone.`);
+                      const confirmDelete = window.confirm(`Delete project \"${project.ProjectName || 'Untitled Project'}\"? This cannot be undone.`);
                       if (confirmDelete) onProjectDelete(project);
                     }}
                   >
@@ -82,23 +84,23 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
 
             {/* Description */}
             <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">
-              {project.description || 'No description provided.'}
+              {project.Description || 'No description provided.'}
             </p>
 
            
             {/* Footer */}
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
               <div className="text-xs text-gray-500">
-                {project.githubLink ? (
+                {project.GitHubRepo ? (
                   <span className="text-green-600">Repo connected</span>
                 ) : (
                   <span>No repository</span>
                 )}
               </div>
               
-              {project.githubLink && (
+              {project.GitHubRepo && (
                 <a
-                  href={project.githubLink}
+                  href={project.GitHubRepo}
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
