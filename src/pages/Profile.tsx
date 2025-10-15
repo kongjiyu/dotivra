@@ -1,13 +1,16 @@
 // src/pages/Profile.tsx - Main profile page with real user data
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import Header from '../components/header/Header';
 import { LogOut } from 'lucide-react';
-import { ProfileHeader, ProfileInfoCard, RecentProjectsCard, DangerZoneCard } from '../components/profile';
+import { ProfileInfoCard, RecentProjectsCard, DangerZoneCard } from '../components/profile';
+import GitHubConnectionCard from '../components/profile/GitHubConnectionCard';
 import { useAuth } from '../context/AuthContext';
+import { getUserDisplayInfo } from '../utils/user';
 import type { Project } from '../types';
 
 const Profile: React.FC = () => {
-  const { user: firebaseUser, userProfile, loading, signOut } = useAuth();
+  const { user: firebaseUser, userProfile, loading } = useAuth();
   const navigate = useNavigate();
 
   // Show loading state while fetching user data
@@ -60,6 +63,8 @@ const Profile: React.FC = () => {
     providerData: firebaseUser.providerData
   };
 
+  const { name: headerName, initials: headerInitials } = getUserDisplayInfo(userProfile, firebaseUser);
+
   // Recent projects (will be loaded from real data)
   const recentProjects: Project[] = [];
 
@@ -72,15 +77,7 @@ const Profile: React.FC = () => {
     navigate(`/project/${project.id}`);
   };
 
-  const handleLogout = async () => {
-    try {
-      await signOut();
-      navigate('/');
-    } catch (error) {
-      console.error('Error signing out:', error);
-      alert('Failed to sign out. Please try again.');
-    }
-  };
+  // Logout is handled via the global header dropdown
 
   const handleDeleteAccount = async () => {
     try {
@@ -105,23 +102,18 @@ const Profile: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <Header userName={headerName} initials={headerInitials} />
       {/* Header with Logout Button */}
-      <ProfileHeader 
-        user={user} 
-        rightContent={
-          <button
-            onClick={handleLogout}
-            className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-lg shadow-sm bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all"
-          >
-            <LogOut className="w-4 h-4 mr-2" />
-            Sign Out
-          </button>
-        }
-      />
+     
 
       <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
         {/* Profile Information */}
         <ProfileInfoCard user={user} />
+
+        {/* GitHub Integration */}
+        <GitHubConnectionCard onConnectionChange={(connected) => {
+          console.log('GitHub connection status changed:', connected);
+        }} />
 
         {/* Recent Projects */}
         <RecentProjectsCard

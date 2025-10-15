@@ -3,6 +3,9 @@ import TipTap from "@/components/Document/TipTap";
 import AIActionContainer from "@/components/Document/AIActionContainer";
 import { useDocument } from "@/context/DocumentContext";
 import { useRef, useEffect, useState, useCallback } from "react";
+import { useParams } from "react-router-dom";
+import { API_ENDPOINTS } from "@/lib/apiConfig";
+import { useAuth } from "@/context/AuthContext";
 
 import { EnhancedAIContentWriter } from '@/utils/enhancedAIContentWriter';
 import type { ContentPosition } from '@/utils/enhancedAIContentWriter';
@@ -123,13 +126,21 @@ const DEFAULT_DOC = `<h1>Product Strategy 2024</h1>
 <p>This strategy provides a clear roadmap for achieving our 2024 objectives. Success depends on execution excellence, team collaboration, and customer-centric decision making.</p>`;
 
 export default function DocumentEditor() {
+    const { documentId } = useParams<{ documentId: string }>();
+    const { user } = useAuth();
     const {
-        documentContent,
         setDocumentContent,
+        setDocumentTitle,
+        currentEditor,
         setCurrentEditor,
-        onOpenChat,
+        showAIActions,
         setShowAIActions,
-        chatSidebarOpen
+        documentContent,
+        chatSidebarOpen,
+        setDocumentId,
+        setProjectId,
+        setRepositoryInfo,
+        onOpenChat
     } = useDocument();
     const documentContentRef = useRef<HTMLDivElement>(null);
 
@@ -145,17 +156,137 @@ export default function DocumentEditor() {
     const [currentOperationId, setCurrentOperationId] = useState<string | null>(null);
 
     const [aiWriter, setAiWriter] = useState<EnhancedAIContentWriter | null>(null);
-    const [currentEditor, setCurrentEditorLocal] = useState<any>(null);
+    const [currentEditorLocal, setCurrentEditorLocal] = useState<any>(null);
 
     // Legacy AI state (for backward compatibility)
     const [isRegenerating, setIsRegenerating] = useState(false);
     const [beforeAIContent, setBeforeAIContent] = useState<string>("");
 
+    // Loading state for document
+    const [isLoadingDocument, setIsLoadingDocument] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
+    // Load document when documentId changes
+    useEffect(() => {
+        const loadDocument = async () => {
+            if (!documentId) {
+                // If no documentId, start with empty content
+                setDocumentContent("");
+                setDocumentTitle("Untitled Document");
+                return;
+            }
+
+            setIsLoadingDocument(true);
+            try {
+                console.log('📄 Loading document with ID:', documentId);
+                
+                // Fetch document from API
+                const response = await fetch(API_ENDPOINTS.document(documentId));
+                if (!response.ok) {
+                    throw new Error(`Failed to load document: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('📄 Loaded document data:', data);
+                
+                // Handle both API response formats: direct document data or wrapped in success/document
+                const documentData = data.success ? data.document : data;
+                
+                if (documentData && documentData.id) {
+                    setDocumentId(documentId);
+                    setDocumentTitle(documentData.Title || documentData.DocumentName || "Untitled Document");
+                    const content = documentData.Content || "";
+                    console.log('📄 Document content from DB:', content ? `"${content.substring(0, 100)}..."` : '(empty)');
+                    console.log('📄 Using content:', content ? content : '(empty - will show blank editor)');
+                    setDocumentContent(content); // Use exact content from DB, empty if empty
+                    
+                    // Load project information if document has a project ID
+                    const projectIdFromDoc = documentData.Project_Id || documentData.ProjectId;
+                    if (projectIdFromDoc) {
+                        console.log('📂 Loading project information for project:', projectIdFromDoc);
+                        setProjectId(projectIdFromDoc);
+                        
+                        // Load project details to get repository information
+                        try {
+                            const projectResponse = await fetch(API_ENDPOINTS.project(projectIdFromDoc));
+                            if (projectResponse.ok) {
+                                const projectData = await projectResponse.json();
+                                const project = projectData.success ? projectData.project : projectData;
+                                
+                                if (project && project.GitHubRepo) {
+                                    console.log('🔗 Found GitHub repository:', project.GitHubRepo);
+                                    
+                                    // Parse GitHub repository URL to get owner/repo
+                                    const repoMatch = project.GitHubRepo.match(/github\.com\/([^\/]+\/[^\/]+)/) || 
+                                                    project.GitHubRepo.match(/^([^\/]+\/[^\/]+)$/);
+                                    
+                                    if (repoMatch) {
+                                        const fullName = repoMatch[1];
+                                        const [owner, repo] = fullName.split('/');
+                                        setRepositoryInfo({ owner, repo });
+                                        console.log('✅ Repository context set:', { owner, repo });
+                                    }
+                                }
+                            }
+                        } catch (projectError) {
+                            console.warn('Could not load project information:', projectError);
+                        }
+                    }
+                } else {
+                    console.warn('📄 No document data found in response:', data);
+                    setDocumentContent("");
+                    setDocumentTitle("Document Not Found");
+                }
+            } catch (error) {
+                console.error('❌ Error loading document:', error);
+                // Show empty editor on error
+                setDocumentContent("");
+                setDocumentTitle("Document Load Error");
+            } finally {
+                setIsLoadingDocument(false);
+            }
+        };
+
+        loadDocument();
+    }, [documentId, setDocumentContent, setDocumentTitle, setDocumentId]);
 
     const handleDocumentUpdate = useCallback((content: string) => {
         setDocumentContent(content);
-    }, [setDocumentContent]);
+        
+        // Auto-save to database if we have a documentId
+        if (documentId) {
+            // Debounce the save operation
+            clearTimeout((window as any).autoSaveTimeout);
+            (window as any).autoSaveTimeout = setTimeout(async () => {
+                try {
+                    setIsSaving(true);
+                    console.log('💾 Auto-saving document...', documentId);
+                    console.log('💾 Content to save (first 100 chars):', content.substring(0, 100) + '...');
+                    const response = await fetch(API_ENDPOINTS.document(documentId), {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            content: content,  // Use lowercase to match API expectation
+                            EditedBy: user?.uid || 'anonymous', // Use actual user ID from auth
+                        }),
+                    });
+                    
+                    if (response.ok) {
+                        const result = await response.json();
+                        console.log('💾 Document auto-saved successfully:', result.UpdatedAt);
+                    } else {
+                        console.error('❌ Failed to auto-save document:', response.status, await response.text());
+                    }
+                } catch (error) {
+                    console.error('❌ Auto-save error:', error);
+                } finally {
+                    setIsSaving(false);
+                }
+            }, 2000); // Save after 2 seconds of inactivity
+        }
+    }, [setDocumentContent, documentId]);
 
     const handleEditorReady = useCallback((editor: any) => {
         setCurrentEditor(editor);
@@ -400,12 +531,7 @@ export default function DocumentEditor() {
         }
     }, [documentContent]);
 
-    // Initialize with default content if empty (run only once)
-    useEffect(() => {
-        if (!documentContent) {
-            setDocumentContent(DEFAULT_DOC);
-        }
-    }, [setDocumentContent]); // Remove documentContent from dependencies
+    // No longer initialize with default content - let documents be empty if they're empty
 
     // Handle keyboard shortcuts
     useEffect(() => {
@@ -443,7 +569,7 @@ export default function DocumentEditor() {
         console.log('DocumentEditor onOpenChat function:', onOpenChat);
     }, [onOpenChat]);
 
-    const effectiveContent = documentContent || DEFAULT_DOC;
+    const effectiveContent = documentContent || "";
 
     return (
         <DocumentLayout showDocumentMenu={true}>
@@ -456,6 +582,14 @@ export default function DocumentEditor() {
                     onOpenChat={onOpenChat}
                     className=""
                 />
+
+                {/* Save Status Indicator */}
+                {isSaving && (
+                    <div className="fixed top-20 right-6 bg-blue-100 text-blue-800 px-3 py-2 rounded-lg shadow-lg z-50 flex items-center space-x-2">
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                        <span className="text-sm">Saving...</span>
+                    </div>
+                )}
 
                 {/* AI Action Container */}
                 <div data-ai-action-container="true">

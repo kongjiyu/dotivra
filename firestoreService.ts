@@ -11,7 +11,7 @@ import {
     where,
     Timestamp
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db } from './src/config/firebase';
 
 // Collections - matching your Firestore database
 const PROJECTS_COLLECTION = 'Projects';
@@ -20,40 +20,59 @@ const TEMPLATES_COLLECTION = 'Templates';
 const USERS_COLLECTION = 'Users';
 const DOCUMENT_HISTORY_COLLECTION = 'Document History';
 const CHATBOX_HISTORY_COLLECTION = 'Chatbox History';
+// const CHAT_HISTORY_COLLECTION = 'ChatHistory';
+// const AI_GENERATION_COLLECTION = 'AI';
 
 // Updated interfaces - using Firestore auto-generated IDs as primary keys and foreign keys
 export interface Project {
     id?: string; // Firestore auto-generated ID (will be set after creation)
+    Project_Id?: string; // Custom Project ID for compatibility
     ProjectName: string;
     User_Id: string; // Foreign key - references User's Firestore document ID
     Description: string;
-    GitHubRepo: string;
+    GitHubRepo?: string;
     Created_Time: any; // Firestore Timestamp
+    Updated_Time?: any; // Firestore Timestamp
 }
 
 export interface User {
     id?: string; // Firestore auto-generated ID (will be set after creation)
+    uid?: string; // Firebase Auth UID
+    User_Id?: string; // Custom User ID for compatibility
     UserEmail: string;
     UserName: string;
-    UserPw: string;
+    UserPw?: string; // Optional for OAuth users
+    displayName?: string;
+    photoURL?: string;
+    provider?: string; // 'email', 'google', 'github'
+    createdAt?: any; // Firestore Timestamp
+    lastLoginAt?: any; // Firestore Timestamp
 }
 
 export interface Document {
     id?: string; // Firestore auto-generated ID (will be set after creation)
     DocumentName: string;
-    DocumentType: string;
-    DocumentCategory: string;
+    DocumentType: string; // 'SRS', 'User Manual', etc.
+    DocumentCategory?: string; // 'User', 'Developer'
     Project_Id: string; // Foreign key - references Project's Firestore document ID
-    Template_Id: string; // Foreign key - references Template's Firestore document ID
+    Template_Id?: string; // Foreign key - references Template's Firestore document ID
     User_Id: string; // Foreign key - references User's Firestore document ID
-    Content: string;
-    Created_Time: any; // Firestore Timestamp
+    Content?: string; // HTML content
+    Created_Time?: any; // Firestore Timestamp
+    Updated_Time?: any; // Firestore Timestamp
+    EditedBy?: string; // User ID who last edited
+    IsDraft?: boolean;
+    Hash?: string; // Content hash for change detection
 }
 
 export interface Template {
     id?: string; // Firestore auto-generated ID (will be set after creation)
+    Template_Id?: string; // Custom Template ID for compatibility
     TemplateName: string;
     TemplatePrompt: string;
+    Category?: string; // 'user', 'developer', 'general'
+    Description?: string;
+    Created_Time?: any; // Firestore Timestamp
 }
 
 export interface DocumentHistory {
@@ -68,6 +87,26 @@ export interface ChatboxHistory {
     id?: string; // Firestore auto-generated ID (will be set after creation)
     ReferDoc: string; // Foreign key - references Document's Firestore document ID
     Content: string;
+}
+
+// Enhanced Chat History for AI workflow
+export interface ChatHistory {
+    id?: string; // Firestore auto-generated ID
+    UserID?: string; // Foreign key - references User ID (nullable for AI messages)
+    DocID: string; // Foreign key - references Document's Firestore document ID
+    Message: string; // Chat message content
+    Role: 'user' | 'assistant'; // Message sender type
+    Stage?: 'reasoning' | 'thinking' | 'action' | 'user'; // AI workflow stage
+    CreatedAt: string; // ISO timestamp
+}
+
+// AI Generation interface for tracking AI-generated content
+export interface AIGeneration {
+    id?: string; // Firestore auto-generated ID
+    DocumentID: string; // Foreign key - references Document's Firestore document ID
+    PromptText: string; // User's input prompt
+    GeneratedContent: string; // AI-generated content
+    createdAt: string; // ISO timestamp
 }
 
 export class FirestoreService {

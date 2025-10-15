@@ -130,17 +130,26 @@ export function processContentForTipTap(content: string): string {
  * Enhanced content processor with better markdown detection and conversion
  */
 export function enhancedContentProcessor(content: string): string {
-  // Handle mixed content (both markdown and HTML)
-  let processed = content;
+  // Clean and normalize the content first
+  let processed = content.trim();
   
-  // Convert markdown elements even if HTML is present
+  // Remove any extra whitespace and normalize line breaks
+  processed = processed.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  
+  // If content is already HTML, clean it up
+  if (/<[^>]+>/g.test(processed)) {
+    // Clean up malformed HTML
+    processed = processed.replace(/>\s+</g, '><');
+    processed = processed.replace(/\s+/g, ' ');
+    return sanitizeHTML(processed);
+  }
+  
+  // Convert markdown elements to HTML
   
   // Headers (only if not already HTML headers)
-  if (!processed.includes('<h1>') && !processed.includes('<h2>') && !processed.includes('<h3>')) {
-    processed = processed.replace(/^### (.*$)/gm, '<h3>$1</h3>');
-    processed = processed.replace(/^## (.*$)/gm, '<h2>$1</h2>');
-    processed = processed.replace(/^# (.*$)/gm, '<h1>$1</h1>');
-  }
+  processed = processed.replace(/^### (.*$)/gm, '<h3>$1</h3>');
+  processed = processed.replace(/^## (.*$)/gm, '<h2>$1</h2>');
+  processed = processed.replace(/^# (.*$)/gm, '<h1>$1</h1>');
   
   // Bold and italic (convert markdown to HTML)
   processed = processed.replace(/\*\*\*(.*?)\*\*\*/g, '<strong><em>$1</em></strong>');
@@ -163,13 +172,44 @@ export function enhancedContentProcessor(content: string): string {
   // Blockquotes
   processed = processed.replace(/^>\s+(.*)$/gm, '<blockquote><p>$1</p></blockquote>');
   
-  // Handle line breaks and paragraphs properly
-  processed = processParagraphsEnhanced(processed);
+  // Handle line breaks and paragraphs properly - SIMPLIFIED
+  processed = processSimpleParagraphs(processed);
   
   // Final sanitization
   processed = sanitizeHTML(processed);
   
   return processed;
+}
+
+/**
+ * Simplified paragraph processing for AI content
+ */
+function processSimpleParagraphs(content: string): string {
+  // Split by double line breaks for paragraphs
+  const paragraphs = content.split(/\n\s*\n/);
+  const processedParagraphs: string[] = [];
+  
+  for (const para of paragraphs) {
+    const trimmed = para.trim();
+    if (!trimmed) continue;
+    
+    // Skip if already wrapped in block elements
+    if (/^<(h[1-6]|div|table|ul|ol|blockquote|pre|hr)[\s>]/.test(trimmed)) {
+      processedParagraphs.push(trimmed);
+    }
+    // Skip if it's a list or table content
+    else if (/^<(li|tr|td|th)[\s>]/.test(trimmed)) {
+      processedParagraphs.push(trimmed);
+    }
+    // Wrap plain text in paragraphs
+    else {
+      // Convert single line breaks to spaces within paragraphs
+      const withSpaces = trimmed.replace(/\n/g, ' ');
+      processedParagraphs.push(`<p>${withSpaces}</p>`);
+    }
+  }
+  
+  return processedParagraphs.join('\n\n');
 }
 
 /**
@@ -232,38 +272,7 @@ function processListsEnhanced(content: string): string {
   return processedLines.join('\n');
 }
 
-/**
- * Enhanced paragraph processing
- */
-function processParagraphsEnhanced(content: string): string {
-  let processed = content;
-  
-  // Split by double line breaks to identify paragraphs
-  const sections = processed.split(/\n\s*\n/);
-  const processedSections: string[] = [];
-  
-  for (const section of sections) {
-    const trimmed = section.trim();
-    if (!trimmed) continue;
-    
-    // Skip if already wrapped in block elements
-    if (/^<(h[1-6]|div|table|ul|ol|blockquote|pre|hr)[\s>]/.test(trimmed)) {
-      processedSections.push(trimmed);
-    }
-    // Skip if it's a list item or table row
-    else if (/^<(li|tr|td|th)[\s>]/.test(trimmed)) {
-      processedSections.push(trimmed);
-    }
-    // Wrap in paragraph
-    else {
-      // Convert single line breaks to <br> within paragraphs
-      const withBreaks = trimmed.replace(/\n/g, '<br>');
-      processedSections.push(`<p>${withBreaks}</p>`);
-    }
-  }
-  
-  return processedSections.join('\n\n');
-}
+
 
 export default {
   markdownToHTML,

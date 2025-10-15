@@ -33,7 +33,8 @@ export default function DocumentLayout({
         currentEditor,
         setOnOpenChat,
         chatSidebarOpen,
-        setChatSidebarOpen
+        setChatSidebarOpen,
+        repositoryInfo
     } = useDocument();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [isAIGenerating, setIsAIGenerating] = useState(false);
@@ -225,9 +226,15 @@ export default function DocumentLayout({
                         }}
                         editor={currentEditor}
                         initialMessage={initialChatMessage}
-                        suggestions={[
+                        repositoryInfo={repositoryInfo}
+                        suggestions={repositoryInfo ? [
+                            "Analyze repository structure",
+                            "Explain codebase patterns",
+                            "Improve React components",
+                            "Debug authentication flow",
+                        ] : [
                             "Strengthen success metrics",
-                            "Review executive summary",
+                            "Review executive summary", 
                             "Add competitor analysis",
                             "Outline next steps",
                         ]}

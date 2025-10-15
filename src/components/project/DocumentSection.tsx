@@ -6,9 +6,9 @@ import type { Document } from '../../types';
 
 interface DocumentSectionProps {
   title: string;
-  category: 'user' | 'developer';
+  category: 'user' | 'developer' | 'general';
   documents: Document[];
-  onAddDocument?: (category: 'user' | 'developer') => void;
+  onAddDocument?: (category: 'user' | 'developer' | 'general') => void;
   onEditDocument: (document: Document) => void;
   onDeleteDocument: (document: Document) => void;
 }
@@ -21,11 +21,15 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
   onDeleteDocument
 }) => {
   const getSectionIcon = () => {
-    return category === 'user' ? FileText : Code;
+    if (category === 'user') return FileText;
+    if (category === 'developer') return Code;
+    return FileText; // Default icon for general
   };
 
   const getSectionColor = () => {
-    return 'text-blue-600 bg-blue-50';
+    if (category === 'user') return 'text-blue-600 bg-blue-50';
+    if (category === 'developer') return 'text-purple-600 bg-purple-50';
+    return 'text-gray-600 bg-gray-50'; // Color for general
   };
 
   const Icon = getSectionIcon();

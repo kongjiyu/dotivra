@@ -65,18 +65,18 @@ const Tiptap = ({
         return handleDestroy;
     }, [handleDestroy]);
 
-    // Update editor content when initialContent changes
-    useEffect(() => {
-        if (editor && initialContent && editor.getHTML() !== initialContent) {
-            editor.commands.setContent(initialContent);
-            // Only dispatch if editor.view exists
-            if (editor.view) {
-                editor.view.dispatch(
-                    editor.state.tr.setMeta('addToHistory', false)
-                );
-            }
-        }
-    }, [editor, initialContent]);
+    // Update editor content when initialContent changes (DISABLED - causes editing issues)
+    // useEffect(() => {
+    //     if (editor && initialContent && editor.getHTML() !== initialContent) {
+    //         editor.commands.setContent(initialContent);
+    //         // Only dispatch if editor.view exists
+    //         if (editor.view) {
+    //             editor.view.dispatch(
+    //                 editor.state.tr.setMeta('addToHistory', false)
+    //             );
+    //         }
+    //     }
+    // }, [editor, initialContent]);
 
     // Prevent first undo from reverting to empty document:
     // Apply initialContent exactly once, suppress history + update.
