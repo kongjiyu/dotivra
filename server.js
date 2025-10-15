@@ -240,6 +240,23 @@ app.get('/api/github/repository/:owner/:repo/file', async (req, res) => {
   }
 });
 
+
+// TEMPLATE OPERATIONS ENDPOINTS 
+
+// Get all templates
+app.get('/api/templates', async (req, res) => {
+  try {
+    const templates = await getAllTemplates();
+    res.json({ templates });
+  } catch (error) {
+    console.error('Error fetching templates:', error);
+    res.status(500).json({
+      error: 'Failed to fetch templates',
+      details: error.message
+    });
+  }
+});
+
 // ============================================================================
 // PROJECT MANAGEMENT ENDPOINTS (Updated for regular Firebase)
 // ============================================================================

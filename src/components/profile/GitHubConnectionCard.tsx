@@ -327,7 +327,7 @@ export default function GitHubConnectionCard({ onConnectionChange }: GitHubConne
             <Button
               onClick={handleConnectGitHub}
               disabled={connecting}
-              className="w-full bg-primary text-primary-foreground hover:bg-primary/90 [&>*]:text-primary-foreground"
+              className="w-full bg-primary hover:bg-primary/90 [&>*]:text-white"
             >
               {connecting ? (
                 <>
@@ -336,7 +336,7 @@ export default function GitHubConnectionCard({ onConnectionChange }: GitHubConne
                 </>
               ) : (
                 <>
-                  <Github className="h-4 w-4 mr-2" />
+                  <Github className="h-4 w-4 mr-2 text-white" />
                   Connect GitHub Account
                 </>
               )}

@@ -5,6 +5,8 @@ import TemplateCard from '../components/allTemplate/TemplateCard';
 import TemplateModal from '../components/allTemplate/TemplateModal';
 import { templates as allTemplates } from '../utils/mockData';
 import { getUserDisplayInfo } from '../utils/user';
+import { FileText } from 'lucide-react';
+import type { LegacyTemplate } from '../types';
 
 const AllTemplate: React.FC = () => {
   const { user, userProfile } = useAuth();
@@ -12,11 +14,22 @@ const AllTemplate: React.FC = () => {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<number | null>(null);
 
+  // Adapt backend/template schema to UI card schema
+  const uiTemplates: LegacyTemplate[] = useMemo(() => {
+    return (allTemplates || []).map((t: any) => ({
+      id: Number(t.id ?? t.Template_Id ?? t.TemplateID ?? Date.now()),
+      name: t.TemplateName ?? t.name ?? 'Template',
+      description: t.Description ?? t.description ?? '',
+      icon: FileText,
+      category: (t.Category as 'user' | 'developer' | 'general') ?? 'general',
+    }));
+  }, []);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return allTemplates;
-    return allTemplates.filter(t => (t.name + ' ' + t.description).toLowerCase().includes(q));
-  }, [query]);
+    if (!q) return uiTemplates;
+    return uiTemplates.filter(t => (t.name + ' ' + t.description).toLowerCase().includes(q));
+  }, [query, uiTemplates]);
 
   return (
     <div className="min-h-screen bg-gray-50">
