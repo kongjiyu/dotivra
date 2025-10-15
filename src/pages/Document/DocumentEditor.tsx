@@ -1,6 +1,6 @@
 import DocumentLayout from "./DocumentLayout";
-import TipTap from "@/components/Document/TipTap";
-import AIActionContainer from "@/components/Document/AIActionContainer";
+import TipTap from "@/components/document/TipTap";
+import AIActionContainer from "@/components/document/AIActionContainer";
 import { useDocument } from "@/context/DocumentContext";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
