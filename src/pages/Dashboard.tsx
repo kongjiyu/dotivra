@@ -9,6 +9,7 @@ import AddDocumentFromTemplate from '../components/modal/addDocumentFromTemplate
 import { API_ENDPOINTS } from '../lib/apiConfig';
 import type { Template } from '../types';
 import { getUserDisplayInfo } from '../utils/user';
+import { useAuth } from '../context/AuthContext';
 
 
 const Dashboard: React.FC = () => {
