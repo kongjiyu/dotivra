@@ -7,7 +7,7 @@ interface Props {
 }
 
 const TemplateModal: React.FC<Props> = ({ id, onClose }) => {
-  const t = allTemplates.find(x => x.id === id);
+  const t = allTemplates.find(x => Number(x.id ?? x.Template_Id) === id);
   if (!t) return null;
 
   return (
@@ -16,7 +16,7 @@ const TemplateModal: React.FC<Props> = ({ id, onClose }) => {
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div>
             <h2 className="text-xl font-semibold text-gray-800">Add Document</h2>
-            <p className="text-sm text-gray-600 mt-1">Create a new document using <span className="font-medium">{t.name}</span></p>
+            <p className="text-sm text-gray-600 mt-1">Create a new document using <span className="font-medium">{t.TemplateName}</span></p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">✕</button>
         </div>
