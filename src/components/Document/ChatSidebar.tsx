@@ -52,13 +52,6 @@ export default function ChatSidebar({
     // Get user context for repository operations
     const { user } = useAuth();
 
-    // Note: Current operation ID is stored globally for DocumentEditor access
-
-    // Debug context values
-    useEffect(() => {
-        console.log('🔍 ChatSidebar: showAIActions changed to:', !!showAIActions, 'function:', showAIActions);
-        console.log('🔍 ChatSidebar: documentContent available:', !!documentContent);
-    }, [showAIActions, documentContent]);
 
     // Combine external messages (if any) with internal state
     const messages = useMemo(() => externalMessages ?? internalMessages, [externalMessages, internalMessages]);
@@ -93,17 +86,14 @@ export default function ChatSidebar({
 
     // Handle initial message from context menu
     useEffect(() => {
-        console.log('💬 ChatSidebar effect triggered - open:', open, 'initialMessage:', initialMessage);
 
         if (open && initialMessage && initialMessage.trim()) {
-            console.log('🚀 ChatSidebar processing initial message:', initialMessage);
 
             // Show the message in the input field first
             setInput(initialMessage);
 
             // Auto-send the initial message after a brief delay
             const autoSend = async () => {
-                console.log('📤 Auto-sending initial message:', initialMessage);
 
                 // Create user message
                 const userMsg: ChatMessage = {
@@ -123,7 +113,6 @@ export default function ChatSidebar({
                 setIsGenerating(true);
 
                 try {
-                    console.log('🤖 Generating AI response for:', initialMessage);
                     const response = await aiService.chatResponse(initialMessage, documentContent);
 
                     const assistantMsg: ChatMessage = {
@@ -135,7 +124,6 @@ export default function ChatSidebar({
 
                     setInternalMessages(prev => [...prev, assistantMsg]);
                 } catch (error) {
-                    console.error('❌ Error generating AI response:', error);
                     const errorMsg: ChatMessage = {
                         id: crypto.randomUUID(),
                         role: "assistant",
@@ -262,7 +250,6 @@ export default function ChatSidebar({
     // AI Content Generation Functions
     const generateAIContent = async (prompt: string): Promise<string> => {
         try {
-            console.log('🤖 Generating AI content for prompt:', prompt);
 
             // Determine the type of AI operation based on the prompt
             const lowerPrompt = prompt.toLowerCase();
@@ -281,7 +268,6 @@ export default function ChatSidebar({
                 lowerPrompt.includes('.tsx') || lowerPrompt.includes('.py') ||
                 lowerPrompt.includes('.java') || lowerPrompt.includes('.cpp')
             )) {
-                console.log('🔍 Repository-aware request detected, using repository context');
 
                 // Check if user is asking about a specific file
                 const fileMatch = prompt.match(/([a-zA-Z0-9_-]+\.[a-zA-Z]+)/);
@@ -295,7 +281,6 @@ export default function ChatSidebar({
                         const result = await aiService.analyzeRepositoryCode(user, repositoryInfo, fileName, analysis);
                         return `<h2>Repository Analysis: ${fileName}</h2>\n${result}`;
                     } catch (error) {
-                        console.log('Could not find specific file, using general repository context');
                     }
                 }
 
@@ -330,7 +315,6 @@ export default function ChatSidebar({
             } else {
                 // Check if we have repository context for better general generation
                 if (repositoryInfo && user) {
-                    console.log('🎯 Using repository context for general generation');
                     const generated = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, documentContent);
                     return generated;
                 } else {
@@ -375,34 +359,20 @@ export default function ChatSidebar({
                     (window as any).currentChatAIWriter = aiWriter;
 
                     // Show AI actions for the operation with a slight delay to ensure content is rendered
-                    console.log('🎯 About to show AI actions. showAIActions:', showAIActions, 'type:', typeof showAIActions, 'documentContent:', documentContent);
                     setTimeout(() => {
                         let actionFunction = showAIActions;
 
                         // Fallback to global function if context function is not available
                         if (!actionFunction && (window as any).currentShowAIActionsFunction) {
-                            console.log('🔧 Using fallback global showAIActions function');
                             actionFunction = (window as any).currentShowAIActionsFunction;
                         }
 
                         if (actionFunction && typeof actionFunction === 'function') {
-                            console.log('✅ Calling showAIActions for *add operation');
                             try {
-                                console.log('🚀 Calling actionFunction with params:', {
-                                    content: "New content added via *add command",
-                                    beforeContent: documentContent
-                                });
                                 actionFunction("New content added via *add command", documentContent);
                             } catch (error) {
                                 console.error('❌ Error calling showAIActions:', error);
                             }
-                        } else {
-                            console.error('❌ showAIActions is not available!', {
-                                contextFunction: showAIActions,
-                                globalFunction: (window as any).currentShowAIActionsFunction,
-                                type: typeof showAIActions,
-                                isFunction: typeof showAIActions === 'function'
-                            });
                         }
                     }, 300);
 
@@ -421,18 +391,15 @@ export default function ChatSidebar({
                     (window as any).currentChatAIWriter = aiWriter;
 
                     // Show AI actions for the operation with a slight delay to ensure content is rendered
-                    console.log('🎯 About to show AI actions for *remove. showAIActions:', showAIActions, 'type:', typeof showAIActions);
                     setTimeout(() => {
                         let actionFunction = showAIActions;
 
                         // Fallback to global function if context function is not available
                         if (!actionFunction && (window as any).currentShowAIActionsFunction) {
-                            console.log('🔧 Using fallback global showAIActions function for *remove');
                             actionFunction = (window as any).currentShowAIActionsFunction;
                         }
 
                         if (actionFunction && typeof actionFunction === 'function') {
-                            console.log('✅ Calling showAIActions for *remove operation');
                             try {
                                 actionFunction("Content marked for removal via *remove command", documentContent);
                             } catch (error) {
@@ -463,18 +430,15 @@ export default function ChatSidebar({
                     (window as any).currentChatAIWriter = aiWriter;
 
                     // Show AI actions for the operation with a slight delay to ensure content is rendered
-                    console.log('🎯 About to show AI actions for *edit. showAIActions:', showAIActions, 'type:', typeof showAIActions);
                     setTimeout(() => {
                         let actionFunction = showAIActions;
 
                         // Fallback to global function if context function is not available
                         if (!actionFunction && (window as any).currentShowAIActionsFunction) {
-                            console.log('🔧 Using fallback global showAIActions function for *edit');
                             actionFunction = (window as any).currentShowAIActionsFunction;
                         }
 
                         if (actionFunction && typeof actionFunction === 'function') {
-                            console.log('✅ Calling showAIActions for *edit operation');
                             try {
                                 actionFunction("Content edited via *edit command", documentContent);
                             } catch (error) {
@@ -509,8 +473,6 @@ export default function ChatSidebar({
                     ) || text.includes('*') || text.length > 100; // Long prompts are likely content requests
 
                     if (isContentGeneration) {
-                        console.log('🎯 Content generation request detected:', text);
-
                         // Generate content and add to document
                         const aiResponse = await generateAIContent(text);
 
@@ -561,7 +523,6 @@ export default function ChatSidebar({
                             throw new Error('Editor not available for content generation');
                         }
                     } else {
-                        console.log('💬 Chat conversation request detected:', text);
 
                         // Regular chat response - don't add to document
                         const aiResponse = await aiService.chatResponse(text, documentContent);

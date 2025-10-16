@@ -210,16 +210,12 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                                     }
                                 }
 
-                                console.log('📝 Selected text for chat (table):', cleanText);
-                                console.log('🚀 onOpenChat function available (table):', !!onOpenChat);
-                                console.log('🔍 onOpenChat function type (table):', typeof onOpenChat);
-
+                              
                                 if (onOpenChat && typeof onOpenChat === 'function') {
                                     const messageToSend = cleanText
                                         ? `Please help me with this content: "${cleanText}"`
                                         : 'Please help me with this document.';
 
-                                    console.log('✅ Calling onOpenChat with message (table):', messageToSend);
                                     onOpenChat(messageToSend);
                                 } else {
                                     console.error('❌ onOpenChat function not available or not a function (table)', {
@@ -548,16 +544,12 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                                         }
                                     }
 
-                                    console.log('📝 Selected text for chat (general):', cleanText);
-                                    console.log('🚀 onOpenChat function available (general):', !!onOpenChat);
-                                    console.log('🔍 onOpenChat function type (general):', typeof onOpenChat);
-
+                                  
                                     if (onOpenChat && typeof onOpenChat === 'function') {
                                         const messageToSend = cleanText
                                             ? `Please help me with this content: "${cleanText}"`
                                             : 'Please help me with this document.';
 
-                                        console.log('✅ Calling onOpenChat with message (general):', messageToSend);
                                         onOpenChat(messageToSend);
                                     } else {
                                         console.error('❌ onOpenChat function not available or not a function (general)', {

@@ -187,14 +187,6 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
                 }
             }
 
-            console.log('Mermaid content extraction:', {
-                fromEditor: editor ? 'attempted' : 'not available',
-                textContent: node.textContent,
-                contentSize: node.content?.size,
-                domElement: codeRef.current?.textContent,
-                finalContent: codeContent
-            })
-
             if (!codeContent.trim()) {
                 setMermaidSvg('')
                 setMermaidError(null)
@@ -207,11 +199,9 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
             // Clear previous error
             setMermaidError(null)
 
-            console.log('Rendering Mermaid with content:', codeContent)
 
             // Render the diagram
             const { svg } = await mermaid.render(diagramId, codeContent)
-            console.log('Mermaid render successful, SVG length:', svg.length)
             setMermaidSvg(svg)
         } catch (error) {
             console.error('Mermaid render error:', error)

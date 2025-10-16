@@ -44,13 +44,6 @@ const Tiptap = ({
 
     const editor = useEditor(editorConfig);
 
-    // Debug onOpenChat prop
-    useEffect(() => {
-        console.log('TipTap onOpenChat prop:', onOpenChat);
-    }, [onOpenChat]);
-
-
-
     // Memoize the context value to prevent unnecessary re-renders
     const contextValue = useMemo(() => ({ editor }), [editor]);
 

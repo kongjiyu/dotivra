@@ -532,7 +532,6 @@ export default function DocumentMenu({
 
 					if (onUpdate) {
 						onUpdate(htmlContent);
-						console.log(`Document "${documentName}" imported successfully`);
 					}
 				}
 			} catch (error) {

@@ -45,16 +45,6 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
     const [showAIActions, setShowAIActions] = useState<((content: string, beforeContent: string) => void) | undefined>(undefined);
     const [chatSidebarOpen, setChatSidebarOpen] = useState<boolean>(false);
 
-    // Add debugging for onOpenChat changes
-    useEffect(() => {
-        console.log('DocumentContext onOpenChat changed:', onOpenChat);
-    }, [onOpenChat]);
-
-    // Add debugging for showAIActions changes
-    useEffect(() => {
-        console.log('🎯 DocumentContext showAIActions changed:', !!showAIActions, 'function:', showAIActions);
-    }, [showAIActions]);
-
     const handleTitleChange = (title: string) => {
         setDocumentTitle(title);
         setIsDocumentModified(true);

@@ -48,7 +48,6 @@ export default function DocumentProject() {
                     // as this is meant to be a project overview page, not an editor
                 }
 
-                console.log('✅ Successfully loaded document project data');
             } catch (err) {
                 console.error('❌ Error loading document project data, falling back to mock data:', err);
 
@@ -64,7 +63,6 @@ export default function DocumentProject() {
                     setProject(defaultProject);
                     setRelatedDocuments(mockRelatedDocuments);
 
-                    console.log('✅ Successfully loaded mock data as fallback');
                 } catch (mockError) {
                     console.error('❌ Failed to load mock data:', mockError);
                     setError('Failed to load document data and mock data is unavailable');
@@ -79,7 +77,6 @@ export default function DocumentProject() {
 
     const handleProjectImport = (content: string, title: string) => {
         setDocumentContent(content);
-        console.log(`Document "${title}" imported to project`);
     };
 
     const handleDocumentClick = (doc: Document) => {

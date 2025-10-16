@@ -46,25 +46,19 @@ export default function DocumentLayout({
 
     useEffect(() => {
         const chatFunction = (message?: string) => {
-            console.log('🎯 DocumentLayout onOpenChat called with message:', message);
-            console.log('🎯 Current chatSidebarOpen state:', chatSidebarOpen);
-
+        
             if (message && message.trim()) {
-                console.log('🎯 Setting initial chat message:', message);
                 setInitialChatMessage(message);
 
                 // Clear the initial message after a delay to prevent re-sending
                 setTimeout(() => {
-                    console.log('🎯 Clearing initial chat message after timeout');
                     setInitialChatMessage('');
                 }, 2000); // Increased timeout to ensure it's processed
             }
 
-            console.log('🎯 Opening chat sidebar');
             setChatSidebarOpen(true);
         };
 
-        console.log('🎯 Setting up onOpenChat function in DocumentLayout');
         setOnOpenChat(() => chatFunction); // Wrap in function to ensure correct reference
     }, [setOnOpenChat, setChatSidebarOpen, chatSidebarOpen]);
 
@@ -111,7 +105,6 @@ export default function DocumentLayout({
     };
 
     const handleSaveAsTemplate = async () => {
-        console.log("Saving document as template...");
         try {
             const { saveDocumentAsTemplate, showNotification } = await import('@/services/documentService');
 
@@ -136,7 +129,6 @@ export default function DocumentLayout({
     };
 
     const handleCopyDocument = async () => {
-        console.log("Copying document...");
         try {
             const { copyDocument, showNotification } = await import('@/services/documentService');
 

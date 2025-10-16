@@ -126,9 +126,30 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     const [selectedTextForLink, setSelectedTextForLink] = useState<string>('');
     const [isEditingLink, setIsEditingLink] = useState(false);
     const [existingLinkUrl, setExistingLinkUrl] = useState<string>('');
+    const [maxIndentLevel, setMaxIndentLevel] = useState<number>(5);
 
     // Check if editing should be disabled - moved to top to avoid hoisting issues
-    const isEditingDisabled = readOnly || isInPreviewMode || isInCodeBlock;
+    const isEditingDisabled = readOnly || isInPreviewMode;
+
+    // Calculate maximum indentation based on editor width
+    const calculateMaxIndentation = () => {
+        if (!editor) return 5;
+
+        const editorElement = (editor.view as any).dom;
+        if (!editorElement) return 5;
+
+        const editorWidth = editorElement.offsetWidth || editorElement.clientWidth;
+        const baseWidth = 600; // Base width for reference
+        const baseMaxIndent = 5; // Base maximum indentation levels
+        const indentWidth = 40; // Approximate width per indent level
+
+        // Calculate dynamic max indentation
+        const availableWidth = editorWidth - 100; // Reserve space for content
+        const calculatedMax = Math.floor(availableWidth / indentWidth);
+
+        // Ensure reasonable bounds (minimum 2, maximum 10)
+        return Math.max(2, Math.min(10, calculatedMax));
+    };
 
     // Get current font attributes and heading state from editor when selection changes
     useEffect(() => {
@@ -139,10 +160,14 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             const inCodeBlock = editor.isActive('codeBlock');
             setIsInCodeBlock(inCodeBlock);
 
-            // Check if we're in Mermaid preview mode by looking for preview elements
-            const previewElements = document.querySelectorAll('[data-mermaid-preview="true"]');
-            const inPreviewMode = previewElements.length > 0;
-            setIsInPreviewMode(inPreviewMode);
+            // Check specifically for Mermaid preview/error mode
+            // Look for Mermaid preview containers or error indicators
+            const mermaidPreviews = document.querySelectorAll('[data-mermaid-preview="true"], .mermaid-preview, .mermaid-container');
+            const mermaidErrors = document.querySelectorAll('[data-mermaid-error="true"], .mermaid-error, .syntax-error, .mermaid-parse-error');
+
+            // Only disable editing when Mermaid is in preview mode or showing errors
+            const inMermaidPreview = inCodeBlock && (mermaidPreviews.length > 0 || mermaidErrors.length > 0);
+            setIsInPreviewMode(inMermaidPreview);
 
             // Get text style attributes (font size and family)
             const textStyleAttrs = editor.getAttributes('textStyle');
@@ -229,8 +254,12 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                 setCurrentFontSize(effectiveFontSize);
             }
 
-            // Update text color
-            const textColor = textStyleAttrs.color || '#000000';
+            // Update text color (similar to background color logic)
+            let textColor = '#000000'; // Default color
+            if (editor.isActive('textStyle')) {
+                const styleAttrs = editor.getAttributes('textStyle');
+                textColor = styleAttrs.color || '#000000';
+            }
             setCurrentTextColor(textColor);
 
             // Update background color (highlight or table cell background)
@@ -275,6 +304,98 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         };
     }, [editor]);
 
+    // Control editor editability based on preview mode
+    useEffect(() => {
+        if (editor) {
+            editor.setEditable(!isEditingDisabled);
+        }
+    }, [editor, isEditingDisabled]);
+
+    // Monitor editor width and update maximum indentation
+    useEffect(() => {
+        if (!editor) return;
+
+        const updateIndentLimits = () => {
+            const newMaxIndent = calculateMaxIndentation();
+            setMaxIndentLevel(newMaxIndent);
+        };
+
+        const editorElement = (editor.view as any).dom;
+        if (!editorElement) return;
+
+        // Initial calculation
+        updateIndentLimits();
+
+        // Monitor resize
+        const resizeObserver = new ResizeObserver(() => {
+            updateIndentLimits();
+        });
+
+        resizeObserver.observe(editorElement);
+
+        return () => {
+            resizeObserver.disconnect();
+        };
+    }, [editor]);
+
+    // Add keyboard shortcut handlers for indentation with dynamic limits
+    useEffect(() => {
+        if (!editor) return;
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            // Handle Tab for indent and Shift+Tab for outdent
+            if (event.key === 'Tab') {
+                event.preventDefault();
+                if (event.shiftKey) {
+                    // Shift+Tab = Outdent
+                    if (!isEditingDisabled) {
+                        if (editor.isActive('paragraph')) {
+                            editor.chain().focus().outdentParagraph().run();
+                        } else if (editor.isActive('heading')) {
+                            editor.chain().focus().outdentHeading().run();
+                        }
+                    }
+                } else {
+                    // Tab = Indent (with dynamic limit check)
+                    if (!isEditingDisabled) {
+
+
+                        let currentLevel = 0;
+                        if (editor.isActive('paragraph')) {
+                            const attrs = editor.getAttributes('paragraph');
+                            currentLevel = attrs.indent || 0;
+                        } else if (editor.isActive('heading')) {
+                            const attrs = editor.getAttributes('heading');
+                            currentLevel = attrs.indent || 0;
+                        }
+
+                        // Only indent if below the dynamically calculated maximum level
+                        //Debug information
+                        console.log(`Current indent level: ${currentLevel}, Max allowed: ${maxIndentLevel}`);
+                        //Compare current level with currentMaxIndent
+                        console.log(` ${currentLevel} < ${maxIndentLevel} = ${currentLevel < maxIndentLevel}`);
+                        if (currentLevel < maxIndentLevel) {
+                            if (editor.isActive('paragraph')) {
+                                editor.chain().focus().indentParagraph().run();
+                            } else if (editor.isActive('heading')) {
+                                editor.chain().focus().indentHeading().run();
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        const editorElement = (editor.view as any).dom;
+        if (editorElement) {
+            editorElement.addEventListener('keydown', handleKeyDown);
+
+            return () => {
+                editorElement.removeEventListener('keydown', handleKeyDown);
+            };
+        }
+    }, [editor, isEditingDisabled, maxIndentLevel]);
+
     if (!editor) return <div>No editor available</div>;
 
     // Helper for active state
@@ -295,19 +416,20 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         return () => document.removeEventListener('mousedown', onDocMouseDown);
     }, [showMoreOptions]);
 
-    // Simple font size input handling
+    // Font size input handling with typing state
     const [fontSizeInput, setFontSizeInput] = useState<string>('16');
+    const [isTyping, setIsTyping] = useState(false);
 
-    // Sync input field with current font size
+    // Sync input field with current font size only when not typing
     useEffect(() => {
-        if (currentFontSize && !isEditingDisabled) {
+        if (!isTyping && currentFontSize && !isEditingDisabled) {
             const sizeMatch = currentFontSize.match(/^(\d+)px$/);
             const displaySize = sizeMatch ? sizeMatch[1] : '16';
             setFontSizeInput(displaySize);
         } else if (isEditingDisabled) {
             setFontSizeInput('');
         }
-    }, [currentFontSize, isEditingDisabled]);
+    }, [currentFontSize, isEditingDisabled, isTyping]);
 
     // Initialize font size on editor load
     useEffect(() => {
@@ -355,6 +477,34 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         // Apply to editor
         if (editor) {
             editor.chain().focus().setFontSize(newSize).run();
+        }
+    };
+
+    // Handle input changes with typing state
+    const handleFontSizeChange = (value: string) => {
+        setIsTyping(true);
+        setFontSizeInput(value);
+    };
+
+    const handleFontSizeBlur = () => {
+        setIsTyping(false);
+        applyFontSize(fontSizeInput);
+    };
+
+    const handleFontSizeKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            setIsTyping(false);
+            applyFontSize(fontSizeInput);
+            (e.target as HTMLInputElement).blur();
+        }
+        if (e.key === 'Escape') {
+            setIsTyping(false);
+            // Reset to current font size
+            const sizeMatch = currentFontSize.match(/^(\d+)px$/);
+            const currentDisplaySize = sizeMatch ? sizeMatch[1] : '16';
+            setFontSizeInput(currentDisplaySize);
+            (e.target as HTMLInputElement).blur();
         }
     };
 
@@ -561,72 +711,47 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                         </SelectContent>
                     </Select>
 
-                    {/* Font Size Input with Popover */}
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <input
-                                type="number"
-                                min="1"
-                                max="200"
-                                value={isEditingDisabled ? '' : fontSizeInput}
-                                onChange={(e) => {
-                                    if (!isEditingDisabled) {
-                                        const val = e.target.value;
-                                        setFontSizeInput(val);
-                                    }
-                                }}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !isEditingDisabled) {
-                                        e.preventDefault();
-                                        const val = fontSizeInput.trim();
-                                        if (val && parseInt(val, 10) > 0) {
-                                            applyFontSize(val);
-                                        }
-                                        (e.target as HTMLInputElement).blur();
-                                    }
-                                }}
-                                onBlur={(e) => {
-                                    if (!isEditingDisabled) {
-                                        const val = e.target.value.trim();
-                                        if (val && parseInt(val, 10) > 0) {
-                                            applyFontSize(val);
-                                        }
-                                    }
-                                }}
-                                disabled={isEditingDisabled}
-                                placeholder={isEditingDisabled ? '' : 'Size'}
-                                className={`w-16 h-8 text-sm text-center border border-input rounded-md bg-background cursor-pointer
-                                           [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
-                                           ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'focus:outline-none focus:border-blue-500 hover:border-gray-400'}`}
-                                title="Font size - click for quick options"
-                            />
-                        </PopoverTrigger>
-                        <PopoverContent align="center" side="bottom" className="p-0 w-20 border border-gray-300">
-                            <div className="py-1 text-sm max-h-48 overflow-y-auto">
-                                {['8', '9', '10', '11', '12', '14', '16', '18', '20', '24', '28', '32', '36', '40', '48', '56', '64', '72', '80', '96', '120'].map(size => {
-                                    const isActiveSize = fontSizeInput === size;
-                                    return (
-                                        <button
-                                            key={size}
-                                            type="button"
-                                            onClick={() => {
-                                                if (!isEditingDisabled) {
-                                                    applyFontSize(size);
-                                                }
-                                            }}
-                                            className={`w-full text-center px-3 py-1.5 hover:bg-gray-100 
-                                                       focus:bg-gray-100 focus:outline-none transition-colors
-                                                       ${isActiveSize ? 'bg-blue-100 text-blue-600 font-medium' : ''}
-                                                       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                            disabled={isEditingDisabled}
-                                        >
-                                            {size}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </PopoverContent>
-                    </Popover>
+                    {/* Font Size Input with Dropdown - Unified Implementation */}
+                    <div className="relative flex items-center">
+                        <input
+                            type="text"
+                            value={isEditingDisabled ? '' : fontSizeInput}
+                            onChange={(e) => {
+                                if (!isEditingDisabled) {
+                                    handleFontSizeChange(e.target.value);
+                                }
+                            }}
+                            onKeyDown={handleFontSizeKeyDown}
+                            onBlur={handleFontSizeBlur}
+                            onFocus={() => setIsTyping(true)}
+                            disabled={isEditingDisabled}
+                            placeholder={isEditingDisabled ? '' : '16'}
+                            className={`w-14 h-8 text-sm text-center border border-gray-300 rounded-l-md bg-white mr-0
+                                       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200'}`}
+                        />
+                        <Select
+                            value={isEditingDisabled ? '' : fontSizeInput}
+                            onValueChange={(value) => {
+                                if (!isEditingDisabled) {
+                                    setIsTyping(false);
+                                    applyFontSize(value);
+                                }
+                            }}
+                            disabled={isEditingDisabled}
+                        >
+                            <SelectTrigger className={`h-8 w-6 border border-l-0 border-gray-300 rounded-l-none rounded-r-md bg-white p-0 flex items-center justify-center [&>svg]:w-3 [&>svg]:h-3
+                                                     ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                                data-size="">
+                            </SelectTrigger>
+                            <SelectContent align="center" side="bottom" className="w-20">
+                                {['4', '6', '8', '10', '12', '16', '20', '24', '28', '36', '48', '64', '72', '96'].map(size => (
+                                    <SelectItem key={size} value={size}>
+                                        {size}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
                     <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
@@ -635,15 +760,21 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                         <PopoverTrigger asChild>
                             <div className="h-8 w-8 p-0  flex flex-col justify-center items-center relative">
                                 <Button variant="outline" size="sm"
-                                    className=" bg-white hover:bg-gray-50"
+                                    className="h-7 w-8 bg-white hover:bg-gray-50"
                                     title="Text Color"
                                     disabled={isEditingDisabled}
                                 >
-                                    <Highlighter className="w-3 h-3" />
+                                    <Highlighter className="w-3 h-3"
+                                        style={{
+                                            color: isEditingDisabled ? 'transparent' : (currentTextColor || '#ffffff'),
+                                        }} />
                                 </Button>
                                 <div
-                                    className="w-8 h-1 mt-0.5 rounded-sm border border-gray-300"
-                                    style={{ backgroundColor: isEditingDisabled ? 'transparent' : currentTextColor }}
+                                    className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
+                                    style={{
+                                        backgroundColor: isEditingDisabled ? 'transparent' : currentTextColor,
+                                        borderColor: currentTextColor ? 'transparent' : '#d1d5db'
+                                    }}
                                 />
                             </div>
                         </PopoverTrigger>
@@ -658,7 +789,20 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                         onClick={() => {
                                             if (!isEditingDisabled) {
                                                 editor.chain().focus().unsetColor().run();
+
+                                                // Update state immediately and verify after operation
                                                 setCurrentTextColor('#000000');
+
+                                                // Double-check the actual state after a brief delay
+                                                setTimeout(() => {
+                                                    if (editor.isActive('textStyle')) {
+                                                        const styleAttrs = editor.getAttributes('textStyle');
+                                                        const actualColor = styleAttrs.color || '#000000';
+                                                        setCurrentTextColor(actualColor);
+                                                    } else {
+                                                        setCurrentTextColor('#000000');
+                                                    }
+                                                }, 100);
                                             }
                                         }}
                                         title="Default (Auto)"
@@ -692,8 +836,22 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                                 onClick={() => {
                                                     if (!isEditingDisabled) {
                                                         editor.chain().focus().setColor(color).run();
+
+                                                        // Update state immediately
                                                         setCurrentTextColor(color);
                                                         console.log('Set text color to', color);
+
+                                                        // Verify the actual state after operation completes
+                                                        setTimeout(() => {
+                                                            if (editor.isActive('textStyle')) {
+                                                                const styleAttrs = editor.getAttributes('textStyle');
+                                                                const actualColor = styleAttrs.color || '#000000';
+                                                                setCurrentTextColor(actualColor);
+                                                            } else {
+                                                                // If textStyle is not active, the color should be default
+                                                                setCurrentTextColor('#000000');
+                                                            }
+                                                        }, 100);
                                                     }
                                                 }}
                                                 title={name}
@@ -710,14 +868,17 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                         <PopoverTrigger asChild>
                             <div className="h-8 w-8 p-0 flex flex-col justify-center items-center relative">
                                 <Button variant="outline" size="sm"
-                                    className="bg-white hover:bg-gray-50"
+                                    className="w-8 h-7 bg-white hover:bg-gray-50"
                                     title="Background Color"
                                     disabled={isEditingDisabled}
+                                    style={{
+                                        backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
+                                    }}
                                 >
                                     <Palette className="w-3 h-3" />
                                 </Button>
                                 <div
-                                    className="w-8 h-1 mt-0.5 p-0 rounded-sm border border-gray-300"
+                                    className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
                                     style={{
                                         backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
                                         borderColor: currentBackgroundColor ? 'transparent' : '#d1d5db'
@@ -932,27 +1093,37 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
                     <Button variant="outline"
                         onClick={() => {
-                            // Universal indent command for both paragraphs and headings
-                            // Silently do nothing if at maximum limit - no visual feedback
-                            if (editor) {
+                            if (!isEditingDisabled && editor) {
+                                // Check current indentation level before allowing indent
+                                let currentLevel = 0;
                                 if (editor.isActive('paragraph')) {
-                                    editor.chain().focus().indentParagraph().run();
+                                    const attrs = editor.getAttributes('paragraph');
+                                    currentLevel = attrs.indent || 0;
                                 } else if (editor.isActive('heading')) {
-                                    editor.chain().focus().indentHeading().run();
+                                    const attrs = editor.getAttributes('heading');
+                                    currentLevel = attrs.indent || 0;
+                                }
+
+                                // Only indent if below maximum level
+                                if (currentLevel < maxIndentLevel) {
+                                    if (editor.isActive('paragraph')) {
+                                        editor.chain().focus().indentParagraph().run();
+                                    } else if (editor.isActive('heading')) {
+                                        editor.chain().focus().indentHeading().run();
+                                    }
                                 }
                             }
                         }}
-                        className="rounded-md bg-white hover:bg-gray-50 transition-colors text-sm"
-                        title="Indent"
+                        disabled={isEditingDisabled}
+                        className={`rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title={`Indent (Max: ${maxIndentLevel} levels)`}
                     >
                         <IndentIncrease />
                     </Button>
 
                     <Button variant="outline"
                         onClick={() => {
-                            // Universal outdent command for both paragraphs and headings
-                            // Silently do nothing if at minimum level (0) - no visual feedback
-                            if (editor) {
+                            if (!isEditingDisabled && editor) {
                                 if (editor.isActive('paragraph')) {
                                     editor.chain().focus().outdentParagraph().run();
                                 } else if (editor.isActive('heading')) {
@@ -960,14 +1131,20 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                 }
                             }
                         }}
-                        className="rounded-md bg-white hover:bg-gray-50 transition-colors text-sm"
+                        disabled={isEditingDisabled}
+                        className={`rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                         title="Outdent"
                     >
                         <IndentDecrease />
                     </Button>
                     <Button variant="outline" size="sm"
-                        onClick={() => editor.chain().focus().clearNodes().unsetAllMarks().run()}
-                        className="h-8 w-8 p-0 bg-white hover:bg-gray-50"
+                        onClick={() => {
+                            if (!isEditingDisabled) {
+                                editor.chain().focus().clearNodes().unsetAllMarks().run();
+                            }
+                        }}
+                        disabled={isEditingDisabled}
+                        className={`h-8 w-8 p-0 bg-white hover:bg-gray-50 ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                         title="Clear All Formatting"
                     >
                         <Eraser className="w-4 h-4" />
@@ -1133,10 +1310,27 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
                             {/* Indentation */}
                             <DropdownMenuItem onClick={() => {
-                                if (editor?.isActive('paragraph')) {
-                                    editor.chain().focus().indentParagraph().run();
-                                } else if (editor?.isActive('heading')) {
-                                    editor.chain().focus().indentHeading().run();
+                                if (!isEditingDisabled && editor) {
+                                    // Calculate current max indent dynamically
+                                    const currentMaxIndent = calculateMaxIndentation();
+
+                                    let currentLevel = 0;
+                                    if (editor.isActive('paragraph')) {
+                                        const attrs = editor.getAttributes('paragraph');
+                                        currentLevel = attrs.indent || 0;
+                                    } else if (editor.isActive('heading')) {
+                                        const attrs = editor.getAttributes('heading');
+                                        currentLevel = attrs.indent || 0;
+                                    }
+
+                                    // Only indent if below maximum level
+                                    if (currentLevel < currentMaxIndent) {
+                                        if (editor.isActive('paragraph')) {
+                                            editor.chain().focus().indentParagraph().run();
+                                        } else if (editor.isActive('heading')) {
+                                            editor.chain().focus().indentHeading().run();
+                                        }
+                                    }
                                 }
                             }}>
                                 <IndentIncrease className="w-4 h-4 mr-2" />
@@ -1144,10 +1338,12 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                             </DropdownMenuItem>
 
                             <DropdownMenuItem onClick={() => {
-                                if (editor?.isActive('paragraph')) {
-                                    editor.chain().focus().outdentParagraph().run();
-                                } else if (editor?.isActive('heading')) {
-                                    editor.chain().focus().outdentHeading().run();
+                                if (!isEditingDisabled && editor) {
+                                    if (editor.isActive('paragraph')) {
+                                        editor.chain().focus().outdentParagraph().run();
+                                    } else if (editor.isActive('heading')) {
+                                        editor.chain().focus().outdentHeading().run();
+                                    }
                                 }
                             }}>
                                 <IndentDecrease className="w-4 h-4 mr-2" />

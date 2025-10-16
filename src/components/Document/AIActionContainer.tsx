@@ -26,12 +26,9 @@ export default function AIActionContainer({
     const [isVisible, setIsVisible] = useState(false);
 
     useEffect(() => {
-        console.log('🎯 AIActionContainer show prop changed to:', show);
         if (show) {
-            console.log('✅ Making AIActionContainer visible');
             setIsVisible(true);
         } else {
-            console.log('❌ Hiding AIActionContainer');
             // Delay hiding to allow for exit animation
             const timer = setTimeout(() => setIsVisible(false), 300);
             return () => clearTimeout(timer);
@@ -57,11 +54,9 @@ export default function AIActionContainer({
     }, [show, onAccept, onReject]);
 
     if (!isVisible) {
-        console.log('🚫 AIActionContainer not visible, returning null');
         return null;
     }
 
-    console.log('👀 AIActionContainer is visible, rendering with show:', show);
 
     // Adjust positioning based on chat sidebar state
     const rightPosition = chatSidebarOpen ? 'right-[30rem]' : 'right-6';

@@ -17,11 +17,6 @@ const DocumentContext = memo(({ editor, children, onOpenChat }: DocumentContextP
     });
     const editorContentRef = useRef<HTMLDivElement>(null);
 
-    // Debug onOpenChat prop
-    useEffect(() => {
-        console.log('DocumentContext component onOpenChat prop:', onOpenChat);
-    }, [onOpenChat]);
-
     useEffect(() => {
         if (!editor || !editorContentRef.current) return;
 
