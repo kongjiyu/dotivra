@@ -343,48 +343,52 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         if (!editor) return;
 
         const handleKeyDown = (event: KeyboardEvent) => {
-            // Handle Tab for indent and Shift+Tab for outdent
-            if (event.key === 'Tab') {
-                event.preventDefault();
-                if (event.shiftKey) {
-                    // Shift+Tab = Outdent
-                    if (!isEditingDisabled) {
-                        if (editor.isActive('paragraph')) {
-                            editor.chain().focus().outdentParagraph().run();
-                        } else if (editor.isActive('heading')) {
-                            editor.chain().focus().outdentHeading().run();
-                        }
+            if (event.key !== 'Tab') return; // Ignore all other keys
+            event.preventDefault(); // Prevent default tab behavior
+            console.log('defaultPrevented before any logic:', event.defaultPrevented);
+
+            // Tab pressed
+            if (isEditingDisabled) {
+                console.log("Editing disabled – allow default Tab behavior.");
+                return; // Don’t prevent default
+            }
+
+            if (event.shiftKey) {
+                // Shift + Tab = Outdent
+                if (editor.isActive('paragraph')) {
+                    event.preventDefault();
+                    editor.chain().focus().outdentParagraph().run();
+                } else if (editor.isActive('heading')) {
+                    event.preventDefault();
+                    editor.chain().focus().outdentHeading().run();
+                }
+            } else {
+                // Tab = Indent
+                let currentLevel = 0;
+
+                if (editor.isActive('paragraph')) {
+                    currentLevel = editor.getAttributes('paragraph').indent || 0;
+                } else if (editor.isActive('heading')) {
+                    currentLevel = editor.getAttributes('heading').indent || 0;
+                }
+
+                console.log(`Current indent level: ${currentLevel}, Max allowed: ${maxIndentLevel}`);
+                if (currentLevel < maxIndentLevel) {
+                    event.preventDefault();
+                    if (editor.isActive('paragraph')) {
+                        editor.chain().focus().indentParagraph().run();
+                    } else if (editor.isActive('heading')) {
+                        editor.chain().focus().indentHeading().run();
                     }
                 } else {
-                    // Tab = Indent (with dynamic limit check)
-                    if (!isEditingDisabled) {
-
-
-                        let currentLevel = 0;
-                        if (editor.isActive('paragraph')) {
-                            const attrs = editor.getAttributes('paragraph');
-                            currentLevel = attrs.indent || 0;
-                        } else if (editor.isActive('heading')) {
-                            const attrs = editor.getAttributes('heading');
-                            currentLevel = attrs.indent || 0;
-                        }
-
-                        // Only indent if below the dynamically calculated maximum level
-                        //Debug information
-                        console.log(`Current indent level: ${currentLevel}, Max allowed: ${maxIndentLevel}`);
-                        //Compare current level with currentMaxIndent
-                        console.log(` ${currentLevel} < ${maxIndentLevel} = ${currentLevel < maxIndentLevel}`);
-                        if (currentLevel < maxIndentLevel) {
-                            if (editor.isActive('paragraph')) {
-                                editor.chain().focus().indentParagraph().run();
-                            } else if (editor.isActive('heading')) {
-                                editor.chain().focus().indentHeading().run();
-                            }
-                        }
-                    }
+                    console.log("Max indentation level reached – default Tab allowed.");
+                    // no preventDefault here → normal Tab navigation continues
                 }
             }
+
+            console.log("Key down event:", event.key, { isEditingDisabled, maxIndentLevel });
         };
+
 
         const editorElement = (editor.view as any).dom;
         if (editorElement) {
