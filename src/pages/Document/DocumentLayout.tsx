@@ -11,9 +11,9 @@ import {
     Folder
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import DocumentMenu from "@/components/Document/DocumentMenu";
-import ChatSidebar from "@/components/Document/ChatSidebar";
-import SimpleShare from "@/components/Document/SimpleShare";
+import DocumentMenu from "@/components/document/DocumentMenu";
+import ChatSidebar from "@/components/document/ChatSidebar";
+import SimpleShare from "@/components/document/SimpleShare";
 import { useDocument } from "@/context/DocumentContext";
 
 interface DocumentLayoutProps {
@@ -34,7 +34,8 @@ export default function DocumentLayout({
         setOnOpenChat,
         chatSidebarOpen,
         setChatSidebarOpen,
-        repositoryInfo
+        repositoryInfo,
+        documentId
     } = useDocument();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [isAIGenerating, setIsAIGenerating] = useState(false);
@@ -45,38 +46,57 @@ export default function DocumentLayout({
 
     useEffect(() => {
         const chatFunction = (message?: string) => {
-            console.log('DocumentLayout onOpenChat called with:', message);
-            if (message) {
+            console.log('🎯 DocumentLayout onOpenChat called with message:', message);
+            console.log('🎯 Current chatSidebarOpen state:', chatSidebarOpen);
+
+            if (message && message.trim()) {
+                console.log('🎯 Setting initial chat message:', message);
                 setInitialChatMessage(message);
+
+                // Clear the initial message after a delay to prevent re-sending
+                setTimeout(() => {
+                    console.log('🎯 Clearing initial chat message after timeout');
+                    setInitialChatMessage('');
+                }, 2000); // Increased timeout to ensure it's processed
             }
+
+            console.log('🎯 Opening chat sidebar');
             setChatSidebarOpen(true);
-            console.log('Chat should now be open, chatSidebarOpen state:', true);
         };
 
-        console.log('Setting up onOpenChat function in DocumentLayout');
-        setOnOpenChat(chatFunction);
-    }, [setOnOpenChat, setChatSidebarOpen]);
+        console.log('🎯 Setting up onOpenChat function in DocumentLayout');
+        setOnOpenChat(() => chatFunction); // Wrap in function to ensure correct reference
+    }, [setOnOpenChat, setChatSidebarOpen, chatSidebarOpen]);
 
     const handleTabChange = (tab: string) => {
         const basePath = '/document';
         switch (tab) {
             case 'editor':
-                navigate(`${basePath}/editor`);
+                if (documentId) {
+                    navigate(`${basePath}/${documentId}`);
+                } else {
+                    navigate(`${basePath}/editor`);
+                }
                 break;
             case 'summary':
                 navigate(`${basePath}/summary`);
                 break;
             case 'project':
-                navigate(`${basePath}/project`);
+                if (documentId) {
+                    navigate(`${basePath}/project/${documentId}`);
+                } else {
+                    navigate(`${basePath}/project`);
+                }
                 break;
             case 'history':
                 navigate(`${basePath}/history`);
                 break;
-            case 'share':
-                navigate(`${basePath}/share`);
-                break;
             default:
-                navigate(`${basePath}/editor`);
+                if (documentId) {
+                    navigate(`${basePath}/${documentId}`);
+                } else {
+                    navigate(`${basePath}/editor`);
+                }
         }
     };
 
@@ -90,8 +110,54 @@ export default function DocumentLayout({
         setTimeout(() => setIsAIGenerating(false), 600);
     };
 
-    const handleSaveAsTemplate = () => {
+    const handleSaveAsTemplate = async () => {
         console.log("Saving document as template...");
+        try {
+            const { saveDocumentAsTemplate, showNotification } = await import('@/services/documentService');
+
+            const documentToSave = {
+                id: documentId,
+                DocumentName: documentTitle,
+                Content: documentContent,
+                DocumentType: 'Document',
+                DocumentCategory: 'general',
+                Project_Id: 'current-project',
+                User_Id: 'current-user',
+                Created_Time: new Date(),
+                Updated_Time: new Date(),
+                IsDraft: true
+            };
+
+            const template = await saveDocumentAsTemplate(documentToSave);
+            showNotification(`Template "${template.TemplateName}" created successfully!`, 'success');
+        } catch (error) {
+            console.error('Error creating template:', error);
+        }
+    };
+
+    const handleCopyDocument = async () => {
+        console.log("Copying document...");
+        try {
+            const { copyDocument, showNotification } = await import('@/services/documentService');
+
+            const documentToCopy = {
+                id: documentId,
+                DocumentName: documentTitle,
+                Content: documentContent,
+                DocumentType: 'Document',
+                DocumentCategory: 'general',
+                Project_Id: 'current-project',
+                User_Id: 'current-user',
+                Created_Time: new Date(),
+                Updated_Time: new Date(),
+                IsDraft: true
+            };
+
+            const copiedDoc = await copyDocument(documentToCopy);
+            showNotification(`Document copy "${copiedDoc.DocumentName}" created successfully!`, 'success');
+        } catch (error) {
+            console.error('Error copying document:', error);
+        }
     };
 
     return (
@@ -194,10 +260,23 @@ export default function DocumentLayout({
                         <DocumentMenu
                             onUpdate={setDocumentContent}
                             onSaveAsTemplate={handleSaveAsTemplate}
+                            onCopyDocument={handleCopyDocument}
                             documentTitle={documentTitle}
                             editor={currentEditor}
                             documentContent={documentContent}
                             context="main"
+                            currentDocument={{
+                                id: documentId,
+                                DocumentName: documentTitle,
+                                Content: documentContent,
+                                DocumentType: 'Document',
+                                DocumentCategory: 'general',
+                                Project_Id: 'current-project',
+                                User_Id: 'current-user',
+                                Created_Time: new Date(),
+                                Updated_Time: new Date(),
+                                IsDraft: true
+                            }}
                         />
                     </div>
                 )}
@@ -234,7 +313,7 @@ export default function DocumentLayout({
                             "Debug authentication flow",
                         ] : [
                             "Strengthen success metrics",
-                            "Review executive summary", 
+                            "Review executive summary",
                             "Add competitor analysis",
                             "Outline next steps",
                         ]}

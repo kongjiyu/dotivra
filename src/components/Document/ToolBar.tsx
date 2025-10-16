@@ -52,44 +52,209 @@ const FONT_FAMILIES = [
     "Inter", "Arial", "Georgia", "Roboto", "Courier New", "Times New Roman", "Verdana", "Tahoma", "Monospace",
 ];
 
+// Table Grid Selector Component
+const TableGridSelector = ({ onSelect }: { onSelect: (rows: number, cols: number) => void }) => {
+    const [hoverRows, setHoverRows] = useState(0);
+    const [hoverCols, setHoverCols] = useState(0);
+
+    const maxRows = 6;
+    const maxCols = 8;
+
+    const handleCellHover = (row: number, col: number) => {
+        setHoverRows(row);
+        setHoverCols(col);
+    };
+
+    const handleCellClick = (row: number, col: number) => {
+        onSelect(row, col);
+    };
+
+    return (
+        <div className="flex flex-col items-center space-y-3">
+            {/* Grid */}
+            <div
+                className="grid gap-1 justify-center"
+                style={{
+                    gridTemplateColumns: `repeat(${maxCols}, 22px)`,
+                    width: 'fit-content'
+                }}
+                onMouseLeave={() => {
+                    setHoverRows(0);
+                    setHoverCols(0);
+                }}
+            >
+                {Array.from({ length: maxRows * maxCols }, (_, index) => {
+                    const row = Math.floor(index / maxCols) + 1;
+                    const col = (index % maxCols) + 1;
+                    const isSelected = row <= hoverRows && col <= hoverCols;
+
+                    return (
+                        <div
+                            key={index}
+                            className={`
+                                w-5 h-5 border border-gray-300 cursor-pointer transition-colors rounded-sm
+                                ${isSelected ? 'bg-blue-500 border-blue-500' : 'bg-white hover:bg-blue-100'}
+                            `}
+                            onMouseEnter={() => handleCellHover(row, col)}
+                            onClick={() => handleCellClick(row, col)}
+                        />
+                    );
+                })}
+            </div>
+
+            {/* Label */}
+            <div className="text-center text-sm text-gray-600">
+                {hoverRows} x {hoverCols}
+            </div>
+        </div>
+    );
+};
 
 
-const ToolBar = ({ editor }: { editor: Editor | null }) => {
+
+const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly?: boolean }) => {
 
     const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [currentFontSize, setCurrentFontSize] = useState<string>('16px');
     const [currentFontFamily, setCurrentFontFamily] = useState<string>("Inter");
+    const [currentTextColor, setCurrentTextColor] = useState<string>('#000000');
+    const [currentBackgroundColor, setCurrentBackgroundColor] = useState<string>('');
+    const [isInCodeBlock, setIsInCodeBlock] = useState(false);
+    const [isInPreviewMode, setIsInPreviewMode] = useState(false);
     const [linkTooltipOpen, setLinkTooltipOpen] = useState(false);
     const [linkTooltipPosition, setLinkTooltipPosition] = useState({ x: 0, y: 0 });
     const [selectedTextForLink, setSelectedTextForLink] = useState<string>('');
     const [isEditingLink, setIsEditingLink] = useState(false);
     const [existingLinkUrl, setExistingLinkUrl] = useState<string>('');
 
-    // Get current font attributes from editor when selection changes
+    // Check if editing should be disabled - moved to top to avoid hoisting issues
+    const isEditingDisabled = readOnly || isInPreviewMode || isInCodeBlock;
+
+    // Get current font attributes and heading state from editor when selection changes
     useEffect(() => {
         if (!editor) return;
 
-        const updateFontAttributes = () => {
-            const attrs = editor.getAttributes('textStyle');
+        const updateToolbarState = () => {
+            // Check if we're in a code block first
+            const inCodeBlock = editor.isActive('codeBlock');
+            setIsInCodeBlock(inCodeBlock);
 
-            // Update font family if set
-            if (attrs.fontFamily) {
-                setCurrentFontFamily(attrs.fontFamily);
+            // Check if we're in Mermaid preview mode by looking for preview elements
+            const previewElements = document.querySelectorAll('[data-mermaid-preview="true"]');
+            const inPreviewMode = previewElements.length > 0;
+            setIsInPreviewMode(inPreviewMode);
+
+            // Get text style attributes (font size and family)
+            const textStyleAttrs = editor.getAttributes('textStyle');
+
+            // Update font family if set (or disable if in code block)
+            if (inCodeBlock) {
+                setCurrentFontFamily('');
+            } else if (textStyleAttrs.fontFamily) {
+                setCurrentFontFamily(textStyleAttrs.fontFamily);
+            } else {
+                // Check if we're in a heading and get its default font family
+                const headingAttrs = editor.getAttributes('heading');
+                if (headingAttrs && headingAttrs.level) {
+                    // Headings typically use the same font family or inherit
+                    setCurrentFontFamily("Inter"); // Default
+                } else {
+                    setCurrentFontFamily("Inter");
+                }
             }
 
-            // Update font size if set
-            if (attrs.fontSize) {
-                setCurrentFontSize(attrs.fontSize);
-            }
-        };
+            // Update font size - check both textStyle and heading attributes (or disable if in code block)
+            let effectiveFontSize = '16px';
 
-        // Listen for selection changes
-        editor.on('selectionUpdate', updateFontAttributes);
-        editor.on('transaction', updateFontAttributes);
+            if (inCodeBlock) {
+                setCurrentFontSize('');
+            } else if (textStyleAttrs.fontSize) {
+                effectiveFontSize = textStyleAttrs.fontSize;
+                setCurrentFontSize(effectiveFontSize);
+            } else {
+                // Check if we're in a heading and set appropriate size
+                const headingAttrs = editor.getAttributes('heading');
+                if (headingAttrs && headingAttrs.level) {
+                    const headingLevel = headingAttrs.level;
+                    // Set default heading sizes
+                    const headingSizes = {
+                        1: '32px', // h1
+                        2: '24px', // h2
+                        3: '20px', // h3
+                        4: '18px', // h4
+                        5: '16px', // h5
+                        6: '14px', // h6
+                    };
+                    effectiveFontSize = headingSizes[headingLevel as keyof typeof headingSizes] || '16px';
+                } else {
+                    // For regular paragraphs, get computed style to get actual font size
+                    try {
+                        const { state } = editor;
+                        const { from } = state.selection;
+                        const resolvedPos = state.doc.resolve(from);
+                        const node = resolvedPos.parent;
+
+                        if (node && node.type.name === 'paragraph') {
+                            // Try to get actual computed font size from DOM
+                            const editorElement = (editor.view as any).dom;
+                            if (editorElement) {
+                                const selection = window.getSelection();
+                                if (selection && selection.rangeCount > 0) {
+                                    const range = selection.getRangeAt(0);
+                                    let element = range.commonAncestorContainer;
+
+                                    if (element.nodeType === Node.TEXT_NODE) {
+                                        element = element.parentElement as Element;
+                                    }
+
+                                    if (element && element instanceof HTMLElement) {
+                                        const computedStyle = window.getComputedStyle(element);
+                                        const fontSize = computedStyle.fontSize;
+                                        if (fontSize && fontSize !== '16px') {
+                                            effectiveFontSize = fontSize;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        // Fallback to default if there's an error
+                        effectiveFontSize = '16px';
+                    }
+
+                    if (!textStyleAttrs.fontSize && effectiveFontSize === '16px') {
+                        effectiveFontSize = '16px'; // Default paragraph size
+                    }
+                }
+                setCurrentFontSize(effectiveFontSize);
+            }
+
+            // Update text color
+            const textColor = textStyleAttrs.color || '#000000';
+            setCurrentTextColor(textColor);
+
+            // Update background color (highlight or table cell background)
+            let bgColor = '';
+            if (editor.isActive('highlight')) {
+                const highlightAttrs = editor.getAttributes('highlight');
+                bgColor = highlightAttrs.color || '';
+            } else if (editor.isActive('tableCell')) {
+                const cellAttrs = editor.getAttributes('tableCell');
+                bgColor = cellAttrs.backgroundColor || '';
+            }
+            setCurrentBackgroundColor(bgColor);
+        };        // Initialize toolbar state immediately when editor becomes available
+        updateToolbarState();
+
+        // Listen for selection changes and content updates
+        editor.on('selectionUpdate', updateToolbarState);
+        editor.on('transaction', updateToolbarState);
+        editor.on('focus', updateToolbarState);
 
         return () => {
-            editor.off('selectionUpdate', updateFontAttributes);
-            editor.off('transaction', updateFontAttributes);
+            editor.off('selectionUpdate', updateToolbarState);
+            editor.off('transaction', updateToolbarState);
+            editor.off('focus', updateToolbarState);
         };
     }, [editor]);
 
@@ -130,19 +295,67 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
         return () => document.removeEventListener('mousedown', onDocMouseDown);
     }, [showMoreOptions]);
 
-    // Get the display value for the current font size
-    const getCurrentFontSizeDisplay = () => {
-        // Strip 'px' and convert to number for display
-        if (!currentFontSize) return '16';
-        const sizeMatch = currentFontSize.match(/^(\d+)px$/);
-        return sizeMatch ? sizeMatch[1] : '16';
-    };
+    // Simple font size input handling
+    const [fontSizeInput, setFontSizeInput] = useState<string>('16');
 
-    // Apply font size with proper px unit
-    const applyFontSize = (size: string) => {
+    // Sync input field with current font size
+    useEffect(() => {
+        if (currentFontSize && !isEditingDisabled) {
+            const sizeMatch = currentFontSize.match(/^(\d+)px$/);
+            const displaySize = sizeMatch ? sizeMatch[1] : '16';
+            setFontSizeInput(displaySize);
+        } else if (isEditingDisabled) {
+            setFontSizeInput('');
+        }
+    }, [currentFontSize, isEditingDisabled]);
+
+    // Initialize font size on editor load
+    useEffect(() => {
+        if (editor && !isEditingDisabled) {
+            // Delay to ensure editor is fully initialized
+            const timeoutId = setTimeout(() => {
+                // Get current font attributes immediately
+                const textStyleAttrs = editor.getAttributes('textStyle');
+                if (textStyleAttrs.fontSize) {
+                    setCurrentFontSize(textStyleAttrs.fontSize);
+                } else {
+                    // Check if we're in a heading for proper initialization
+                    const headingAttrs = editor.getAttributes('heading');
+                    if (headingAttrs && headingAttrs.level) {
+                        const headingSizes = {
+                            1: '32px', 2: '24px', 3: '20px', 4: '18px', 5: '16px', 6: '14px',
+                        };
+                        const size = headingSizes[headingAttrs.level as keyof typeof headingSizes] || '16px';
+                        setCurrentFontSize(size);
+                    } else {
+                        setCurrentFontSize('16px');
+                    }
+                }
+            }, 100);
+
+            return () => clearTimeout(timeoutId);
+        }
+    }, [editor, isEditingDisabled]);
+
+    // Apply font size with simple validation
+    const applyFontSize = (sizeStr: string) => {
+        if (isEditingDisabled) return; // Don't apply if editing is disabled
+
+        const size = parseInt(sizeStr, 10);
+
+        // Simple validation
+        if (isNaN(size) || size < 1) {
+            return; // Invalid input, don't apply
+        }
+
         const newSize = `${size}px`;
+        setFontSizeInput(size.toString());
         setCurrentFontSize(newSize);
-        editor.chain().focus().setFontSize(newSize).run();
+
+        // Apply to editor
+        if (editor) {
+            editor.chain().focus().setFontSize(newSize).run();
+        }
     };
 
     return (
@@ -152,9 +365,14 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
             <div className="flex items-center gap-1 flex-shrink-0 overflow-hidden">
                 {/* Basic Text Formatting */}
                 <Button variant="outline" size="sm"
-                    onClick={() => editor.chain().focus().toggleBold().run()}
+                    onClick={() => {
+                        if (!isEditingDisabled) {
+                            editor.chain().focus().toggleBold().run();
+                        }
+                    }}
+                    disabled={isEditingDisabled}
                     className={`h-8 w-8 p-0 ${isActive('bold') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                        }`}
+                        } ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                     title="Bold"
                 >
                     <Bold className="w-4 h-4" />
@@ -324,14 +542,17 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                 {/* Font Styling - Hidden on smaller screens */}
                 <div className="hidden lg:flex items-center gap-1">
                     <Select
-                        value={currentFontFamily}
+                        value={isEditingDisabled ? '' : currentFontFamily}
                         onValueChange={(value) => {
-                            editor.chain().focus().setFontFamily(value).run();
-                            setCurrentFontFamily(value);
+                            if (!isEditingDisabled) {
+                                editor.chain().focus().setFontFamily(value).run();
+                                setCurrentFontFamily(value);
+                            }
                         }}
+                        disabled={isEditingDisabled}
                     >
-                        <SelectTrigger className="w-[140px] h-8 text-sm">
-                            <SelectValue placeholder={currentFontFamily} />
+                        <SelectTrigger className={`w-[140px] h-8 text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                            <SelectValue placeholder={isEditingDisabled ? '' : currentFontFamily} />
                         </SelectTrigger>
                         <SelectContent>
                             {FONT_FAMILIES.map(f => (
@@ -340,104 +561,88 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                         </SelectContent>
                     </Select>
 
-                    {/* Enhanced Font Size Selector with card-like appearance */}
-                    <div className="relative">
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <div className="flex items-center h-8 rounded-md border border-input bg-background">
-                                    <button
-                                        type="button"
-                                        onClick={(e) => {
-                                            e.stopPropagation(); // Prevent popover from opening
-                                            const currentSize = parseInt(getCurrentFontSizeDisplay(), 10);
-                                            if (currentSize > 1) {
-                                                applyFontSize((currentSize - 1).toString());
-                                            }
-                                        }}
-                                        className="h-full px-1.5 flex items-center justify-center border-r border-input 
-                                    text-muted-foreground hover:bg-accent hover:text-accent-foreground rounded-l-md"
-                                    >
-                                        -
-                                    </button>
-
-                                    <input
-                                        type="text"
-                                        value={getCurrentFontSizeDisplay()}
-                                        onChange={(e) => {
-                                            const val = e.target.value.replace(/[^\d]/g, '');
-                                            if (val === '') {
-                                                setCurrentFontSize('');
-                                                return;
-                                            }
-
-                                            const numVal = parseInt(val, 10);
-                                            if (numVal >= 0 && numVal <= 100) {
-                                                applyFontSize(numVal.toString());
-                                            }
-                                        }}
-                                        onBlur={(e) => {
-                                            // If empty or 0, reset to default (16)
-                                            if (e.target.value === '' || parseInt(e.target.value, 10) === 0) {
-                                                applyFontSize('16');
-                                            }
-                                        }}
-                                        className="h-full w-8 bg-transparent text-sm text-center focus:outline-none"
-                                    />
-
-
-                                    <div className="flex items-center h-full">
+                    {/* Font Size Input with Popover */}
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <input
+                                type="number"
+                                min="1"
+                                max="200"
+                                value={isEditingDisabled ? '' : fontSizeInput}
+                                onChange={(e) => {
+                                    if (!isEditingDisabled) {
+                                        const val = e.target.value;
+                                        setFontSizeInput(val);
+                                    }
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !isEditingDisabled) {
+                                        e.preventDefault();
+                                        const val = fontSizeInput.trim();
+                                        if (val && parseInt(val, 10) > 0) {
+                                            applyFontSize(val);
+                                        }
+                                        (e.target as HTMLInputElement).blur();
+                                    }
+                                }}
+                                onBlur={(e) => {
+                                    if (!isEditingDisabled) {
+                                        const val = e.target.value.trim();
+                                        if (val && parseInt(val, 10) > 0) {
+                                            applyFontSize(val);
+                                        }
+                                    }
+                                }}
+                                disabled={isEditingDisabled}
+                                placeholder={isEditingDisabled ? '' : 'Size'}
+                                className={`w-16 h-8 text-sm text-center border border-input rounded-md bg-background cursor-pointer
+                                           [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none
+                                           ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'focus:outline-none focus:border-blue-500 hover:border-gray-400'}`}
+                                title="Font size - click for quick options"
+                            />
+                        </PopoverTrigger>
+                        <PopoverContent align="center" side="bottom" className="p-0 w-20 border border-gray-300">
+                            <div className="py-1 text-sm max-h-48 overflow-y-auto">
+                                {['8', '9', '10', '11', '12', '14', '16', '18', '20', '24', '28', '32', '36', '40', '48', '56', '64', '72', '80', '96', '120'].map(size => {
+                                    const isActiveSize = fontSizeInput === size;
+                                    return (
                                         <button
+                                            key={size}
                                             type="button"
-                                            onClick={(e) => {
-                                                e.stopPropagation(); // Prevent popover from opening
-                                                const currentSize = parseInt(getCurrentFontSizeDisplay(), 10);
-                                                if (currentSize < 100) {
-                                                    applyFontSize((currentSize + 1).toString());
+                                            onClick={() => {
+                                                if (!isEditingDisabled) {
+                                                    applyFontSize(size);
                                                 }
                                             }}
-                                            className="h-full px-1.5 flex items-center justify-center border-l border-input 
-                                        text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                                            className={`w-full text-center px-3 py-1.5 hover:bg-gray-100 
+                                                       focus:bg-gray-100 focus:outline-none transition-colors
+                                                       ${isActiveSize ? 'bg-blue-100 text-blue-600 font-medium' : ''}
+                                                       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            disabled={isEditingDisabled}
                                         >
-                                            +
+                                            {size}
                                         </button>
-
-                                    </div>
-                                </div>
-                            </PopoverTrigger>
-
-                            <PopoverContent align="center" side="bottom" className="p-0 w-16 border border-gray-300">
-                                <ul className="py-1 text-sm">
-                                    {['8', '9', '10', '11', '12', '14', '18', '24', '30', '36', '48', '60', '72', '96'].map(disp => {
-                                        const isActiveSize = getCurrentFontSizeDisplay() === disp;
-                                        return (
-                                            <li key={disp}>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => applyFontSize(disp)}
-                                                    className={`w-full text-left px-3 py-1.5 hover:bg-gray-100 
-                                                focus:bg-gray-100 focus:outline-none
-                                                ${isActiveSize ? 'bg-gray-100' : ''}`}
-                                                >
-                                                    {disp}
-                                                </button>
-                                            </li>
-                                        );
-                                    })}
-                                </ul>
-                            </PopoverContent>
-                        </Popover>
-                    </div>
+                                    );
+                                })}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
 
                     <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
-                    {/* Text Color: 8 most used colors for light theme */}
+                    {/* Text Color with current color indicator */}
                     <Popover>
                         <PopoverTrigger asChild>
                             <Button variant="outline" size="sm"
-                                className="h-8 w-8 p-0 bg-white hover:bg-gray-50"
+                                className="h-8 w-8 p-0 bg-white hover:bg-gray-50 flex flex-col justify-center items-center relative"
                                 title="Text Color"
+                                disabled={isEditingDisabled}
                             >
-                                <Palette className="w-4 h-4" />
+                                <Palette className="w-3 h-3" />
+                                <div
+                                    className="w-4 h-1 mt-0.5 rounded-sm"
+                                    style={{ backgroundColor: isEditingDisabled ? 'transparent' : currentTextColor }}
+                                />
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-64 p-4" side="bottom" align="center">
@@ -448,7 +653,12 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                 <div className="flex items-center gap-2">
                                     <button
                                         className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
-                                        onClick={() => editor.chain().focus().unsetColor().run()}
+                                        onClick={() => {
+                                            if (!isEditingDisabled) {
+                                                editor.chain().focus().unsetColor().run();
+                                                setCurrentTextColor('#000000');
+                                            }
+                                        }}
                                         title="Default (Auto)"
                                     >
                                         A
@@ -477,7 +687,12 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                                     backgroundColor: `${color}20`, // 20 = ~12% opacity
                                                     borderColor: color
                                                 }}
-                                                onClick={() => editor.chain().focus().setColor(color).run()}
+                                                onClick={() => {
+                                                    if (!isEditingDisabled) {
+                                                        editor.chain().focus().setColor(color).run();
+                                                        setCurrentTextColor(color);
+                                                    }
+                                                }}
                                                 title={name}
                                             />
                                         ))}
@@ -487,14 +702,22 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                         </PopoverContent>
                     </Popover>
 
-                    {/* Background Color: Same 8 colors */}
+                    {/* Background Color with current color indicator */}
                     <Popover>
                         <PopoverTrigger asChild>
                             <Button variant="outline" size="sm"
-                                className="h-8 w-8 p-0 bg-white hover:bg-gray-50"
+                                className="h-8 w-8 p-0 bg-white hover:bg-gray-50 flex flex-col justify-center items-center relative"
                                 title="Background Color"
+                                disabled={isEditingDisabled}
                             >
-                                <Highlighter className="w-4 h-4" />
+                                <Highlighter className="w-3 h-3" />
+                                <div
+                                    className="w-4 h-1 mt-0.5 rounded-sm border border-gray-300"
+                                    style={{
+                                        backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
+                                        borderColor: currentBackgroundColor ? 'transparent' : '#d1d5db'
+                                    }}
+                                />
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-80 p-4" side="bottom" align="center">
@@ -503,7 +726,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
 
                                 {/* Context Detection */}
                                 <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
-                                    {editor?.isActive('tableCell')
+                                    {(editor?.isActive('tableCell') || editor?.isActive('tableHeader'))
                                         ? "💡 You're in a table cell - colors will be applied to the cell background"
                                         : "💡 Colors will be applied as text highlighting"
                                     }
@@ -514,12 +737,18 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                     <button
                                         className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
                                         onClick={() => {
-                                            if (editor?.isActive('tableCell')) {
-                                                // Remove cell background
-                                                editor?.chain().focus().updateAttributes('tableCell', { style: '' }).run();
-                                            } else {
-                                                // Remove text highlighting
-                                                editor?.chain().focus().unsetHighlight().run();
+                                            if (!isEditingDisabled) {
+                                                if (editor?.isActive('tableCell')) {
+                                                    // Remove cell background using our custom extension
+                                                    editor?.chain().focus().unsetTableCellBackgroundColor().run();
+                                                } else if (editor?.isActive('tableHeader')) {
+                                                    // Remove header background using our custom extension
+                                                    editor?.chain().focus().unsetTableHeaderBackgroundColor().run();
+                                                } else {
+                                                    // Remove text highlighting
+                                                    editor?.chain().focus().unsetHighlight().run();
+                                                }
+                                                setCurrentBackgroundColor('');
                                             }
                                         }}
                                         title="No Background"
@@ -551,14 +780,18 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                                     borderColor: color
                                                 }}
                                                 onClick={() => {
-                                                    if (editor?.isActive('tableCell')) {
-                                                        // Apply to table cell background
-                                                        editor?.chain().focus().updateAttributes('tableCell', {
-                                                            style: `background-color: ${color}`
-                                                        }).run();
-                                                    } else {
-                                                        // Apply as text highlighting
-                                                        editor?.chain().focus().setHighlight({ color }).run();
+                                                    if (!isEditingDisabled) {
+                                                        if (editor?.isActive('tableCell')) {
+                                                            // Apply to table cell background using our custom extension
+                                                            editor?.chain().focus().setTableCellBackgroundColor(color).run();
+                                                        } else if (editor?.isActive('tableHeader')) {
+                                                            // Apply to table header background using our custom extension
+                                                            editor?.chain().focus().setTableHeaderBackgroundColor(color).run();
+                                                        } else {
+                                                            // Apply as text highlighting
+                                                            editor?.chain().focus().setHighlight({ color }).run();
+                                                        }
+                                                        setCurrentBackgroundColor(color);
                                                     }
                                                 }}
                                                 title={name}
@@ -568,7 +801,7 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                 </div>
 
                                 {/* Additional Table Cell Colors */}
-                                {editor?.isActive('tableCell') && (
+                                {(editor?.isActive('tableCell') || editor?.isActive('tableHeader')) && (
                                     <div>
                                         <p className="text-xs text-gray-500 mb-2">Additional Cell Colors</p>
                                         <div className="grid grid-cols-6 gap-1">
@@ -585,9 +818,16 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
                                                     className="w-8 h-8 rounded border border-gray-300 hover:scale-110 transition-transform"
                                                     style={{ backgroundColor: color }}
                                                     onClick={() => {
-                                                        editor?.chain().focus().updateAttributes('tableCell', {
-                                                            style: `background-color: ${color}`
-                                                        }).run();
+                                                        if (!isEditingDisabled) {
+                                                            if (editor?.isActive('tableHeader')) {
+                                                                // Use our custom table header extension
+                                                                editor?.chain().focus().setTableHeaderBackgroundColor(color).run();
+                                                            } else {
+                                                                // Use our custom table cell extension
+                                                                editor?.chain().focus().setTableCellBackgroundColor(color).run();
+                                                            }
+                                                            setCurrentBackgroundColor(color);
+                                                        }
                                                     }}
                                                     title={name}
                                                 />
@@ -732,36 +972,40 @@ const ToolBar = ({ editor }: { editor: Editor | null }) => {
 
                     {/* INSERT OPTIONS - Always visible */}
                     <div className="flex items-center gap-1">
-                        <Button variant="outline" size="sm"
-                            onClick={() => {
-                                const rowsInput = window.prompt('Number of rows:', '3');
-                                const colsInput = window.prompt('Number of columns:', '3');
-                                const rows = rowsInput ? Number(rowsInput) : NaN;
-                                const cols = colsInput ? Number(colsInput) : NaN;
-                                if (Number.isFinite(rows) && Number.isFinite(cols) && rows > 0 && cols > 0) {
-                                    editor.chain().focus().insertTable({ rows, cols, withHeaderRow: false }).run();
-                                }
-                            }}
-                            className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
-                            title="Insert Table"
-                        >
-                            <Table className="w-4 h-4" />
-                            <span className="hidden lg:inline">Table</span>
-                        </Button>
+                        {/* Table Grid Selector */}
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button variant="outline" size="sm"
+                                    className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
+                                    title="Insert Table"
+                                >
+                                    <Table className="w-4 h-4" />
+                                    <span className="hidden lg:inline">Table</span>
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 p-4" side="bottom" align="start">
+                                <div className="space-y-3">
+                                    <h4 className="text-sm font-medium text-gray-700">Insert Table</h4>
+                                    <TableGridSelector
+                                        onSelect={(rows, cols) => {
+                                            editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+                                        }}
+                                    />
+                                </div>
+                            </PopoverContent>
+                        </Popover>
 
                         <Button variant="outline" size="sm"
                             onClick={() => {
                                 const defaultChart = `graph TD
-                                            A[Start] --> B{Decision}
-                                            B -->|Yes| C[Do something]
-                                            B -->|No| D[Do something else]
-                                            C --> E[End]
-                                            D --> E`;
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Do something]
+    B -->|No| D[Do something else]
+    C --> E[End]
+    D --> E`;
 
-                                const chart = window.prompt('Enter Mermaid diagram code:', defaultChart);
-                                if (chart && chart.trim()) {
-                                    editor?.commands.insertMermaidDiagram({ chart: chart.trim() });
-                                }
+                                // Insert a Mermaid code block directly instead of using prompt
+                                editor?.chain().focus().toggleCodeBlock({ language: 'mermaid' }).insertContent(defaultChart).run();
                             }}
                             className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
                             title="Insert Mermaid Diagram"

@@ -49,6 +49,9 @@ export default function ChatSidebar({
     // Get AI actions function from document context
     const { showAIActions, documentContent } = useDocument();
 
+    // Get user context for repository operations
+    const { user } = useAuth();
+
     // Note: Current operation ID is stored globally for DocumentEditor access
 
     // Debug context values
@@ -64,13 +67,13 @@ export default function ChatSidebar({
     useEffect(() => {
         if (open && !externalMessages && internalMessages.length === 0) {
             let content = 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content.\n\n**Special AI Operations:**\n• Type `*add` to add new content\n• Type `*remove` to mark content for removal\n• Type `*edit` to replace existing content\n\nThese operations will show highlighted changes in your document with accept/reject options.';
-            
+
             if (repositoryInfo) {
                 content += `\n\n**🚀 Repository Integration Active!**\n📂 Connected to: \`${repositoryInfo.owner}/${repositoryInfo.repo}\`\n\n**Repository Commands:**\n• "Analyze code in [filename]" - Explain specific files\n• "Improve the React components" - Code improvements\n• "Debug the authentication flow" - Find issues\n• "Explain how routing works" - Understand patterns\n• "Document the API endpoints" - Generate docs\n\nI have access to your repository structure, README, and key files to provide contextual assistance!`;
             }
-            
+
             content += '\n\nHow can I assist you today?';
-            
+
             const helloMsg: ChatMessage = {
                 id: 'hello-msg',
                 role: 'assistant',
@@ -90,10 +93,68 @@ export default function ChatSidebar({
 
     // Handle initial message from context menu
     useEffect(() => {
+        console.log('💬 ChatSidebar effect triggered - open:', open, 'initialMessage:', initialMessage);
+
         if (open && initialMessage && initialMessage.trim()) {
+            console.log('🚀 ChatSidebar processing initial message:', initialMessage);
+
+            // Show the message in the input field first
             setInput(initialMessage);
+
+            // Auto-send the initial message after a brief delay
+            const autoSend = async () => {
+                console.log('📤 Auto-sending initial message:', initialMessage);
+
+                // Create user message
+                const userMsg: ChatMessage = {
+                    id: crypto.randomUUID(),
+                    role: "user",
+                    content: initialMessage,
+                    timestamp: Date.now()
+                };
+
+                // Add user message to chat
+                setInternalMessages(prev => [...prev, userMsg]);
+
+                // Clear input after sending
+                setInput('');
+
+                // Start generating AI response
+                setIsGenerating(true);
+
+                try {
+                    console.log('🤖 Generating AI response for:', initialMessage);
+                    const response = await aiService.chatResponse(initialMessage, documentContent);
+
+                    const assistantMsg: ChatMessage = {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: response,
+                        timestamp: Date.now()
+                    };
+
+                    setInternalMessages(prev => [...prev, assistantMsg]);
+                } catch (error) {
+                    console.error('❌ Error generating AI response:', error);
+                    const errorMsg: ChatMessage = {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: "I'm sorry, I encountered an error while processing your request. Please try again.",
+                        timestamp: Date.now()
+                    };
+                    setInternalMessages(prev => [...prev, errorMsg]);
+                } finally {
+                    setIsGenerating(false);
+                }
+            };
+
+            // Delay to show the message in input field briefly, then send
+            const timeoutId = setTimeout(autoSend, 100); // Reduced from 500ms for faster response
+
+            // Cleanup timeout on component unmount or effect re-run
+            return () => clearTimeout(timeoutId);
         }
-    }, [open, initialMessage]);
+    }, [open, initialMessage, documentContent]);
 
     // Suggestions UI removed per request; associated helpers removed.
 
@@ -202,48 +263,47 @@ export default function ChatSidebar({
     const generateAIContent = async (prompt: string): Promise<string> => {
         try {
             console.log('🤖 Generating AI content for prompt:', prompt);
-            
+
             // Determine the type of AI operation based on the prompt
             const lowerPrompt = prompt.toLowerCase();
-            
-            // Get user for repository operations (only when needed)
-            const { user } = useAuth();
-            
+
+            // Use user from hook for repository operations
+
             // Check for repository-specific commands
             if (repositoryInfo && user && (
-                lowerPrompt.includes('analyze code') || 
-                lowerPrompt.includes('explain file') || 
-                lowerPrompt.includes('improve code') || 
+                lowerPrompt.includes('analyze code') ||
+                lowerPrompt.includes('explain file') ||
+                lowerPrompt.includes('improve code') ||
                 lowerPrompt.includes('debug') ||
                 lowerPrompt.includes('repository') ||
                 lowerPrompt.includes('codebase') ||
-                lowerPrompt.includes('.js') || lowerPrompt.includes('.ts') || 
-                lowerPrompt.includes('.tsx') || lowerPrompt.includes('.py') || 
+                lowerPrompt.includes('.js') || lowerPrompt.includes('.ts') ||
+                lowerPrompt.includes('.tsx') || lowerPrompt.includes('.py') ||
                 lowerPrompt.includes('.java') || lowerPrompt.includes('.cpp')
             )) {
                 console.log('🔍 Repository-aware request detected, using repository context');
-                
+
                 // Check if user is asking about a specific file
                 const fileMatch = prompt.match(/([a-zA-Z0-9_-]+\.[a-zA-Z]+)/);
                 if (fileMatch) {
                     const fileName = fileMatch[1];
                     try {
                         const analysis = lowerPrompt.includes('improve') ? 'improve' :
-                                       lowerPrompt.includes('debug') ? 'debug' :
-                                       lowerPrompt.includes('document') ? 'document' : 'explain';
-                        
+                            lowerPrompt.includes('debug') ? 'debug' :
+                                lowerPrompt.includes('document') ? 'document' : 'explain';
+
                         const result = await aiService.analyzeRepositoryCode(user, repositoryInfo, fileName, analysis);
                         return `<h2>Repository Analysis: ${fileName}</h2>\n${result}`;
                     } catch (error) {
                         console.log('Could not find specific file, using general repository context');
                     }
                 }
-                
+
                 // General repository-aware generation
                 const result = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, documentContent);
                 return `<h2>Repository-Aware Response</h2>\n${result}`;
             }
-            
+
             if (lowerPrompt.includes('summarize') || lowerPrompt.includes('summary')) {
                 // Generate summary of current document
                 const summary = await aiService.summarizeContent(documentContent || '');
@@ -438,65 +498,83 @@ export default function ChatSidebar({
                     };
                     setInternalMessages(prev => [...prev, assistantMsg]);
                 } else {
-                    // Regular AI content generation using EnhancedAIContentWriter - ADD AT END OF DOCUMENT
-                    const aiResponse = await generateAIContent(text);
+                    // Check if this is a content generation request or a chat conversation
+                    const contentGenerationKeywords = [
+                        'generate', 'create', 'write', 'add', 'insert', 'make', 'produce', 'compose',
+                        'draft', 'develop', 'build', 'construct', 'design', 'formulate', 'outline'
+                    ];
 
-                    if (aiWriter && editor && aiResponse) {
-                        // Get the end of document position instead of cursor position
-                        const doc = editor.state.doc;
-                        const endPosition = doc.content.size;
+                    const isContentGeneration = contentGenerationKeywords.some(keyword =>
+                        text.toLowerCase().includes(keyword)
+                    ) || text.includes('*') || text.length > 100; // Long prompts are likely content requests
 
-                        const position: ContentPosition = {
-                            from: endPosition,
-                            to: endPosition,
-                            length: 0
+                    if (isContentGeneration) {
+                        console.log('🎯 Content generation request detected:', text);
+
+                        // Generate content and add to document
+                        const aiResponse = await generateAIContent(text);
+
+                        if (aiWriter && editor && aiResponse) {
+                            // Get the end of document position
+                            const doc = editor.state.doc;
+                            const endPosition = doc.content.size;
+
+                            const position: ContentPosition = {
+                                from: endPosition,
+                                to: endPosition,
+                                length: 0
+                            };
+
+                            // Add content to document with highlighting
+                            const operationId = await aiWriter.addContentAtPosition(position, `\n\n${aiResponse}`);
+
+                            // Store operation ID globally so DocumentEditor can access it
+                            (window as any).currentChatOperationId = operationId;
+                            (window as any).currentChatAIWriter = aiWriter;
+
+                            // Show AI actions with delay
+                            setTimeout(() => {
+                                let actionFunction = showAIActions;
+
+                                if (!actionFunction && (window as any).currentShowAIActionsFunction) {
+                                    actionFunction = (window as any).currentShowAIActionsFunction;
+                                }
+
+                                if (actionFunction && typeof actionFunction === 'function') {
+                                    try {
+                                        actionFunction(`AI Generated Content: ${text}`, documentContent);
+                                    } catch (error) {
+                                        console.error('❌ Error calling showAIActions:', error);
+                                    }
+                                }
+                            }, 300);
+
+                            const assistantMsg: ChatMessage = {
+                                id: crypto.randomUUID(),
+                                role: "assistant",
+                                content: "✨ Content generated and added to your document with green highlighting. Use the action buttons to accept, reject, or regenerate the content.",
+                                timestamp: Date.now(),
+                            };
+
+                            setInternalMessages(prev => [...prev, assistantMsg]);
+                        } else {
+                            throw new Error('Editor not available for content generation');
+                        }
+                    } else {
+                        console.log('💬 Chat conversation request detected:', text);
+
+                        // Regular chat response - don't add to document
+                        const aiResponse = await aiService.chatResponse(text, documentContent);
+
+                        const assistantMsg: ChatMessage = {
+                            id: crypto.randomUUID(),
+                            role: "assistant",
+                            content: aiResponse,
+                            timestamp: Date.now(),
                         };
 
-                        // Use the AI writer to add content at the end of document with proper highlighting
-                        const operationId = await aiWriter.addContentAtPosition(position, `\n\n${aiResponse}`);
-
-                        // Store operation ID globally so DocumentEditor can access it
-                        (window as any).currentChatOperationId = operationId;
-                        (window as any).currentChatAIWriter = aiWriter;
-
-                        // Show AI actions for the operation with a slight delay to ensure content is rendered
-                        console.log('🎯 About to show AI actions for regular AI. showAIActions:', showAIActions);
-                        setTimeout(() => {
-                            let actionFunction = showAIActions;
-
-                            // Fallback to global function if context function is not available
-                            if (!actionFunction && (window as any).currentShowAIActionsFunction) {
-                                console.log('🔧 Using fallback global showAIActions function for regular chat');
-                                actionFunction = (window as any).currentShowAIActionsFunction;
-                            }
-
-                            if (actionFunction && typeof actionFunction === 'function') {
-                                console.log('✅ Calling showAIActions for regular AI operation');
-                                try {
-                                    actionFunction(`AI Response: ${text}`, documentContent);
-                                } catch (error) {
-                                    console.error('❌ Error calling showAIActions for regular AI:', error);
-                                }
-                            } else {
-                                console.error('❌ showAIActions is not available for regular AI!', {
-                                    contextFunction: showAIActions,
-                                    globalFunction: (window as any).currentShowAIActionsFunction,
-                                    type: typeof showAIActions,
-                                    isFunction: typeof showAIActions === 'function'
-                                });
-                            }
-                        }, 300);
+                        setInternalMessages(prev => [...prev, assistantMsg]);
                     }
-
-                    // Add confirmation message 
-                    const assistantMsg: ChatMessage = {
-                        id: crypto.randomUUID(),
-                        role: "assistant",
-                        content: "✨ AI content generated and added to the end of your document. Review the green-highlighted content and use the action container to accept, reject, or regenerate.",
-                        timestamp: Date.now(),
-                    };
-
-                    setInternalMessages(prev => [...prev, assistantMsg]);
                 }
             } catch (error) {
                 console.error('Error processing request:', error);
@@ -587,14 +665,14 @@ export default function ChatSidebar({
                             <div className="flex flex-wrap justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                 {(suggestions ?? (repositoryInfo ? [
                                     "*add",
-                                    "*remove", 
+                                    "*remove",
                                     "*edit",
                                     "Analyze repository",
                                     "Explain codebase",
                                 ] : [
                                     "*add",
                                     "*remove",
-                                    "*edit", 
+                                    "*edit",
                                     "Improve content",
                                     "Add summary",
                                 ])).slice(0, 5).map((s, idx) => (

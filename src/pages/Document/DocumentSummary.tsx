@@ -1,6 +1,6 @@
 ﻿import { useEffect } from "react";
 import DocumentLayout from "./DocumentLayout";
-import TipTap from "@/components/Document/TipTap";
+import TipTap from "@/components/document/TipTap";
 import { useDocument } from "../../context/DocumentContext";
 
 export default function DocumentSummary() {

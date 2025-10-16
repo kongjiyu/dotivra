@@ -8,8 +8,8 @@ import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
 import TableRow from "@tiptap/extension-table-row";
-import TableHeader from "@tiptap/extension-table-header";
-import TableCell from "@tiptap/extension-table-cell";
+import TableHeaderWithBackgroundColor from "@/lib/extensions/TableHeaderWithBackgroundColor";
+import TableCellWithBackgroundColor from "@/lib/extensions/TableCellWithBackgroundColor";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import CharacterCount from "@tiptap/extension-character-count";
@@ -75,8 +75,8 @@ export const getTipTapExtensions = () => [
         resizable: true,
     }),
     TableRow,
-    TableHeader,
-    TableCell.configure({
+    TableHeaderWithBackgroundColor,
+    TableCellWithBackgroundColor.configure({
         HTMLAttributes: {
             class: 'table-cell',
         },

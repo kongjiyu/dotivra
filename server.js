@@ -17,6 +17,7 @@ import {
   collection, 
   addDoc, 
   getDocs, 
+  getDoc,
   query, 
   where, 
   orderBy, 

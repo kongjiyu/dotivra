@@ -32,19 +32,23 @@ import type { Editor } from "@tiptap/react";
 interface DocumentMenuProps {
 	onUpdate?: (content: string) => void;
 	onSaveAsTemplate?: () => void;
+	onCopyDocument?: () => void;
 	documentTitle?: string;
 	editor?: Editor; // TipTap editor instance
 	documentContent?: string; // Current document content for PDF export
 	context?: 'main' | 'project'; // To distinguish between main menu and project tab imports
+	currentDocument?: any; // Current document data for template/copy operations
 }
 
 export default function DocumentMenu({
 	onUpdate,
 	onSaveAsTemplate,
+	onCopyDocument,
 	documentTitle = "Untitled Document",
 	editor,
 	documentContent,
 	context = 'main',
+	currentDocument,
 }: DocumentMenuProps) {
 	// Document menu state
 	const [showSearch, setShowSearch] = useState(false);
@@ -58,7 +62,7 @@ export default function DocumentMenu({
 	const [replaceText, setReplaceText] = useState<string>("");
 
 	// === NEW: Decoration plugin wiring ===
-	const searchPluginKeyRef = useRef(new PluginKey("search-highlights"));
+	const searchPluginKeyRef = useRef(new PluginKey(`search-highlights-${Math.random().toString(36).substring(2)}`));
 	const searchPluginRef = useRef<any>(null);
 
 	function buildSearchDecorations(doc: any, matches: Array<{ from: number; to: number }>, currentIndex: number) {
@@ -80,7 +84,13 @@ export default function DocumentMenu({
 	useEffect(() => {
 		if (!editor || searchPluginRef.current) return;
 
+		// Check if plugin with this key is already registered
 		const key = searchPluginKeyRef.current;
+		const existingPlugin = editor.state.plugins.find((plugin: any) => plugin.spec?.key === key);
+		if (existingPlugin) {
+			console.warn('Plugin with key already exists, skipping registration');
+			return;
+		}
 
 		searchPluginRef.current = new Plugin({
 			key,
@@ -109,7 +119,11 @@ export default function DocumentMenu({
 
 		return () => {
 			if (editor && searchPluginRef.current) {
-				editor.unregisterPlugin(searchPluginKeyRef.current);
+				try {
+					editor.unregisterPlugin(searchPluginKeyRef.current);
+				} catch (error) {
+					console.warn('Error unregistering plugin:', error);
+				}
 				searchPluginRef.current = null;
 			}
 		};
@@ -590,17 +604,72 @@ export default function DocumentMenu({
 		setShowExportOptions(false);
 	};
 
-	const handleSaveAsTemplate = () => {
+	const handleSaveAsTemplate = async () => {
 		if (onSaveAsTemplate) {
 			onSaveAsTemplate();
-		} else {
-			console.log("Saving as template...");
+			return;
+		}
+
+		// If no custom handler, use the built-in service
+		if (!currentDocument) {
+			console.warn("No document data available for template creation");
+			return;
+		}
+
+		try {
+			const { saveDocumentAsTemplate, showNotification } = await import('@/services/documentService');
+
+			// Get current content from editor
+			const content = editor ? editor.getHTML() : (documentContent || '');
+
+			// Create document object with current content
+			const documentToSave = {
+				...currentDocument,
+				Content: content,
+				DocumentName: documentTitle
+			};
+
+			const template = await saveDocumentAsTemplate(documentToSave);
+			showNotification(`Template "${template.TemplateName}" created successfully!`, 'success');
+		} catch (error) {
+			console.error('Error creating template:', error);
+			const { showNotification } = await import('@/services/documentService');
+			showNotification('Failed to create template', 'error');
 		}
 	};
 
-	const handleCopyDocument = () => {
-		navigator.clipboard.writeText("Document content copied");
-		console.log("Document copied to clipboard");
+	const handleCopyDocument = async () => {
+		if (onCopyDocument) {
+			onCopyDocument();
+			return;
+		}
+
+		// If no custom handler, use the built-in service
+		if (!currentDocument) {
+			console.warn("No document data available for copying");
+			return;
+		}
+
+		try {
+			const { copyDocument, showNotification } = await import('@/services/documentService');
+
+			// Get current content from editor
+			const content = editor ? editor.getHTML() : (documentContent || '');
+
+			// Create document object with current content
+			const documentToCopy = {
+				...currentDocument,
+				Content: content,
+				DocumentName: documentTitle
+			};
+
+			const copiedDoc = await copyDocument(documentToCopy);
+			showNotification(`Document copy "${copiedDoc.DocumentName}" created successfully!`, 'success');
+		} catch (error) {
+			console.error('Error copying document:', error);
+			const { showNotification } = await import('@/services/documentService');
+			showNotification('Failed to copy document', 'error');
+		}
 	};
 
 	// Undo/Redo state
@@ -751,7 +820,7 @@ export default function DocumentMenu({
 											className="w-full justify-start h-8 px-2 text-gray-700"
 										>
 											<Copy className="w-4 h-4 mr-2" />
-											<span className="text-sm">Copy Document</span>
+											<span className="text-sm">Make a Copy</span>
 										</Button>
 									</div>
 								</PopoverContent>

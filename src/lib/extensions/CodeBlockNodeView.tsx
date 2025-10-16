@@ -55,7 +55,7 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
     })
     const [open, setOpen] = useState(false)
     const [searchValue, setSearchValue] = useState('')
-    const [isPreviewMode, setIsPreviewMode] = useState(false)
+    const [isPreviewMode, setIsPreviewMode] = useState(node.attrs.language === 'mermaid')
     const [mermaidError, setMermaidError] = useState<string | null>(null)
     const [mermaidSvg, setMermaidSvg] = useState<string>('')
     const codeRef = useRef<HTMLPreElement>(null)
@@ -86,6 +86,10 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
         updateAttributes({ language })
         setOpen(false)
         setSearchValue('')
+        // Auto-enable preview mode for Mermaid language
+        if (language === 'mermaid') {
+            setIsPreviewMode(true)
+        }
     }, [updateAttributes])
 
     const handleCopy = useCallback(async () => {

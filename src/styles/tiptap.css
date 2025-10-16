@@ -45,6 +45,36 @@
   margin: 0;
 }
 
+/* Protect headings and paragraphs inside blockquotes from being overwritten */
+.tiptap blockquote h1,
+.tiptap blockquote h2,
+.tiptap blockquote h3,
+.tiptap blockquote h4,
+.tiptap blockquote h5,
+.tiptap blockquote h6 {
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  margin: 0 !important;
+  line-height: inherit !important;
+  color: inherit !important;
+}
+
+/* Protect headings and paragraphs inside code blocks from overriding code block styling */
+.code-block-wrapper h1,
+.code-block-wrapper h2,
+.code-block-wrapper h3,
+.code-block-wrapper h4,
+.code-block-wrapper h5,
+.code-block-wrapper h6,
+.code-block-wrapper p {
+  /* Only prevent heading/paragraph styles from overriding, preserve syntax highlighting */
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+  margin: 0 !important;
+  line-height: inherit !important;
+}
+
 /* Controlled indentation support for paragraphs and headings - maximum 21 levels */
 /* This prevents content overflow while still providing extensive indentation options */
 .tiptap p[data-indent],
@@ -1011,7 +1041,8 @@
   background-color: rgba(59, 130, 246, 0.15);
 }
 
-/* Table hover effects */
+/* Table hover effects - DISABLED to prevent interference with custom background colors */
+/* 
 .tiptap table td:hover,
 .tiptap table th:hover {
   background-color: rgba(0, 0, 0, 0.02);
@@ -1019,6 +1050,21 @@
 
 .tiptap table th:hover {
   background-color: rgba(0, 0, 0, 0.05);
+}
+*/
+
+/* Remove all hover effects from table cells to prevent interference with custom background colors */
+.tiptap table td,
+.tiptap table th {
+  /* Remove hover effects completely */
+  background-color: transparent;
+}
+
+/* Ensure custom background colors via style attribute take priority */
+.tiptap table td[style*="background-color"],
+.tiptap table th[style*="background-color"] {
+  /* Preserve custom background colors and prevent hover override */
+  position: relative;
 }
 
 /* Dark theme table styles */
@@ -1038,6 +1084,8 @@
   background-color: rgba(59, 130, 246, 0.25);
 }
 
+/* Dark theme hover effects - DISABLED to prevent interference with custom background colors */
+/*
 .theme-dark .tiptap table td:hover,
 .theme-dark .tiptap table th:hover {
   background-color: rgba(255, 255, 255, 0.05);
@@ -1046,3 +1094,4 @@
 .theme-dark .tiptap table th:hover {
   background-color: rgba(255, 255, 255, 0.1);
 }
+*/
