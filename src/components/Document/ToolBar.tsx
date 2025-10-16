@@ -829,7 +829,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                 disabled={isEditingDisabled}
                                 placeholder={isEditingDisabled ? '' : '16'}
                                 className={`w-14 h-8 text-sm text-center border border-gray-300 rounded-l-md bg-white mr-0
-                                       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200'}`}
+                                       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`}
                             />
                             <Select
                                 value={isEditingDisabled ? '' : fontSizeInput}
@@ -842,8 +842,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                 disabled={isEditingDisabled}
                             >
                                 <SelectTrigger className={`h-8 w-6 border border-l-0 border-gray-300 rounded-l-none rounded-r-md bg-white p-0 flex items-center justify-center [&>svg]:w-3 [&>svg]:h-3
-                                                     ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
-                                    data-size="">
+   ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'outline-none focus:ring-offset-0 focus:outline-none hover:bg-gray-50 focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`} data-size="">
                                 </SelectTrigger>
                                 <SelectContent align="center" side="bottom" className="w-20">
                                     {['4', '6', '8', '10', '12', '16', '20', '24', '28', '36', '48', '64', '72', '96'].map(size => (
