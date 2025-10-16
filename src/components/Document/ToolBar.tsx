@@ -633,17 +633,19 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     {/* Text Color with current color indicator */}
                     <Popover>
                         <PopoverTrigger asChild>
-                            <Button variant="outline" size="sm"
-                                className="h-8 w-8 p-0 bg-white hover:bg-gray-50 flex flex-col justify-center items-center relative"
-                                title="Text Color"
-                                disabled={isEditingDisabled}
-                            >
-                                <Palette className="w-3 h-3" />
+                            <div className="h-8 w-8 p-0  flex flex-col justify-center items-center relative">
+                                <Button variant="outline" size="sm"
+                                    className=" bg-white hover:bg-gray-50"
+                                    title="Text Color"
+                                    disabled={isEditingDisabled}
+                                >
+                                    <Highlighter className="w-3 h-3" />
+                                </Button>
                                 <div
-                                    className="w-4 h-1 mt-0.5 rounded-sm"
+                                    className="w-8 h-1 mt-0.5 rounded-sm border border-gray-300"
                                     style={{ backgroundColor: isEditingDisabled ? 'transparent' : currentTextColor }}
                                 />
-                            </Button>
+                            </div>
                         </PopoverTrigger>
                         <PopoverContent className="w-64 p-4" side="bottom" align="center">
                             <div className="space-y-3">
@@ -691,6 +693,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                                     if (!isEditingDisabled) {
                                                         editor.chain().focus().setColor(color).run();
                                                         setCurrentTextColor(color);
+                                                        console.log('Set text color to', color);
                                                     }
                                                 }}
                                                 title={name}
@@ -705,20 +708,22 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     {/* Background Color with current color indicator */}
                     <Popover>
                         <PopoverTrigger asChild>
-                            <Button variant="outline" size="sm"
-                                className="h-8 w-8 p-0 bg-white hover:bg-gray-50 flex flex-col justify-center items-center relative"
-                                title="Background Color"
-                                disabled={isEditingDisabled}
-                            >
-                                <Highlighter className="w-3 h-3" />
+                            <div className="h-8 w-8 p-0 flex flex-col justify-center items-center relative">
+                                <Button variant="outline" size="sm"
+                                    className="bg-white hover:bg-gray-50"
+                                    title="Background Color"
+                                    disabled={isEditingDisabled}
+                                >
+                                    <Palette className="w-3 h-3" />
+                                </Button>
                                 <div
-                                    className="w-4 h-1 mt-0.5 rounded-sm border border-gray-300"
+                                    className="w-8 h-1 mt-0.5 p-0 rounded-sm border border-gray-300"
                                     style={{
                                         backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
                                         borderColor: currentBackgroundColor ? 'transparent' : '#d1d5db'
                                     }}
                                 />
-                            </Button>
+                            </div>
                         </PopoverTrigger>
                         <PopoverContent className="w-80 p-4" side="bottom" align="center">
                             <div className="space-y-4">
