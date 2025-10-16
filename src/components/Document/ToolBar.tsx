@@ -119,6 +119,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     const [currentFontFamily, setCurrentFontFamily] = useState<string>("Inter");
     const [currentTextColor, setCurrentTextColor] = useState<string>('#000000');
     const [currentBackgroundColor, setCurrentBackgroundColor] = useState<string>('');
+
     const [isInCodeBlock, setIsInCodeBlock] = useState(false);
     const [isInPreviewMode, setIsInPreviewMode] = useState(false);
     const [linkTooltipOpen, setLinkTooltipOpen] = useState(false);
@@ -326,17 +327,114 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         // Initial calculation
         updateIndentLimits();
 
-        // Monitor resize
-        const resizeObserver = new ResizeObserver(() => {
-            updateIndentLimits();
-        });
+        // Note: Resize monitoring is handled by the bookmark-style hiding useEffect below
+    }, [editor]);
 
-        resizeObserver.observe(editorElement);
+    // Width-based responsive toolbar - show/hide sections based on specific window width breakpoints
+    const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+
+    useEffect(() => {
+        // Also update indent limits when resizing
+        if (editor) {
+            const editorElement = editor.view.dom.closest('.editor-container') || editor.view.dom.parentElement;
+            if (editorElement) {
+                const containerWidth = editorElement.clientWidth;
+                const avgCharWidth = 8;
+                const maxCharsPerLine = Math.floor(containerWidth / avgCharWidth);
+                const newMaxIndentLevel = Math.max(1, Math.min(6, Math.floor(maxCharsPerLine / 40)));
+
+                // Only update if the value actually changed to prevent infinite loops
+                if (newMaxIndentLevel !== maxIndentLevel) {
+                    setMaxIndentLevel(newMaxIndentLevel);
+                }
+            }
+        }
+
+        // Throttled resize handler to improve performance and reduce lag
+        let isResizing = false;
+
+        const handleResize = () => {
+            const newWidth = window.innerWidth;
+
+            // Only update if we crossed a breakpoint threshold for smoother performance
+            const thresholds = [1400, 1150, 1000, 850, 650];
+            const oldThreshold = thresholds.find(t => windowWidth >= t) || 0;
+            const newThreshold = thresholds.find(t => newWidth >= t) || 0;
+
+            if (oldThreshold === newThreshold && Math.abs(newWidth - windowWidth) < 50) return;
+            console.log('� ========== WIDTH-BASED TOOLBAR DEBUG ==========');
+            console.log('� Window width changed:', windowWidth, '→', newWidth);
+
+            // Calculated width breakpoints based on actual toolbar section sizes
+            // Core sections (always visible): Bold, Italic, Underline, Font Size, Font Color, Background Color ≈ 400px
+            // More Options button: ≈ 50px, Separators and padding: ≈ 100px, Base requirement: ≈ 550px
+            const breakpoints = {
+                insertOptions: 1400,    // Insert Options (Table, Diagram, Link) ≈ 200px - hide below 1400px
+                textAlign: 1150,        // Text Alignment (4 buttons) ≈ 150px - hide below 1150px  
+                clearFormatting: 1000,  // Clear Formatting (1 button) ≈ 40px - hide below 1000px
+                indent: 850,            // Indentation (2 buttons) ≈ 100px - hide below 850px (earlier than before)
+                lists: 650              // Lists (3 buttons) ≈ 150px - hide below 650px (earlier than before)
+            };
+
+
+            const hasHiddenSections = newWidth < breakpoints.insertOptions ||
+                newWidth < breakpoints.textAlign ||
+                newWidth < breakpoints.clearFormatting ||
+                newWidth < breakpoints.indent ||
+                newWidth < breakpoints.lists;
+
+            console.log('�   - More Options needed:', hasHiddenSections ? 'SHOW' : 'HIDE');
+            console.log('� ==========================================');
+
+            setWindowWidth(newWidth);
+        };
+
+        let debounceTimer: NodeJS.Timeout | null = null;
+        let rafId: number | null = null;
+
+        const debouncedResize = () => {
+            // Cancel previous requests for smoother performance
+            if (debounceTimer) clearTimeout(debounceTimer);
+            if (rafId) cancelAnimationFrame(rafId);
+
+            // Immediate visual response
+            rafId = requestAnimationFrame(() => {
+                handleResize();
+                rafId = null;
+            });
+
+            // Final cleanup after resize stops
+            debounceTimer = setTimeout(() => {
+                requestAnimationFrame(() => {
+                    const finalWidth = window.innerWidth;
+                    if (Math.abs(finalWidth - windowWidth) > 10) {
+                        handleResize();
+                    }
+                });
+                debounceTimer = null;
+            }, 150);
+        };
+
+        // Initial calculation
+        handleResize();
+
+        // Listen for window resize with optimized debouncing
+        window.addEventListener('resize', debouncedResize, { passive: true });
 
         return () => {
-            resizeObserver.disconnect();
+            window.removeEventListener('resize', debouncedResize);
+            if (debounceTimer) clearTimeout(debounceTimer);
+            if (rafId) cancelAnimationFrame(rafId);
         };
-    }, [editor]);
+    }, [editor, maxIndentLevel]);
+
+    // Helper functions to determine section visibility based on calculated window width breakpoints  
+    const shouldShowInsertOptions = () => windowWidth >= 1390;      // Table, Diagram, Link buttons
+    const shouldShowIndent = () => windowWidth >= 1150;              // Increase/Decrease indent buttons (earlier hiding)
+    const shouldShowClearFormatting = () => windowWidth >= 1150;    // Clear formatting button
+    const shouldShowLists = () => windowWidth >= 990;               // Bullet, Ordered, Task list buttons (earlier hiding)
+    const shouldShowTextAlign = () => windowWidth >= 880;          // Left, Center, Right, Justify alignment
+    const shouldShowMoreOptions = () => !shouldShowInsertOptions() || !shouldShowTextAlign() || !shouldShowClearFormatting() || !shouldShowIndent() || !shouldShowLists();
 
     // Add keyboard shortcut handlers for indentation with dynamic limits
     useEffect(() => {
@@ -345,11 +443,9 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key !== 'Tab') return; // Ignore all other keys
             event.preventDefault(); // Prevent default tab behavior
-            console.log('defaultPrevented before any logic:', event.defaultPrevented);
 
             // Tab pressed
             if (isEditingDisabled) {
-                console.log("Editing disabled – allow default Tab behavior.");
                 return; // Don’t prevent default
             }
 
@@ -372,7 +468,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     currentLevel = editor.getAttributes('heading').indent || 0;
                 }
 
-                console.log(`Current indent level: ${currentLevel}, Max allowed: ${maxIndentLevel}`);
                 if (currentLevel < maxIndentLevel) {
                     event.preventDefault();
                     if (editor.isActive('paragraph')) {
@@ -381,12 +476,10 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                         editor.chain().focus().indentHeading().run();
                     }
                 } else {
-                    console.log("Max indentation level reached – default Tab allowed.");
                     // no preventDefault here → normal Tab navigation continues
                 }
             }
 
-            console.log("Key down event:", event.key, { isEditingDisabled, maxIndentLevel });
         };
 
 
@@ -513,10 +606,10 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     };
 
     return (
-        <div ref={containerRef} className="toolbar flex items-center gap-1 p-3 m-2 rounded-sm border border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm overflow-hidden w-full">
+        <div ref={containerRef} className="toolbar flex items-center gap-1 p-3 m-2 rounded-sm border border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm overflow-x-auto w-full">
 
-            {/* ESSENTIAL FORMATTING - Always visible */}
-            <div className="flex items-center gap-1 flex-shrink-0 overflow-hidden">
+            {/* ESSENTIAL FORMATTING - Always visible, scrollable like browser bookmarks */}
+            <div className="flex items-center gap-1 flex-shrink-0">
                 {/* Basic Text Formatting */}
                 <Button variant="outline" size="sm"
                     onClick={() => {
@@ -691,310 +784,288 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     </SelectContent>
                 </Select>
 
-                <div className="w-px h-6 bg-gray-300 mx-1 hidden md:block"></div>
+                <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
-                {/* Font Styling - Hidden on smaller screens */}
-                <div className="hidden lg:flex items-center gap-1">
-                    <Select
-                        value={isEditingDisabled ? '' : currentFontFamily}
-                        onValueChange={(value) => {
-                            if (!isEditingDisabled) {
-                                editor.chain().focus().setFontFamily(value).run();
-                                setCurrentFontFamily(value);
-                            }
-                        }}
-                        disabled={isEditingDisabled}
-                    >
-                        <SelectTrigger className={`w-[140px] h-8 text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                            <SelectValue placeholder={isEditingDisabled ? '' : currentFontFamily} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {FONT_FAMILIES.map(f => (
-                                <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-
-                    {/* Font Size Input with Dropdown - Unified Implementation */}
-                    <div className="relative flex items-center">
-                        <input
-                            type="text"
-                            value={isEditingDisabled ? '' : fontSizeInput}
-                            onChange={(e) => {
-                                if (!isEditingDisabled) {
-                                    handleFontSizeChange(e.target.value);
-                                }
-                            }}
-                            onKeyDown={handleFontSizeKeyDown}
-                            onBlur={handleFontSizeBlur}
-                            onFocus={() => setIsTyping(true)}
-                            disabled={isEditingDisabled}
-                            placeholder={isEditingDisabled ? '' : '16'}
-                            className={`w-14 h-8 text-sm text-center border border-gray-300 rounded-l-md bg-white mr-0
-                                       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200'}`}
-                        />
+                {/* Font Styling - Bookmark-style hiding */}
+                {true && ( // Font family always visible
+                    <div className="flex items-center gap-1">
                         <Select
-                            value={isEditingDisabled ? '' : fontSizeInput}
+                            value={isEditingDisabled ? '' : currentFontFamily}
                             onValueChange={(value) => {
                                 if (!isEditingDisabled) {
-                                    setIsTyping(false);
-                                    applyFontSize(value);
+                                    editor.chain().focus().setFontFamily(value).run();
+                                    setCurrentFontFamily(value);
                                 }
                             }}
                             disabled={isEditingDisabled}
                         >
-                            <SelectTrigger className={`h-8 w-6 border border-l-0 border-gray-300 rounded-l-none rounded-r-md bg-white p-0 flex items-center justify-center [&>svg]:w-3 [&>svg]:h-3
-                                                     ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
-                                data-size="">
+                            <SelectTrigger className={`w-[140px] h-8 text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                <SelectValue placeholder={isEditingDisabled ? '' : currentFontFamily} />
                             </SelectTrigger>
-                            <SelectContent align="center" side="bottom" className="w-20">
-                                {['4', '6', '8', '10', '12', '16', '20', '24', '28', '36', '48', '64', '72', '96'].map(size => (
-                                    <SelectItem key={size} value={size}>
-                                        {size}
-                                    </SelectItem>
+                            <SelectContent>
+                                {FONT_FAMILIES.map(f => (
+                                    <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
                                 ))}
                             </SelectContent>
                         </Select>
                     </div>
+                )}
 
-                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
-
-                    {/* Text Color with current color indicator */}
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <div className="h-8 w-8 p-0  flex flex-col justify-center items-center relative">
-                                <Button variant="outline" size="sm"
-                                    className="h-7 w-8 bg-white hover:bg-gray-50"
-                                    title="Text Color"
-                                    disabled={isEditingDisabled}
-                                >
-                                    <Highlighter className="w-3 h-3"
-                                        style={{
-                                            color: isEditingDisabled ? 'transparent' : (currentTextColor || '#ffffff'),
-                                        }} />
-                                </Button>
-                                <div
-                                    className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
-                                    style={{
-                                        backgroundColor: isEditingDisabled ? 'transparent' : currentTextColor,
-                                        borderColor: currentTextColor ? 'transparent' : '#d1d5db'
-                                    }}
-                                />
-                            </div>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-64 p-4" side="bottom" align="center">
-                            <div className="space-y-3">
-                                <h4 className="text-sm font-medium text-gray-700">Text Color</h4>
-
-                                {/* Default Color */}
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
-                                        onClick={() => {
-                                            if (!isEditingDisabled) {
-                                                editor.chain().focus().unsetColor().run();
-
-                                                // Update state immediately and verify after operation
-                                                setCurrentTextColor('#000000');
-
-                                                // Double-check the actual state after a brief delay
-                                                setTimeout(() => {
-                                                    if (editor.isActive('textStyle')) {
-                                                        const styleAttrs = editor.getAttributes('textStyle');
-                                                        const actualColor = styleAttrs.color || '#000000';
-                                                        setCurrentTextColor(actualColor);
-                                                    } else {
-                                                        setCurrentTextColor('#000000');
-                                                    }
-                                                }, 100);
-                                            }
-                                        }}
-                                        title="Default (Auto)"
-                                    >
-                                        A
-                                    </button>
-                                    <span className="text-xs text-gray-500">Default</span>
-                                </div>
-
-                                {/* 8 Most Popular Colors for Light Theme */}
-                                <div>
-                                    <p className="text-xs text-gray-500 mb-2">Popular Colors</p>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {[
-                                            { color: '#000000', name: 'Black' },
-                                            { color: '#6B7280', name: 'Gray' },
-                                            { color: '#DC2626', name: 'Red' },
-                                            { color: '#2563EB', name: 'Blue' },
-                                            { color: '#059669', name: 'Green' },
-                                            { color: '#D97706', name: 'Orange' },
-                                            { color: '#7C2D12', name: 'Brown' },
-                                            { color: '#7C3AED', name: 'Purple' }
-                                        ].map(({ color, name }) => (
-                                            <button
-                                                key={color}
-                                                className="w-10 h-10 rounded-lg border-2 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md"
-                                                style={{
-                                                    backgroundColor: `${color}20`, // 20 = ~12% opacity
-                                                    borderColor: color
-                                                }}
-                                                onClick={() => {
-                                                    if (!isEditingDisabled) {
-                                                        editor.chain().focus().setColor(color).run();
-
-                                                        // Update state immediately
-                                                        setCurrentTextColor(color);
-                                                        console.log('Set text color to', color);
-
-                                                        // Verify the actual state after operation completes
-                                                        setTimeout(() => {
-                                                            if (editor.isActive('textStyle')) {
-                                                                const styleAttrs = editor.getAttributes('textStyle');
-                                                                const actualColor = styleAttrs.color || '#000000';
-                                                                setCurrentTextColor(actualColor);
-                                                            } else {
-                                                                // If textStyle is not active, the color should be default
-                                                                setCurrentTextColor('#000000');
-                                                            }
-                                                        }, 100);
-                                                    }
-                                                }}
-                                                title={name}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-                        </PopoverContent>
-                    </Popover>
-
-                    {/* Background Color with current color indicator */}
-                    <Popover>
-                        <PopoverTrigger asChild>
-                            <div className="h-8 w-8 p-0 flex flex-col justify-center items-center relative">
-                                <Button variant="outline" size="sm"
-                                    className="w-8 h-7 bg-white hover:bg-gray-50"
-                                    title="Background Color"
-                                    disabled={isEditingDisabled}
-                                    style={{
-                                        backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
-                                    }}
-                                >
-                                    <Palette className="w-3 h-3" />
-                                </Button>
-                                <div
-                                    className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
-                                    style={{
-                                        backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
-                                        borderColor: currentBackgroundColor ? 'transparent' : '#d1d5db'
-                                    }}
-                                />
-                            </div>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80 p-4" side="bottom" align="center">
-                            <div className="space-y-4">
-                                <h4 className="text-sm font-medium text-gray-700">Background Color</h4>
-
-                                {/* Context Detection */}
-                                <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
-                                    {(editor?.isActive('tableCell') || editor?.isActive('tableHeader'))
-                                        ? "💡 You're in a table cell - colors will be applied to the cell background"
-                                        : "💡 Colors will be applied as text highlighting"
+                {true && ( // Font size always visible
+                    <div className="flex items-center gap-1">
+                        {/* Font Size Input with Dropdown - Unified Implementation */}
+                        <div className="relative flex items-center">
+                            <input
+                                type="text"
+                                value={isEditingDisabled ? '' : fontSizeInput}
+                                onChange={(e) => {
+                                    if (!isEditingDisabled) {
+                                        handleFontSizeChange(e.target.value);
                                     }
-                                </div>
+                                }}
+                                onKeyDown={handleFontSizeKeyDown}
+                                onBlur={handleFontSizeBlur}
+                                onFocus={() => setIsTyping(true)}
+                                disabled={isEditingDisabled}
+                                placeholder={isEditingDisabled ? '' : '16'}
+                                className={`w-14 h-8 text-sm text-center border border-gray-300 rounded-l-md bg-white mr-0
+                                       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-200'}`}
+                            />
+                            <Select
+                                value={isEditingDisabled ? '' : fontSizeInput}
+                                onValueChange={(value) => {
+                                    if (!isEditingDisabled) {
+                                        setIsTyping(false);
+                                        applyFontSize(value);
+                                    }
+                                }}
+                                disabled={isEditingDisabled}
+                            >
+                                <SelectTrigger className={`h-8 w-6 border border-l-0 border-gray-300 rounded-l-none rounded-r-md bg-white p-0 flex items-center justify-center [&>svg]:w-3 [&>svg]:h-3
+                                                     ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                                    data-size="">
+                                </SelectTrigger>
+                                <SelectContent align="center" side="bottom" className="w-20">
+                                    {['4', '6', '8', '10', '12', '16', '20', '24', '28', '36', '48', '64', '72', '96'].map(size => (
+                                        <SelectItem key={size} value={size}>
+                                            {size}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                )}
 
-                                {/* Default Background */}
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
-                                        onClick={() => {
-                                            if (!isEditingDisabled) {
-                                                if (editor?.isActive('tableCell')) {
-                                                    // Remove cell background using our custom extension
-                                                    editor?.chain().focus().unsetTableCellBackgroundColor().run();
-                                                } else if (editor?.isActive('tableHeader')) {
-                                                    // Remove header background using our custom extension
-                                                    editor?.chain().focus().unsetTableHeaderBackgroundColor().run();
-                                                } else {
-                                                    // Remove text highlighting
-                                                    editor?.chain().focus().unsetHighlight().run();
-                                                }
-                                                setCurrentBackgroundColor('');
-                                            }
-                                        }}
-                                        title="No Background"
+                {true && ( // Text color always visible
+                    <div className="flex items-center gap-1">
+                        <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+                        {/* Text Color with current color indicator */}
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <div className="h-8 w-8 p-0  flex flex-col justify-center items-center relative">
+                                    <Button variant="outline" size="sm"
+                                        className="h-7 w-8 bg-white hover:bg-gray-50"
+                                        title="Text Color"
+                                        disabled={isEditingDisabled}
                                     >
-                                        ✕
-                                    </button>
-                                    <span className="text-xs text-gray-500">No Background</span>
+                                        <Highlighter className="w-3 h-3"
+                                            style={{
+                                                color: isEditingDisabled ? 'transparent' : (currentTextColor || '#ffffff'),
+                                            }} />
+                                    </Button>
+                                    <div
+                                        className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
+                                        style={{
+                                            backgroundColor: isEditingDisabled ? 'transparent' : currentTextColor,
+                                            borderColor: currentTextColor ? 'transparent' : '#d1d5db'
+                                        }}
+                                    />
                                 </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-64 p-4" side="bottom" align="center">
+                                <div className="space-y-3">
+                                    <h4 className="text-sm font-medium text-gray-700">Text Color</h4>
 
-                                {/* 8 Most Popular Background Colors for Light Theme */}
-                                <div>
-                                    <p className="text-xs text-gray-500 mb-2">Popular Colors</p>
-                                    <div className="grid grid-cols-4 gap-2">
-                                        {[
-                                            { color: '#FEF3C7', name: 'Light Yellow' },
-                                            { color: '#DBEAFE', name: 'Light Blue' },
-                                            { color: '#DCFCE7', name: 'Light Green' },
-                                            { color: '#FEE2E2', name: 'Light Red' },
-                                            { color: '#F3E8FF', name: 'Light Purple' },
-                                            { color: '#FED7AA', name: 'Light Orange' },
-                                            { color: '#F3F4F6', name: 'Light Gray' },
-                                            { color: '#FDF2F8', name: 'Light Pink' }
-                                        ].map(({ color, name }) => (
-                                            <button
-                                                key={color}
-                                                className="w-10 h-10 rounded-lg border-2 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md"
-                                                style={{
-                                                    backgroundColor: `${color}80`, // 80 = ~50% opacity for backgrounds
-                                                    borderColor: color
-                                                }}
-                                                onClick={() => {
-                                                    if (!isEditingDisabled) {
-                                                        if (editor?.isActive('tableCell')) {
-                                                            // Apply to table cell background using our custom extension
-                                                            editor?.chain().focus().setTableCellBackgroundColor(color).run();
-                                                        } else if (editor?.isActive('tableHeader')) {
-                                                            // Apply to table header background using our custom extension
-                                                            editor?.chain().focus().setTableHeaderBackgroundColor(color).run();
+                                    {/* Default Color */}
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
+                                            onClick={() => {
+                                                if (!isEditingDisabled) {
+                                                    editor.chain().focus().unsetColor().run();
+
+                                                    // Update state immediately and verify after operation
+                                                    setCurrentTextColor('#000000');
+
+                                                    // Double-check the actual state after a brief delay
+                                                    setTimeout(() => {
+                                                        if (editor.isActive('textStyle')) {
+                                                            const styleAttrs = editor.getAttributes('textStyle');
+                                                            const actualColor = styleAttrs.color || '#000000';
+                                                            setCurrentTextColor(actualColor);
                                                         } else {
-                                                            // Apply as text highlighting
-                                                            editor?.chain().focus().setHighlight({ color }).run();
+                                                            setCurrentTextColor('#000000');
                                                         }
-                                                        setCurrentBackgroundColor(color);
-                                                    }
-                                                }}
-                                                title={name}
-                                            />
-                                        ))}
+                                                    }, 100);
+                                                }
+                                            }}
+                                            title="Default (Auto)"
+                                        >
+                                            A
+                                        </button>
+                                        <span className="text-xs text-gray-500">Default</span>
                                     </div>
-                                </div>
 
-                                {/* Additional Table Cell Colors */}
-                                {(editor?.isActive('tableCell') || editor?.isActive('tableHeader')) && (
+                                    {/* 8 Most Popular Colors for Light Theme */}
                                     <div>
-                                        <p className="text-xs text-gray-500 mb-2">Additional Cell Colors</p>
-                                        <div className="grid grid-cols-6 gap-1">
+                                        <p className="text-xs text-gray-500 mb-2">Popular Colors</p>
+                                        <div className="grid grid-cols-4 gap-2">
                                             {[
-                                                { color: '#E0E7FF', name: 'Light Indigo' },
-                                                { color: '#FCE7F3', name: 'Light Pink' },
-                                                { color: '#F0FDF4', name: 'Very Light Green' },
-                                                { color: '#FEF7CD', name: 'Very Light Yellow' },
-                                                { color: '#FDF4FF', name: 'Very Light Purple' },
-                                                { color: '#F8FAFC', name: 'Very Light Gray' }
+                                                { color: '#000000', name: 'Black' },
+                                                { color: '#6B7280', name: 'Gray' },
+                                                { color: '#DC2626', name: 'Red' },
+                                                { color: '#2563EB', name: 'Blue' },
+                                                { color: '#059669', name: 'Green' },
+                                                { color: '#D97706', name: 'Orange' },
+                                                { color: '#7C2D12', name: 'Brown' },
+                                                { color: '#7C3AED', name: 'Purple' }
                                             ].map(({ color, name }) => (
                                                 <button
                                                     key={color}
-                                                    className="w-8 h-8 rounded border border-gray-300 hover:scale-110 transition-transform"
-                                                    style={{ backgroundColor: color }}
+                                                    className="w-10 h-10 rounded-lg border-2 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md"
+                                                    style={{
+                                                        backgroundColor: `${color}20`, // 20 = ~12% opacity
+                                                        borderColor: color
+                                                    }}
                                                     onClick={() => {
                                                         if (!isEditingDisabled) {
-                                                            if (editor?.isActive('tableHeader')) {
-                                                                // Use our custom table header extension
+                                                            editor.chain().focus().setColor(color).run();
+
+                                                            // Update state immediately
+                                                            setCurrentTextColor(color);
+                                                            console.log('Set text color to', color);
+
+                                                            // Verify the actual state after operation completes
+                                                            setTimeout(() => {
+                                                                if (editor.isActive('textStyle')) {
+                                                                    const styleAttrs = editor.getAttributes('textStyle');
+                                                                    const actualColor = styleAttrs.color || '#000000';
+                                                                    setCurrentTextColor(actualColor);
+                                                                } else {
+                                                                    // If textStyle is not active, the color should be default
+                                                                    setCurrentTextColor('#000000');
+                                                                }
+                                                            }, 100);
+                                                        }
+                                                    }}
+                                                    title={name}
+                                                />
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                )}
+
+                {/* Background Color with current color indicator */}
+                {true && ( // Background color always visible
+                    <div className="flex items-center gap-1">
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <div className="h-8 w-8 p-0 flex flex-col justify-center items-center relative">
+                                    <Button variant="outline" size="sm"
+                                        className="w-8 h-7 bg-white hover:bg-gray-50"
+                                        title="Background Color"
+                                        disabled={isEditingDisabled}
+                                        style={{
+                                            backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
+                                        }}
+                                    >
+                                        <Palette className="w-3 h-3" />
+                                    </Button>
+                                    <div
+                                        className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
+                                        style={{
+                                            backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
+                                            borderColor: currentBackgroundColor ? 'transparent' : '#d1d5db'
+                                        }}
+                                    />
+                                </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80 p-4" side="bottom" align="center">
+                                <div className="space-y-4">
+                                    <h4 className="text-sm font-medium text-gray-700">Background Color</h4>
+
+                                    {/* Context Detection */}
+                                    <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
+                                        {(editor?.isActive('tableCell') || editor?.isActive('tableHeader'))
+                                            ? "💡 You're in a table cell - colors will be applied to the cell background"
+                                            : "💡 Colors will be applied as text highlighting"
+                                        }
+                                    </div>
+
+                                    {/* Default Background */}
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
+                                            onClick={() => {
+                                                if (!isEditingDisabled) {
+                                                    if (editor?.isActive('tableCell')) {
+                                                        // Remove cell background using our custom extension
+                                                        editor?.chain().focus().unsetTableCellBackgroundColor().run();
+                                                    } else if (editor?.isActive('tableHeader')) {
+                                                        // Remove header background using our custom extension
+                                                        editor?.chain().focus().unsetTableHeaderBackgroundColor().run();
+                                                    } else {
+                                                        // Remove text highlighting
+                                                        editor?.chain().focus().unsetHighlight().run();
+                                                    }
+                                                    setCurrentBackgroundColor('');
+                                                }
+                                            }}
+                                            title="No Background"
+                                        >
+                                            ✕
+                                        </button>
+                                        <span className="text-xs text-gray-500">No Background</span>
+                                    </div>
+
+                                    {/* 8 Most Popular Background Colors for Light Theme */}
+                                    <div>
+                                        <p className="text-xs text-gray-500 mb-2">Popular Colors</p>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {[
+                                                { color: '#FEF3C7', name: 'Light Yellow' },
+                                                { color: '#DBEAFE', name: 'Light Blue' },
+                                                { color: '#DCFCE7', name: 'Light Green' },
+                                                { color: '#FEE2E2', name: 'Light Red' },
+                                                { color: '#F3E8FF', name: 'Light Purple' },
+                                                { color: '#FED7AA', name: 'Light Orange' },
+                                                { color: '#F3F4F6', name: 'Light Gray' },
+                                                { color: '#FDF2F8', name: 'Light Pink' }
+                                            ].map(({ color, name }) => (
+                                                <button
+                                                    key={color}
+                                                    className="w-10 h-10 rounded-lg border-2 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md"
+                                                    style={{
+                                                        backgroundColor: `${color}80`, // 80 = ~50% opacity for backgrounds
+                                                        borderColor: color
+                                                    }}
+                                                    onClick={() => {
+                                                        if (!isEditingDisabled) {
+                                                            if (editor?.isActive('tableCell')) {
+                                                                // Apply to table cell background using our custom extension
+                                                                editor?.chain().focus().setTableCellBackgroundColor(color).run();
+                                                            } else if (editor?.isActive('tableHeader')) {
+                                                                // Apply to table header background using our custom extension
                                                                 editor?.chain().focus().setTableHeaderBackgroundColor(color).run();
                                                             } else {
-                                                                // Use our custom table cell extension
-                                                                editor?.chain().focus().setTableCellBackgroundColor(color).run();
+                                                                // Apply as text highlighting
+                                                                editor?.chain().focus().setHighlight({ color }).run();
                                                             }
                                                             setCurrentBackgroundColor(color);
                                                         }
@@ -1004,143 +1075,198 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                             ))}
                                         </div>
                                     </div>
-                                )}
-                            </div>
-                        </PopoverContent>
-                    </Popover>
 
-                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
-
-                    {/* Alignment Dropdown */}
-                    <Select
-                        value={
-                            editor.isActive({ textAlign: 'center' }) ? 'center' :
-                                editor.isActive({ textAlign: 'right' }) ? 'right' :
-                                    editor.isActive({ textAlign: 'justify' }) ? 'justify' : 'left'
-                        }
-                        onValueChange={(value) => {
-                            editor.chain().focus().setTextAlign(value).run();
-                        }}
-                    >
-                        <SelectTrigger className="w-16 h-8 px-4 border border-gray-300 bg-white hover:bg-gray-50 [&>svg]:hidden">
-                            <div className="flex items-center justify-between w-full">
-                                <div className="flex items-center">
-                                    {editor.isActive({ textAlign: 'center' }) && <AlignCenter className="w-4 h-4" />}
-                                    {editor.isActive({ textAlign: 'right' }) && <AlignRight className="w-4 h-4" />}
-                                    {editor.isActive({ textAlign: 'justify' }) && <AlignJustify className="w-4 h-4" />}
-                                    {(!editor.isActive({ textAlign: 'center' }) &&
-                                        !editor.isActive({ textAlign: 'right' }) &&
-                                        !editor.isActive({ textAlign: 'justify' })) && <AlignLeft className="w-4 h-4" />}
+                                    {/* Additional Table Cell Colors */}
+                                    {(editor?.isActive('tableCell') || editor?.isActive('tableHeader')) && (
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-2">Additional Cell Colors</p>
+                                            <div className="grid grid-cols-6 gap-1">
+                                                {[
+                                                    { color: '#E0E7FF', name: 'Light Indigo' },
+                                                    { color: '#FCE7F3', name: 'Light Pink' },
+                                                    { color: '#F0FDF4', name: 'Very Light Green' },
+                                                    { color: '#FEF7CD', name: 'Very Light Yellow' },
+                                                    { color: '#FDF4FF', name: 'Very Light Purple' },
+                                                    { color: '#F8FAFC', name: 'Very Light Gray' }
+                                                ].map(({ color, name }) => (
+                                                    <button
+                                                        key={color}
+                                                        className="w-8 h-8 rounded border border-gray-300 hover:scale-110 transition-transform"
+                                                        style={{ backgroundColor: color }}
+                                                        onClick={() => {
+                                                            if (!isEditingDisabled) {
+                                                                if (editor?.isActive('tableHeader')) {
+                                                                    // Use our custom table header extension
+                                                                    editor?.chain().focus().setTableHeaderBackgroundColor(color).run();
+                                                                } else {
+                                                                    // Use our custom table cell extension
+                                                                    editor?.chain().focus().setTableCellBackgroundColor(color).run();
+                                                                }
+                                                                setCurrentBackgroundColor(color);
+                                                            }
+                                                        }}
+                                                        title={name}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
-                                <ChevronDown className="w-3 h-3 ml-1 text-gray-500" />
-                            </div>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="left">
-                                <div className="flex items-center gap-2">
-                                    <AlignLeft className="w-4 h-4" />
-                                    <span>Left</span>
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                )}
+
+                {/* Separator before Text Alignment - only show if alignment is visible */}
+                {shouldShowTextAlign() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
+
+                {/* Text Alignment */}
+                {shouldShowTextAlign() && (
+                    <div className="flex items-center gap-1">
+                        <Select
+                            value={
+                                editor.isActive({ textAlign: 'center' }) ? 'center' :
+                                    editor.isActive({ textAlign: 'right' }) ? 'right' :
+                                        editor.isActive({ textAlign: 'justify' }) ? 'justify' : 'left'
+                            }
+                            onValueChange={(value) => {
+                                editor.chain().focus().setTextAlign(value).run();
+                            }}
+                        >
+                            <SelectTrigger className="w-16 h-8 px-4 border border-gray-300 bg-white hover:bg-gray-50 [&>svg]:hidden">
+                                <div className="flex items-center justify-between w-full">
+                                    <div className="flex items-center">
+                                        {editor.isActive({ textAlign: 'center' }) && <AlignCenter className="w-4 h-4" />}
+                                        {editor.isActive({ textAlign: 'right' }) && <AlignRight className="w-4 h-4" />}
+                                        {editor.isActive({ textAlign: 'justify' }) && <AlignJustify className="w-4 h-4" />}
+                                        {(!editor.isActive({ textAlign: 'center' }) &&
+                                            !editor.isActive({ textAlign: 'right' }) &&
+                                            !editor.isActive({ textAlign: 'justify' })) && <AlignLeft className="w-4 h-4" />}
+                                    </div>
+                                    <ChevronDown className="w-3 h-3 ml-1 text-gray-500" />
                                 </div>
-                            </SelectItem>
-                            <SelectItem value="center">
-                                <div className="flex items-center gap-2">
-                                    <AlignCenter className="w-4 h-4" />
-                                    <span>Center</span>
-                                </div>
-                            </SelectItem>
-                            <SelectItem value="right">
-                                <div className="flex items-center gap-2">
-                                    <AlignRight className="w-4 h-4" />
-                                    <span>Right</span>
-                                </div>
-                            </SelectItem>
-                            <SelectItem value="justify">
-                                <div className="flex items-center gap-2">
-                                    <AlignJustify className="w-4 h-4" />
-                                    <span>Justify</span>
-                                </div>
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="left">
+                                    <div className="flex items-center gap-2">
+                                        <AlignLeft className="w-4 h-4" />
+                                        <span>Left</span>
+                                    </div>
+                                </SelectItem>
+                                <SelectItem value="center">
+                                    <div className="flex items-center gap-2">
+                                        <AlignCenter className="w-4 h-4" />
+                                        <span>Center</span>
+                                    </div>
+                                </SelectItem>
+                                <SelectItem value="right">
+                                    <div className="flex items-center gap-2">
+                                        <AlignRight className="w-4 h-4" />
+                                        <span>Right</span>
+                                    </div>
+                                </SelectItem>
+                                <SelectItem value="justify">
+                                    <div className="flex items-center gap-2">
+                                        <AlignJustify className="w-4 h-4" />
+                                        <span>Justify</span>
+                                    </div>
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
 
-                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                {/* Separator before Lists - only show if lists are visible */}
+                {shouldShowLists() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
 
-                    {/* Essential Lists */}
-                    <Button variant="outline" size="sm"
-                        onClick={() => editor.chain().focus().toggleBulletList().run()}
-                        className={`h-8 w-8 p-0 ${isActive('bulletList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                            }`}
-                        title="Bullet List"
-                    >
-                        <List className="w-4 h-4" />
-                    </Button>
+                {/* Essential Lists */}
+                {shouldShowLists() && (
+                    <>
+                        <Button variant="outline" size="sm"
+                            onClick={() => editor.chain().focus().toggleBulletList().run()}
+                            className={`h-8 w-8 p-0 ${isActive('bulletList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                                }`}
+                            title="Bullet List"
+                        >
+                            <List className="w-4 h-4" />
+                        </Button>
 
-                    <Button variant="outline" size="sm"
-                        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                        className={`h-8 w-8 p-0 ${isActive('orderedList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                            }`}
-                        title="Numbered List"
-                    >
-                        <ListOrdered className="w-4 h-4" />
-                    </Button>
-                    <Button variant="outline"
-                        onClick={() => editor.chain().focus().toggleTaskList().run()}
-                        className={`h-8 w-8 p-0 ${isActive('taskList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                            }`}
-                        title="Task List"
-                    >
-                        <CheckSquare className="w-4 h-4" />
-                    </Button>
+                        <Button variant="outline" size="sm"
+                            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                            className={`h-8 w-8 p-0 ${isActive('orderedList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                                }`}
+                            title="Numbered List"
+                        >
+                            <ListOrdered className="w-4 h-4" />
+                        </Button>
+                        <Button variant="outline"
+                            onClick={() => editor.chain().focus().toggleTaskList().run()}
+                            className={`h-8 w-8 p-0 ${isActive('taskList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                                }`}
+                            title="Task List"
+                        >
+                            <CheckSquare className="w-4 h-4" />
+                        </Button>
+                    </>
+                )}
 
-                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                {/* Separator before Indent - only show if indent is visible */}
+                {shouldShowIndent() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
 
-
-                    <Button variant="outline"
-                        onClick={() => {
-                            if (!isEditingDisabled && editor) {
-                                // Check current indentation level before allowing indent
-                                let currentLevel = 0;
-                                if (editor.isActive('paragraph')) {
-                                    const attrs = editor.getAttributes('paragraph');
-                                    currentLevel = attrs.indent || 0;
-                                } else if (editor.isActive('heading')) {
-                                    const attrs = editor.getAttributes('heading');
-                                    currentLevel = attrs.indent || 0;
-                                }
-
-                                // Only indent if below maximum level
-                                if (currentLevel < maxIndentLevel) {
+                {/* Indentation Controls */}
+                {shouldShowIndent() && (
+                    <>
+                        <Button variant="outline"
+                            onClick={() => {
+                                if (!isEditingDisabled && editor) {
+                                    // Check current indentation level before allowing indent
+                                    let currentLevel = 0;
                                     if (editor.isActive('paragraph')) {
-                                        editor.chain().focus().indentParagraph().run();
+                                        const attrs = editor.getAttributes('paragraph');
+                                        currentLevel = attrs.indent || 0;
                                     } else if (editor.isActive('heading')) {
-                                        editor.chain().focus().indentHeading().run();
+                                        const attrs = editor.getAttributes('heading');
+                                        currentLevel = attrs.indent || 0;
+                                    }
+
+                                    // Only indent if below maximum level
+                                    if (currentLevel < maxIndentLevel) {
+                                        if (editor.isActive('paragraph')) {
+                                            editor.chain().focus().indentParagraph().run();
+                                        } else if (editor.isActive('heading')) {
+                                            editor.chain().focus().indentHeading().run();
+                                        }
                                     }
                                 }
-                            }
-                        }}
-                        disabled={isEditingDisabled}
-                        className={`rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title={`Indent (Max: ${maxIndentLevel} levels)`}
-                    >
-                        <IndentIncrease />
-                    </Button>
+                            }}
+                            disabled={isEditingDisabled}
+                            className={`h-8 w-8 p-0 rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title={`Indent (Max: ${maxIndentLevel} levels)`}
+                        >
+                            <IndentIncrease className="w-4 h-4" />
+                        </Button>
 
-                    <Button variant="outline"
-                        onClick={() => {
-                            if (!isEditingDisabled && editor) {
-                                if (editor.isActive('paragraph')) {
-                                    editor.chain().focus().outdentParagraph().run();
-                                } else if (editor.isActive('heading')) {
-                                    editor.chain().focus().outdentHeading().run();
+                        <Button variant="outline"
+                            onClick={() => {
+                                if (!isEditingDisabled && editor) {
+                                    if (editor.isActive('paragraph')) {
+                                        editor.chain().focus().outdentParagraph().run();
+                                    } else if (editor.isActive('heading')) {
+                                        editor.chain().focus().outdentHeading().run();
+                                    }
                                 }
-                            }
-                        }}
-                        disabled={isEditingDisabled}
-                        className={`rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title="Outdent"
-                    >
-                        <IndentDecrease />
-                    </Button>
+                            }}
+                            disabled={isEditingDisabled}
+                            className={`h-8 w-8 p-0  rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title="Outdent"
+                        >
+                            <IndentDecrease className="w-4 h-4" />
+                        </Button>
+                    </>
+                )}
+
+                {/* Clear Formatting */}
+                {shouldShowClearFormatting() && (
                     <Button variant="outline" size="sm"
                         onClick={() => {
                             if (!isEditingDisabled) {
@@ -1153,10 +1279,13 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     >
                         <Eraser className="w-4 h-4" />
                     </Button>
+                )}
 
-                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                {/* Separator before Insert Options - only show if insert options are visible */}
+                {shouldShowInsertOptions() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
 
-                    {/* INSERT OPTIONS - Always visible */}
+                {/* INSERT OPTIONS */}
+                {shouldShowInsertOptions() && (
                     <div className="flex items-center gap-1">
                         {/* Table Grid Selector */}
                         <Popover>
@@ -1240,11 +1369,13 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                             <span className="hidden lg:inline">Link</span>
                         </Button>
                     </div>
+                )}
 
-                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
-                </div>
+                <div className="w-px h-6 bg-gray-300 mx-1"></div>
+            </div>
 
-                {/* MORE OPTIONS DROPDOWN - Contains overflow items */}
+            {/* MORE OPTIONS DROPDOWN - Shows when sections are hidden due to narrow width */}
+            {shouldShowMoreOptions() && (
                 <div className="relative ml-auto flex-shrink-0">
                     <DropdownMenu open={showMoreOptions} onOpenChange={setShowMoreOptions}>
                         <DropdownMenuTrigger asChild>
@@ -1256,128 +1387,167 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                             </Button>
                         </DropdownMenuTrigger>
 
-                        <DropdownMenuContent align="end" className="w-56">
-                            {/* Font Controls for smaller screens */}
-                            <div className="lg:hidden">
-                                <DropdownMenuItem onClick={() => {
-                                    // Font family selector would go here - could implement a submenu
-                                }}>
-                                    <span>Font Family</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                            </div>
+                        <DropdownMenuContent align="end" className="w-50">
+                            {/* Categorized sections - only show categories when sections are hidden */}
 
-                            {/* Color controls for mobile */}
-                            <div className="md:hidden">
-                                <DropdownMenuItem onClick={() => {
-                                    // Color picker would go here
-                                }}>
-                                    <Palette className="w-4 h-4 mr-2" />
-                                    <span>Text Color</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => {
-                                    // Highlight color picker would go here
-                                }}>
-                                    <Highlighter className="w-4 h-4 mr-2" />
-                                    <span>Highlight</span>
-                                </DropdownMenuItem>
-                                <DropdownMenuSeparator />
-                            </div>
-
-                            {/* Alignment */}
-                            <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('left').run()}>
-                                <AlignLeft className="w-4 h-4 mr-2" />
-                                <span>Align Left</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('center').run()}>
-                                <AlignCenter className="w-4 h-4 mr-2" />
-                                <span>Align Center</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('right').run()}>
-                                <AlignRight className="w-4 h-4 mr-2" />
-                                <span>Align Right</span>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('justify').run()}>
-                                <AlignJustify className="w-4 h-4 mr-2" />
-                                <span>Justify</span>
-                            </DropdownMenuItem>
-
-                            <DropdownMenuSeparator />
-
-                            {/* Lists */}
-                            <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
-                                <CheckSquare className="w-4 h-4 mr-2" />
-                                <span>Task List</span>
-                            </DropdownMenuItem>
-
-                            <DropdownMenuSeparator />
-
-                            {/* Indentation */}
-                            <DropdownMenuItem onClick={() => {
-                                if (!isEditingDisabled && editor) {
-                                    // Calculate current max indent dynamically
-                                    const currentMaxIndent = calculateMaxIndentation();
-
-                                    let currentLevel = 0;
-                                    if (editor.isActive('paragraph')) {
-                                        const attrs = editor.getAttributes('paragraph');
-                                        currentLevel = attrs.indent || 0;
-                                    } else if (editor.isActive('heading')) {
-                                        const attrs = editor.getAttributes('heading');
-                                        currentLevel = attrs.indent || 0;
-                                    }
-
-                                    // Only indent if below maximum level
-                                    if (currentLevel < currentMaxIndent) {
-                                        if (editor.isActive('paragraph')) {
-                                            editor.chain().focus().indentParagraph().run();
-                                        } else if (editor.isActive('heading')) {
-                                            editor.chain().focus().indentHeading().run();
+                            {/* INSERT CATEGORY */}
+                            {!shouldShowInsertOptions() && (
+                                <>
+                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                        Insert
+                                    </div>
+                                    <DropdownMenuItem onClick={() => {
+                                        editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+                                    }}>
+                                        <Table className="w-4 h-4 mr-2" />
+                                        <span>Table</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                        const defaultChart = `graph TD
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Do something]
+    B -->|No| D[Do something else]
+    C --> E[End]
+    D --> E`;
+                                        editor?.chain().focus().toggleCodeBlock({ language: 'mermaid' }).insertContent(defaultChart).run();
+                                    }}>
+                                        <Network className="w-4 h-4 mr-2" />
+                                        <span>Diagram</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                        const url = window.prompt('Enter the URL:');
+                                        if (url) {
+                                            editor.chain().focus().setLink({ href: url }).run();
                                         }
-                                    }
-                                }
-                            }}>
-                                <IndentIncrease className="w-4 h-4 mr-2" />
-                                <span>Increase Indent</span>
-                            </DropdownMenuItem>
+                                    }}>
+                                        <Link className="w-4 h-4 mr-2" />
+                                        <span>Link</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                </>
+                            )}
 
-                            <DropdownMenuItem onClick={() => {
-                                if (!isEditingDisabled && editor) {
-                                    if (editor.isActive('paragraph')) {
-                                        editor.chain().focus().outdentParagraph().run();
-                                    } else if (editor.isActive('heading')) {
-                                        editor.chain().focus().outdentHeading().run();
-                                    }
-                                }
-                            }}>
-                                <IndentDecrease className="w-4 h-4 mr-2" />
-                                <span>Decrease Indent</span>
-                            </DropdownMenuItem>
+                            {/* ALIGNMENT CATEGORY */}
+                            {!shouldShowTextAlign() && (
+                                <>
+                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                        Alignment
+                                    </div>
+                                    <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('left').run()}>
+                                        <AlignLeft className="w-4 h-4 mr-2" />
+                                        <span>Left</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('center').run()}>
+                                        <AlignCenter className="w-4 h-4 mr-2" />
+                                        <span>Center</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('right').run()}>
+                                        <AlignRight className="w-4 h-4 mr-2" />
+                                        <span>Right</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('justify').run()}>
+                                        <AlignJustify className="w-4 h-4 mr-2" />
+                                        <span>Justify</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                </>
+                            )}
+
+
+
+                            {/* INDENTATION CATEGORY */}
+                            {!shouldShowIndent() && (
+                                <>
+                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                        Indentation
+                                    </div>
+                                    <DropdownMenuItem onClick={() => {
+                                        if (!isEditingDisabled && editor) {
+                                            // Calculate current max indent dynamically
+                                            const currentMaxIndent = calculateMaxIndentation();
+
+                                            let currentLevel = 0;
+                                            if (editor.isActive('paragraph')) {
+                                                const attrs = editor.getAttributes('paragraph');
+                                                currentLevel = attrs.indent || 0;
+                                            } else if (editor.isActive('heading')) {
+                                                const attrs = editor.getAttributes('heading');
+                                                currentLevel = attrs.indent || 0;
+                                            }
+
+                                            // Only indent if below maximum level
+                                            if (currentLevel < currentMaxIndent) {
+                                                if (editor.isActive('paragraph')) {
+                                                    editor.chain().focus().indentParagraph().run();
+                                                } else if (editor.isActive('heading')) {
+                                                    editor.chain().focus().indentHeading().run();
+                                                }
+                                            }
+                                        }
+                                    }}>
+                                        <IndentIncrease className="w-4 h-4 mr-2" />
+                                        <span>Indent</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => {
+                                        if (!isEditingDisabled && editor) {
+                                            if (editor.isActive('paragraph')) {
+                                                editor.chain().focus().outdentParagraph().run();
+                                            } else if (editor.isActive('heading')) {
+                                                editor.chain().focus().outdentHeading().run();
+                                            }
+                                        }
+                                    }}>
+                                        <IndentDecrease className="w-4 h-4 mr-2" />
+                                        <span>Outdent</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                </>
+                            )}
+
+                            {/* LISTS CATEGORY */}
+                            {!shouldShowLists() && (
+                                <>
+                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                        List
+                                    </div>
+                                    <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
+                                        <CheckSquare className="w-4 h-4 mr-2" />
+                                        <span>Task List</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => editor.chain().focus().toggleBulletList().run()}>
+                                        <List className="w-4 h-4 mr-2" />
+                                        <span>Bullet List</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+                                        <ListOrdered className="w-4 h-4 mr-2" />
+                                        <span>Ordered List</span>
+                                    </DropdownMenuItem>
+                                </>
+                            )}
+
+                            {/* CLEAR FORMATTING CATEGORY */}
+                            {!shouldShowClearFormatting() && (
+                                <>
+                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                        More
+                                    </div>
+                                    <DropdownMenuItem onClick={() => {
+                                        if (!isEditingDisabled) {
+                                            editor.chain().focus().clearNodes().unsetAllMarks().run();
+                                        }
+                                    }}>
+                                        <Eraser className="w-4 h-4 mr-2" />
+                                        <span>Clear Formatting</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                </>
+                            )}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
-
-                {/* Outside click handled via document listener to avoid blocking scroll */}
-
-                {/* Link Tooltip */}
-                {editor && (
-                    <LinkTooltip
-                        editor={editor}
-                        isOpen={linkTooltipOpen}
-                        onClose={() => {
-                            setLinkTooltipOpen(false);
-                            setIsEditingLink(false);
-                            setExistingLinkUrl('');
-                            setSelectedTextForLink('');
-                        }}
-                        position={linkTooltipPosition}
-                        selectedText={selectedTextForLink}
-                        isEditing={isEditingLink}
-                        existingUrl={existingLinkUrl}
-                    />
-                )}
-            </div>
+            )}
         </div>
+
     );
 }
 

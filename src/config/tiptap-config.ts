@@ -20,6 +20,7 @@ import Paragraph from "@/lib/extensions/Paragraph"; // Import our custom paragra
 import Heading from "@/lib/extensions/Heading"; // Import our custom heading extension
 import Mermaid from "@/lib/extensions/Mermaid"; // Import Mermaid extension
 import { CodeBlockWithHighlight } from "@/lib/extensions/CodeBlockWithHighlight"; // Import highlight.js CodeBlock extension
+import { BackspaceBehaviorFix } from "@/lib/extensions/BackspaceBehaviorFix"; // Import backspace behavior fix
 
 // TipTap Editor Configuration
 export const getTipTapExtensions = () => [
@@ -98,6 +99,8 @@ export const getTipTapExtensions = () => [
     CharacterCount,
     // Mermaid diagram support
     Mermaid,
+    // Custom backspace behavior fix for styling blocks
+    BackspaceBehaviorFix,
 ];
 
 // Editor Props Configuration

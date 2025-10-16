@@ -134,7 +134,7 @@
 
 .tiptap ul[data-type="taskList"] li {
   display: flex;
-  align-items: flex-start;
+  align-items: center; /* Changed from flex-start to center for better vertical alignment */
   margin: 0.5rem 0;
 }
 
@@ -142,7 +142,10 @@
   flex: 0 0 auto;
   margin-right: 0.5rem;
   user-select: none;
-  margin-top: 0.125rem; /* Slight adjustment to align with text */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.5rem; /* Match text line height */
 }
 
 .tiptap ul[data-type="taskList"] li > div {
@@ -190,14 +193,17 @@
 /* Task list items */
 .tiptap li[data-type="taskItem"] {
   display: flex;
-  align-items: flex-start;
+  align-items: center; /* Changed from flex-start to center for better vertical alignment */
 }
 
 .tiptap li[data-type="taskItem"] > label {
   flex: 0 0 auto;
   margin-right: 0.5rem;
   user-select: none;
-  margin-top: 0.125rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.5rem; /* Match text line height */
 }
 
 /* Alternative styling using CSS classes if data attributes don't work */
@@ -209,7 +215,7 @@
 
 .tiptap .task-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center; /* Changed from flex-start to center for better vertical alignment */
   margin: 0.5rem 0;
 }
 
@@ -217,7 +223,10 @@
   flex: 0 0 auto;
   margin-right: 0.5rem;
   user-select: none;
-  margin-top: 0.125rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.5rem; /* Match text line height */
 }
 
 .tiptap .task-item label input[type="checkbox"] {

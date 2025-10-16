@@ -8,7 +8,6 @@ import {
     Bold,
     Italic,
     Underline,
-    Table,
     Plus,
     Minus,
     Trash2,
@@ -18,8 +17,7 @@ import {
     Redo,
     FileText,
     Eraser,
-    Bot,
-    Delete
+    Bot
 } from 'lucide-react'
 
 interface ContextMenuProps {
@@ -210,7 +208,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                                     }
                                 }
 
-                              
+
                                 if (onOpenChat && typeof onOpenChat === 'function') {
                                     const messageToSend = cleanText
                                         ? `Please help me with this content: "${cleanText}"`
@@ -353,23 +351,29 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="w-full justify-start px-3 py-2 text-sm"
+                        className="w-full justify-between px-3 py-2 text-sm"
                         onClick={() => executeCommand(() => editor.chain().focus().undo().run())}
                         disabled={!editor.can().undo()}
                     >
-                        <Undo className="w-4 h-4 mr-2" />
-                        Undo
+                        <div className="flex items-center">
+                            <Undo className="w-4 h-4 mr-2" />
+                            Undo
+                        </div>
+                        <span className="text-xs text-gray-400">Ctrl+Z</span>
                     </Button>
 
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="w-full justify-start px-3 py-2 text-sm"
+                        className="w-full justify-between px-3 py-2 text-sm"
                         onClick={() => executeCommand(() => editor.chain().focus().redo().run())}
                         disabled={!editor.can().redo()}
                     >
-                        <Redo className="w-4 h-4 mr-2" />
-                        Redo
+                        <div className="flex items-center">
+                            <Redo className="w-4 h-4 mr-2" />
+                            Redo
+                        </div>
+                        <span className="text-xs text-gray-400">Ctrl+Y</span>
                     </Button>
 
                     <div className="border-t border-gray-100 my-1"></div>
@@ -382,7 +386,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="w-full justify-start px-3 py-2 text-sm"
+                        className="w-full justify-between px-3 py-2 text-sm"
                         onClick={() => executeCommand(() => {
                             const selection = window.getSelection()
                             if (selection) {
@@ -391,14 +395,17 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                         })}
                         disabled={!isTextSelected}
                     >
-                        <Copy className="w-4 h-4 mr-2" />
-                        Copy
+                        <div className="flex items-center">
+                            <Copy className="w-4 h-4 mr-2" />
+                            Copy
+                        </div>
+                        <span className="text-xs text-gray-400">Ctrl+C</span>
                     </Button>
 
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="w-full justify-start px-3 py-2 text-sm"
+                        className="w-full justify-between px-3 py-2 text-sm"
                         onClick={() => executeCommand(() => {
                             const selection = window.getSelection()
                             if (selection) {
@@ -408,14 +415,17 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                         })}
                         disabled={!isTextSelected}
                     >
-                        <Scissors className="w-4 h-4 mr-2" />
-                        Cut
+                        <div className="flex items-center">
+                            <Scissors className="w-4 h-4 mr-2" />
+                            Cut
+                        </div>
+                        <span className="text-xs text-gray-400">Ctrl+X</span>
                     </Button>
 
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="w-full justify-start px-3 py-2 text-sm"
+                        className="w-full justify-between px-3 py-2 text-sm"
                         onClick={() => executeCommand(async () => {
                             try {
                                 const text = await navigator.clipboard.readText()
@@ -426,14 +436,17 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                         })}
                         disabled={!canPaste}
                     >
-                        <ClipboardPaste className="w-4 h-4 mr-2" />
-                        Paste
+                        <div className="flex items-center">
+                            <ClipboardPaste className="w-4 h-4 mr-2" />
+                            Paste
+                        </div>
+                        <span className="text-xs text-gray-400">Ctrl+V</span>
                     </Button>
 
                     <Button
                         variant="ghost"
                         size="sm"
-                        className="w-full justify-start px-3 py-2 text-sm"
+                        className="w-full justify-between px-3 py-2 text-sm"
                         onClick={() => executeCommand(async () => {
                             try {
                                 const text = await navigator.clipboard.readText()
@@ -445,21 +458,12 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                         })}
                         disabled={!canPaste}
                     >
-                        <FileText className="w-4 h-4 mr-2" />
-                        Paste without Formatting
+                        <div className="flex items-center">
+                            <FileText className="w-4 h-4 mr-2" />
+                            Paste without Formatting
+                        </div>
+                        <span className="text-xs text-gray-400">Ctrl+Shift+V</span>
                     </Button>
-
-                    {isTextSelected && (
-                        <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-full justify-start px-3 py-2 text-sm hover:bg-red-50 hover:text-red-600"
-                            onClick={() => executeCommand(() => editor.commands.deleteSelection())}
-                        >
-                            <Delete className="w-4 h-4 mr-2" />
-                            Delete
-                        </Button>
-                    )}
 
                     {isTextSelected && (
                         <>
@@ -472,44 +476,56 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                className="w-full justify-start px-3 py-2 text-sm"
+                                className="w-full justify-between px-3 py-2 text-sm"
                                 onClick={() => executeCommand(() => editor.chain().focus().toggleBold().run())}
                             >
-                                <Bold className="w-4 h-4 mr-2" />
-                                Bold
+                                <div className="flex items-center">
+                                    <Bold className="w-4 h-4 mr-2" />
+                                    Bold
+                                </div>
+                                <span className="text-xs text-gray-400">Ctrl+B</span>
                             </Button>
 
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                className="w-full justify-start px-3 py-2 text-sm"
+                                className="w-full justify-between px-3 py-2 text-sm"
                                 onClick={() => executeCommand(() => editor.chain().focus().toggleItalic().run())}
                             >
-                                <Italic className="w-4 h-4 mr-2" />
-                                Italic
+                                <div className="flex items-center">
+                                    <Italic className="w-4 h-4 mr-2" />
+                                    Italic
+                                </div>
+                                <span className="text-xs text-gray-400">Ctrl+I</span>
                             </Button>
 
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                className="w-full justify-start px-3 py-2 text-sm"
+                                className="w-full justify-between px-3 py-2 text-sm"
                                 onClick={() => executeCommand(() => editor.chain().focus().toggleUnderline().run())}
                             >
-                                <Underline className="w-4 h-4 mr-2" />
-                                Underline
+                                <div className="flex items-center">
+                                    <Underline className="w-4 h-4 mr-2" />
+                                    Underline
+                                </div>
+                                <span className="text-xs text-gray-400">Ctrl+U</span>
                             </Button>
 
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                className="w-full justify-start px-3 py-2 text-sm"
+                                className="w-full justify-between px-3 py-2 text-sm"
                                 onClick={() => executeCommand(() => {
                                     // Clear all formatting from selected text
                                     editor.chain().focus().unsetAllMarks().run()
                                 })}
                             >
-                                <Eraser className="w-4 h-4 mr-2" />
-                                Clear Formatting
+                                <div className="flex items-center">
+                                    <Eraser className="w-4 h-4 mr-2" />
+                                    Clear Formatting
+                                </div>
+                                <span className="text-xs text-gray-400">Ctrl+\\</span>
                             </Button>
 
                             <div className="border-t border-gray-100 my-1"></div>
@@ -544,7 +560,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                                         }
                                     }
 
-                                  
+
                                     if (onOpenChat && typeof onOpenChat === 'function') {
                                         const messageToSend = cleanText
                                             ? `Please help me with this content: "${cleanText}"`
@@ -565,27 +581,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                         </>
                     )}
 
-                    <div className="border-t border-gray-100 my-1"></div>
 
-                    <div className="px-3 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        Insert
-                    </div>
-
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-full justify-start px-3 py-2 text-sm"
-                        onClick={() => executeCommand(() => {
-                            editor.chain().focus().insertTable({
-                                rows: 3,
-                                cols: 3,
-                                withHeaderRow: true
-                            }).run()
-                        })}
-                    >
-                        <Table className="w-4 h-4 mr-2" />
-                        Insert Table
-                    </Button>
                 </>
             )}
         </div>
