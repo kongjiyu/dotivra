@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import ProjectView from "./pages/ProjectOverview";
 import DocumentSummary from "@/pages/Document/DocumentSummary";
 import DocumentProject from "@/pages/Document/DocumentProject";
+import DocumentProjectList from "@/pages/Document/DocumentProjectList";
 import DocumentHistory from "@/pages/Document/DocumentHistory";
 import { DocumentProvider } from "./context/DocumentContext";
 import Profile from "./pages/Profile";
@@ -82,6 +83,11 @@ const router = createBrowserRouter([
   {
     path: "/document/summary",
     element: <ProtectedDocumentWrapper><DocumentSummary /></ProtectedDocumentWrapper>,
+    errorElement: <ErrorPage />
+  },
+  {
+    path: "/document/project",
+    element: <ProtectedDocumentWrapper><DocumentProjectList /></ProtectedDocumentWrapper>,
     errorElement: <ErrorPage />
   },
   {

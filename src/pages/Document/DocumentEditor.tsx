@@ -5,6 +5,7 @@ import { useDocument } from "@/context/DocumentContext";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "@/lib/apiConfig";
+import { fetchDocument } from "@/services/apiService";
 import { useAuth } from "@/context/AuthContext";
 
 import { EnhancedAIContentWriter } from '@/utils/enhancedAIContentWriter';
@@ -174,61 +175,63 @@ export default function DocumentEditor() {
 
             setIsLoadingDocument(true);
             try {
+                console.log('📄 Loading document using apiService:', documentId);
 
-                // Fetch document from API
-                const response = await fetch(API_ENDPOINTS.document(documentId));
-                if (!response.ok) {
-                    throw new Error(`Failed to load document: ${response.status}`);
-                }
-
-                const data = await response.json();
-
-                // Handle both API response formats: direct document data or wrapped in success/document
-                const documentData = data.success ? data.document : data;
+                // Use the improved fetchDocument function with fallback logic
+                const documentData = await fetchDocument(documentId);
 
                 if (documentData && documentData.id) {
                     setDocumentId(documentId);
-                    setDocumentTitle(documentData.Title || documentData.DocumentName || "Untitled Document");
+                    setDocumentTitle(documentData.DocumentName || "Untitled Document");
                     const content = documentData.Content || "";
                     setDocumentContent(content); // Use exact content from DB, empty if empty
 
+                    console.log('📄 Document loaded successfully:', documentData.DocumentName);
+
                     // Load project information if document has a project ID
-                    const projectIdFromDoc = documentData.Project_Id || documentData.ProjectId;
+                    const projectIdFromDoc = documentData.Project_Id;
                     if (projectIdFromDoc) {
                         setProjectId(projectIdFromDoc);
 
-                        // Load project details to get repository information
-                        try {
-                            const projectResponse = await fetch(API_ENDPOINTS.project(projectIdFromDoc));
-                            if (projectResponse.ok) {
-                                const projectData = await projectResponse.json();
-                                const project = projectData.success ? projectData.project : projectData;
+                        // Skip API call for mock projects
+                        if (projectIdFromDoc.startsWith('mock-')) {
+                            console.log('📋 Skipping API call for mock project:', projectIdFromDoc);
+                        } else {
+                            // Load project details to get repository information
+                            try {
+                                const projectResponse = await fetch(API_ENDPOINTS.project(projectIdFromDoc));
+                                if (projectResponse.ok) {
+                                    const projectData = await projectResponse.json();
+                                    const project = projectData.success ? projectData.project : projectData;
 
-                                if (project && project.GitHubRepo) {
+                                    if (project && project.GitHubRepo) {
 
-                                    // Parse GitHub repository URL to get owner/repo
-                                    const repoMatch = project.GitHubRepo.match(/github\.com\/([^\/]+\/[^\/]+)/) ||
-                                        project.GitHubRepo.match(/^([^\/]+\/[^\/]+)$/);
+                                        // Parse GitHub repository URL to get owner/repo
+                                        const repoMatch = project.GitHubRepo.match(/github\.com\/([^\/]+\/[^\/]+)/) ||
+                                            project.GitHubRepo.match(/^([^\/]+\/[^\/]+)$/);
 
-                                    if (repoMatch) {
-                                        const fullName = repoMatch[1];
-                                        const [owner, repo] = fullName.split('/');
-                                        setRepositoryInfo({ owner, repo });
+                                        if (repoMatch) {
+                                            const fullName = repoMatch[1];
+                                            const [owner, repo] = fullName.split('/');
+                                            setRepositoryInfo({ owner, repo });
+                                        }
                                     }
+                                } else {
+                                    console.warn('Project API returned error status:', projectResponse.status);
                                 }
+                            } catch (projectError) {
+                                console.warn('Could not load project information:', projectError);
                             }
-                        } catch (projectError) {
-                            console.warn('Could not load project information:', projectError);
                         }
                     }
                 } else {
-                    console.warn('📄 No document data found in response:', data);
+                    console.warn('📄 No document data found in response:', documentData);
                     setDocumentContent("");
                     setDocumentTitle("Document Not Found");
                 }
             } catch (error) {
                 console.error('❌ Error loading document:', error);
-                // Show empty editor on error
+                // Show empty editor on error - but this should rarely happen now with fallback logic
                 setDocumentContent("");
                 setDocumentTitle("Document Load Error");
             } finally {

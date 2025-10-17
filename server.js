@@ -9,6 +9,7 @@ import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 import { WebSocketServer } from 'ws';
 import http from 'http';
+import fetch from 'node-fetch';
 
 // Import regular Firebase
 import { initializeApp } from 'firebase/app';
@@ -1212,6 +1213,102 @@ app.get('/api/github/repos/:owner/:repo/contents/*', async (req, res) => {
     });
   }
 });
+
+/* ------------------ Link Preview API ------------------ */
+app.get('/api/link-preview', async (req, res) => {
+  try {
+    const { url } = req.query;
+    
+    if (!url) {
+      return res.status(400).json({ error: 'URL parameter is required' });
+    }
+
+    // Validate URL
+    let validUrl;
+    try {
+      validUrl = new URL(url);
+      if (!['http:', 'https:'].includes(validUrl.protocol)) {
+        return res.status(400).json({ error: 'Only HTTP and HTTPS URLs are supported' });
+      }
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    // Fetch webpage
+    const response = await fetch(validUrl.href, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Dotivra-Bot/1.0 (+https://dotivra.com)',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      timeout: 10000, // 10 second timeout
+      redirect: 'follow',
+      size: 1024 * 1024, // 1MB limit
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html')) {
+      return res.json({
+        url: validUrl.href,
+        title: validUrl.hostname,
+        error: 'Content is not HTML'
+      });
+    }
+
+    const html = await response.text();
+    
+    // Parse HTML using a simple regex approach (for production, consider using a proper HTML parser)
+    const metadata = {
+      url: validUrl.href,
+      title: extractMetaContent(html, /<title[^>]*>([^<]+)<\/title>/i) || 
+             extractMetaContent(html, /<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
+             validUrl.hostname,
+      description: extractMetaContent(html, /<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+                  extractMetaContent(html, /<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i),
+      image: extractMetaContent(html, /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i),
+      siteName: extractMetaContent(html, /<meta[^>]*property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i),
+      favicon: `${validUrl.protocol}//${validUrl.hostname}/favicon.ico`
+    };
+
+    // Clean up the title (remove extra whitespace and decode HTML entities)
+    if (metadata.title) {
+      metadata.title = metadata.title.trim().replace(/\s+/g, ' ')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+    }
+
+    // Limit description length
+    if (metadata.description && metadata.description.length > 200) {
+      metadata.description = metadata.description.substring(0, 200) + '...';
+    }
+
+    res.json(metadata);
+  } catch (error) {
+    console.error('Link preview error:', error);
+    
+    // Return partial metadata even on error
+    const urlObj = req.query.url ? new URL(req.query.url) : null;
+    res.json({
+      url: req.query.url,
+      title: urlObj ? urlObj.hostname : 'Unknown',
+      error: error.message || 'Failed to fetch preview'
+    });
+  }
+});
+
+// Helper function to extract meta content using regex
+function extractMetaContent(html, regex) {
+  const match = html.match(regex);
+  return match ? match[1].trim() : null;
+}
 
 /* ------------------ WebSocket ------------------ */
 const wss = new WebSocketServer({ noServer: true });

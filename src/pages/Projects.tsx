@@ -17,25 +17,25 @@ const Projects: React.FC = () => {
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // Debug: Log the modal state and projects
   console.log('🔍 Projects component rendered, isModalOpen:', isModalOpen);
   console.log('📊 Current allProjects state:', allProjects);
-  
+
   // Load projects from API
   const loadProjects = async () => {
     try {
       console.log('🔄 Loading projects from API...');
       setLoading(true);
       setError(null);
-      
+
       const response = await fetch(API_ENDPOINTS.projects());
       console.log('📡 API Response status:', response.status);
-      
+
       if (!response.ok) {
         throw new Error('Failed to load projects');
       }
-      
+
       const data = await response.json();
       console.log('📋 Received projects data:', data);
       const normalizedProjects = (data.projects || []).map((project: any): Project => {
@@ -50,10 +50,10 @@ const Projects: React.FC = () => {
           typeof rawCreated === 'string'
             ? rawCreated
             : rawCreated?.toDate?.()
-            ? rawCreated.toDate().toISOString()
-            : rawCreated
-            ? String(rawCreated)
-            : '';
+              ? rawCreated.toDate().toISOString()
+              : rawCreated
+                ? String(rawCreated)
+                : '';
 
         return {
           id: String(project.Project_Id ?? project.id ?? Date.now()),
@@ -80,7 +80,7 @@ const Projects: React.FC = () => {
   useEffect(() => {
     loadProjects();
   }, []);
-  
+
   // Filter projects based on search
   const filteredProjects = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -150,15 +150,35 @@ const Projects: React.FC = () => {
             </div>
           </div>
         ) : error ? (
-          <div className="text-center py-12">
-            <h3 className="text-lg font-medium text-red-900 mb-2">Error Loading Projects</h3>
-            <p className="text-red-600 mb-4">{error}</p>
-            <button
-              onClick={loadProjects}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Try Again
-            </button>
+          <div className="text-center py-12 bg-white rounded-lg border border-red-200 mx-4">
+            <div className="w-16 h-16 mx-auto mb-4 bg-red-50 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Unable to Load Projects</h3>
+            <p className="text-gray-600 mb-6 max-w-md mx-auto">
+              We're having trouble connecting to load your projects. Please check your internet connection and try again.
+            </p>
+            <div className="space-y-3">
+              <button
+                onClick={loadProjects}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Retry Loading
+              </button>
+              <p className="text-sm text-gray-500">or</p>
+              <button
+                onClick={handleNewProject}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Create New Project
+              </button>
+            </div>
           </div>
         ) : filteredProjects.length > 0 ? (
           <ProjectsGridView
@@ -193,7 +213,7 @@ const Projects: React.FC = () => {
         onSubmit={async (projectData) => {
           try {
             console.log('Creating project:', projectData);
-            
+
             const response = await fetch(API_ENDPOINTS.projects(), {
               method: 'POST',
               headers: {
@@ -208,11 +228,11 @@ const Projects: React.FC = () => {
 
             const result = await response.json();
             console.log('✅ Project created successfully:', result.project);
-            
+
             // Close modal and reload projects
             setIsModalOpen(false);
             await loadProjects();
-            
+
             // Navigate to the new project
             navigate(`/project/${result.project.id}`);
           } catch (err) {

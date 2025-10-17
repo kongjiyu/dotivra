@@ -1,7 +1,7 @@
 import DocumentLayout from "./DocumentLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Plus, Download, ExternalLink, Clock, User, FolderOpen } from "lucide-react";
+import { FileText, Plus, Download, ExternalLink, Clock, User, FolderOpen, Copy } from "lucide-react";
 import { useDocument } from "@/context/DocumentContext";
 import SimpleShare from "@/components/document/SimpleShare";
 import ImportModal from "@/components/document/ImportModal";
@@ -33,26 +33,39 @@ const useDocumentProjectData = (documentId: string | undefined) => {
         try {
             setLoading(true);
             setError(null);
+            console.log('📋 Loading document project data for:', documentId);
 
             const result = await fetchDocumentWithProject(documentId);
+            console.log('📋 Successfully loaded document project data:', result);
             setData(result);
         } catch (err) {
-            console.error('❌ Error loading document project data, falling back to mock data:', err);
+            console.error('❌ Error loading document project data:', err);
+            const error = err as Error;
+            console.error('❌ Error details:', {
+                message: error?.message,
+                stack: error?.stack,
+                cause: error?.cause
+            });
 
+            // Client-side fallback handling
             try {
+                console.log('📋 Attempting to load fallback mock data...');
                 const { createMockDocument, mockProjects, getMockDocumentsByProject } = await import('@/utils/mockProjectData');
                 const mockDocument = createMockDocument(documentId);
                 const defaultProject = mockProjects[0];
                 const mockRelatedDocuments = getMockDocumentsByProject(defaultProject.id!).filter(doc => doc.id !== documentId);
 
+                console.log('📋 Successfully loaded mock fallback data');
                 setData({
                     currentDocument: mockDocument,
                     project: defaultProject,
                     relatedDocuments: mockRelatedDocuments
                 });
+                setError(null); // Clear error since we have fallback data
             } catch (mockError) {
-                console.error('❌ Failed to load mock data:', mockError);
-                setError('Failed to load document data');
+                console.error('❌ Failed to load fallback data:', mockError);
+                const error = err as Error;
+                setError(`Failed to load document data: ${error?.message || 'Unknown error'}`);
             }
         } finally {
             setLoading(false);
@@ -127,6 +140,38 @@ export default function DocumentProject() {
         navigate('/document/editor');
     }, [navigate]);
 
+    const handleCopyUrl = useCallback(async (doc: Document) => {
+        const url = `${window.location.origin}/document/${doc.id}`;
+        try {
+            await navigator.clipboard.writeText(url);
+            // You could add a toast notification here
+            console.log('URL copied to clipboard');
+        } catch (err) {
+            console.error('Failed to copy URL:', err);
+        }
+    }, []);
+
+    const handleExportDocument = useCallback((doc: Document) => {
+        try {
+            // Create a blob with the document content
+            const content = doc.Content || '';
+            const plainText = content.replace(/<[^>]*>/g, ''); // Remove HTML tags
+            const blob = new Blob([plainText], { type: 'text/plain' });
+
+            // Create download link
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${doc.DocumentName || 'document'}.txt`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error('Failed to export document:', err);
+        }
+    }, []);
+
     if (loading) {
         return (
             <DocumentLayout showDocumentMenu={false}>
@@ -144,13 +189,19 @@ export default function DocumentProject() {
         return (
             <DocumentLayout showDocumentMenu={false}>
                 <div className="h-full flex items-center justify-center">
-                    <div className="text-center">
+                    <div className="text-center max-w-md">
                         <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                         <h3 className="text-lg font-semibold text-gray-900 mb-2">Failed to load project</h3>
-                        <p className="text-gray-600 mb-4">{error}</p>
-                        <Button onClick={() => window.history.back()} variant="outline">
-                            Go Back
-                        </Button>
+                        <p className="text-gray-600 mb-2">{error}</p>
+                        <p className="text-sm text-gray-500 mb-4">Document ID: {documentId}</p>
+                        <div className="space-x-2">
+                            <Button onClick={() => window.location.reload()} variant="outline">
+                                Retry
+                            </Button>
+                            <Button onClick={() => window.history.back()} variant="outline">
+                                Go Back
+                            </Button>
+                        </div>
                     </div>
                 </div>
             </DocumentLayout>
@@ -224,7 +275,26 @@ export default function DocumentProject() {
                                     </div>
                                 </div>
                                 <div className="flex gap-2 ml-4">
-                                    <Button variant="ghost" size="sm">
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleCopyUrl(currentDocument);
+                                        }}
+                                        title="Copy URL"
+                                    >
+                                        <Copy className="w-4 h-4" />
+                                    </Button>
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleExportDocument(currentDocument);
+                                        }}
+                                        title="Export Document"
+                                    >
                                         <Download className="w-4 h-4" />
                                     </Button>
                                     <SimpleShare documentTitle={currentDocument.DocumentName} documentId={currentDocument.id!} />
@@ -260,7 +330,26 @@ export default function DocumentProject() {
                                         </div>
                                     </div>
                                     <div className="flex gap-2 ml-4">
-                                        <Button variant="ghost" size="sm">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleCopyUrl(doc);
+                                            }}
+                                            title="Copy URL"
+                                        >
+                                            <Copy className="w-4 h-4" />
+                                        </Button>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleExportDocument(doc);
+                                            }}
+                                            title="Export Document"
+                                        >
                                             <Download className="w-4 h-4" />
                                         </Button>
                                         <SimpleShare documentTitle={doc.DocumentName} documentId={doc.id!} />

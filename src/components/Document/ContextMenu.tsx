@@ -17,7 +17,8 @@ import {
     Redo,
     FileText,
     Eraser,
-    Bot
+    Bot,
+    Link
 } from 'lucide-react'
 
 interface ContextMenuProps {
@@ -87,14 +88,14 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
     // Ensure menu stays within viewport
     const adjustedPosition = {
-        x: Math.min(position.x, window.innerWidth - 450), // 450px is approximate menu width + padding
-        y: Math.min(position.y, window.innerHeight - 600), // 600px is approximate expanded menu height
+        x: Math.min(position.x, window.innerWidth - 250), // 250px is approximate menu width + padding
+        y: Math.min(position.y, window.innerHeight - 500), // 500px is approximate expanded menu height
     }
 
     return (
         <div
             ref={menuRef}
-            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 min-w-[200px]"
+            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 w-[350px]"
             style={{
                 left: adjustedPosition.x,
                 top: adjustedPosition.y,
@@ -185,7 +186,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                         <Button
                             variant="ghost"
                             size="sm"
-                            className="w-full justify-start px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700"
+                            className="w-full justify-start px-3 py-2 text-sm"
                             onClick={() => executeCommand(() => {
                                 // Get selected text from TipTap editor
                                 const { state } = editor;
@@ -517,6 +518,52 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                                 size="sm"
                                 className="w-full justify-between px-3 py-2 text-sm"
                                 onClick={() => executeCommand(() => {
+                                    // Check if the selected text already has a link
+                                    const existingHref = editor.getAttributes('link').href;
+                                    if (existingHref) {
+                                        // Remove link if one exists
+                                        editor.chain().focus().unsetLink().run();
+                                    } else {
+                                        // Get selected text
+                                        const { state } = editor;
+                                        const { from, to } = state.selection;
+                                        const hasSelection = from !== to;
+
+                                        if (hasSelection) {
+                                            // Get selected text
+                                            const selectedText = state.doc.textBetween(from, to, ' ', ' ').trim();
+
+                                            // Check if the selected text is a valid URL
+                                            const urlPattern = /^https?:\/\/.+/i;
+                                            if (urlPattern.test(selectedText)) {
+                                                // If selected text is a valid URL, make it a link
+                                                editor.chain().focus().setLink({ href: selectedText }).run();
+                                            }
+                                            // If selected text is not a valid URL, do nothing
+                                        } else {
+                                            // No text selected, prompt for URL and insert new link
+                                            const url = window.prompt('Enter URL:', 'https://');
+                                            if (url && url.trim()) {
+                                                const linkText = window.prompt('Enter link text:', url.trim());
+                                                const text = linkText && linkText.trim() ? linkText.trim() : url.trim();
+                                                editor.chain().focus().insertContent(`<a href="${url.trim()}">${text}</a>`).run();
+                                            }
+                                        }
+                                    }
+                                })}
+                            >
+                                <div className="flex items-center">
+                                    <Link className="w-4 h-4 mr-2" />
+                                    {editor.getAttributes('link').href ? 'Remove Link' : 'Add Link'}
+                                </div>
+                                <span className="text-xs text-gray-400">Ctrl+K</span>
+                            </Button>
+
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-between px-3 py-2 text-sm"
+                                onClick={() => executeCommand(() => {
                                     // Clear all formatting from selected text
                                     editor.chain().focus().unsetAllMarks().run()
                                 })}
@@ -526,9 +573,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                                     Clear Formatting
                                 </div>
                                 <span className="text-xs text-gray-400">Ctrl+\\</span>
-                            </Button>
-
-                            <div className="border-t border-gray-100 my-1"></div>
+                            </Button>                            <div className="border-t border-gray-100 my-1"></div>
 
                             <div className="px-3 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wide">
                                 AI Assistant
@@ -537,7 +582,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                             <Button
                                 variant="ghost"
                                 size="sm"
-                                className="w-full justify-start px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 text-blue-700"
+                                className="w-full justify-start px-3 py-2 text-sm"
                                 onClick={() => executeCommand(() => {
                                     // Get selected text from TipTap editor
                                     const { state } = editor;

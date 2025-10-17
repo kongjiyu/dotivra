@@ -10,7 +10,7 @@ import {
     Folder,
     Sparkles
 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import DocumentMenu from "@/components/document/DocumentMenu";
 import ChatSidebar from "@/components/document/ChatSidebar";
 import SimpleShare from "@/components/document/SimpleShare";
@@ -41,6 +41,32 @@ export default function DocumentLayout({
     const [isAIGenerating, setIsAIGenerating] = useState(false);
     const [initialChatMessage, setInitialChatMessage] = useState<string>('');
     const navigate = useNavigate();
+    const location = useLocation();
+
+    // Helper function to determine if a tab is active based on current location
+    const isTabActive = (tabName: string) => {
+        const path = location.pathname;
+        switch (tabName) {
+            case 'editor':
+                return path.includes('/document/editor') || (path.includes('/document/') && !path.includes('/summary') && !path.includes('/project') && !path.includes('/history'));
+            case 'summary':
+                return path.includes('/summary');
+            case 'project':
+                return path.includes('/project');
+            case 'history':
+                return path.includes('/history');
+            default:
+                return false;
+        }
+    };
+
+    // Helper function to get tab button classes
+    const getTabButtonClasses = (tabName: string) => {
+        const isActive = isTabActive(tabName);
+        return isActive
+            ? "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
+            : "text-gray-900 hover:bg-gray-50";
+    };
 
     // Remove the local chatOpen state and use context instead
 
@@ -64,6 +90,7 @@ export default function DocumentLayout({
 
     const handleTabChange = (tab: string) => {
         const basePath = '/document';
+
         switch (tab) {
             case 'editor':
                 if (documentId) {
@@ -201,7 +228,7 @@ export default function DocumentLayout({
                         <Button
                             variant="outline"
                             size="sm"
-                            className="text-gray-900"
+                            className={getTabButtonClasses("editor")}
                             onClick={() => handleTabChange("editor")}
                         >
                             <FileText className="w-4 h-4 mr-2" />
@@ -210,7 +237,7 @@ export default function DocumentLayout({
                         <Button
                             variant="outline"
                             size="sm"
-                            className="text-gray-900"
+                            className={getTabButtonClasses("summary")}
                             onClick={() => handleTabChange("summary")}
                         >
                             <Dock className="w-4 h-4 mr-2" />
@@ -219,7 +246,7 @@ export default function DocumentLayout({
                         <Button
                             variant="outline"
                             size="sm"
-                            className="text-gray-900"
+                            className={getTabButtonClasses("project")}
                             onClick={() => handleTabChange("project")}
                         >
                             <Folder className="w-4 h-4 mr-2" />
@@ -230,7 +257,7 @@ export default function DocumentLayout({
                         <Button
                             variant="outline"
                             size="sm"
-                            className="text-gray-900"
+                            className={getTabButtonClasses("history")}
                             onClick={() => handleTabChange("history")}
                         >
                             <History className="w-4 h-4 mr-2" />

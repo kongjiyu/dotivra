@@ -20,7 +20,7 @@ export default function DocumentSummary() {
         const plainText = documentContent.replace(/<[^>]*>/g, '');
         const words = plainText.trim().split(/\s+/).filter(word => word.length > 0);
         const sentences = plainText.split(/[.!?]+/).filter(s => s.trim().length > 0);
-        const paragraphs = documentContent.split(/<\/p>|<\/h[1-6]>|<\/li>/).filter(p => 
+        const paragraphs = documentContent.split(/<\/p>|<\/h[1-6]>|<\/li>/).filter(p =>
             p.trim().replace(/<[^>]*>/g, '').length > 0
         );
 
@@ -81,46 +81,14 @@ export default function DocumentSummary() {
 
     return (
         <DocumentLayout showDocumentMenu={true}>
-            <div className="max-w-4xl mx-auto space-y-6">
-                {/* Statistics Card */}
-                {documentStats && (
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Document Statistics</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                                <div className="text-center">
-                                    <div className="text-2xl font-bold text-blue-600">{documentStats.wordCount}</div>
-                                    <div className="text-sm text-gray-500">Words</div>
-                                </div>
-                                <div className="text-center">
-                                    <div className="text-2xl font-bold text-green-600">{documentStats.readingTime}</div>
-                                    <div className="text-sm text-gray-500">Min Read</div>
-                                </div>
-                                <div className="text-center">
-                                    <div className="text-2xl font-bold text-purple-600">{documentStats.sentenceCount}</div>
-                                    <div className="text-sm text-gray-500">Sentences</div>
-                                </div>
-                                <div className="text-center">
-                                    <div className="text-2xl font-bold text-orange-600">{documentStats.paragraphCount}</div>
-                                    <div className="text-sm text-gray-500">Paragraphs</div>
-                                </div>
-                            </div>
-                        </CardContent>
-                    </Card>
-                )}
 
-                {/* Summary Editor */}
-                <div className="bg-white rounded-lg border">
-                    <TipTap
-                        initialContent={summaryContent || "Document summary will appear here..."}
-                        onUpdate={handleSummaryUpdate}
-                        onEditorReady={handleSummaryEditorReady}
-                        className="min-h-[500px]"
-                    />
-                </div>
-            </div>
+            {/* Summary Editor */}
+            <TipTap
+                initialContent={summaryContent || "Document summary will appear here..."}
+                onUpdate={handleSummaryUpdate}
+                onEditorReady={handleSummaryEditorReady}
+                className="min-h-[500px]"
+            />
         </DocumentLayout>
     );
 }

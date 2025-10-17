@@ -13,14 +13,14 @@ import TableCellWithBackgroundColor from "@/lib/extensions/TableCellWithBackgrou
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import CharacterCount from "@tiptap/extension-character-count";
-import FontFamily from "@tiptap/extension-font-family"; // ADD THIS
-import FontSize from "@/types/fontSize"; // Adjusted import path
+import FontFamily from "@tiptap/extension-font-family";
+import FontSize from "@/types/fontSize";
 import { cn } from "@/lib/utils";
-import Paragraph from "@/lib/extensions/Paragraph"; // Import our custom paragraph extension
-import Heading from "@/lib/extensions/Heading"; // Import our custom heading extension
-import Mermaid from "@/lib/extensions/Mermaid"; // Import Mermaid extension
-import { CodeBlockWithHighlight } from "@/lib/extensions/CodeBlockWithHighlight"; // Import highlight.js CodeBlock extension
-import { BackspaceBehaviorFix } from "@/lib/extensions/BackspaceBehaviorFix"; // Import backspace behavior fix
+import Paragraph from "@/lib/extensions/Paragraph";
+import Heading from "@/lib/extensions/Heading";
+import Mermaid from "@/lib/extensions/Mermaid";
+import { CodeBlockWithHighlight } from "@/lib/extensions/CodeBlockWithHighlight";
+import { BackspaceBehaviorFix } from "@/lib/extensions/BackspaceBehaviorFix";
 
 // TipTap Editor Configuration
 export const getTipTapExtensions = () => [
@@ -48,19 +48,17 @@ export const getTipTapExtensions = () => [
         types: ['textStyle'],
     }),
     TextStyle,
-    // ADD THESE TWO EXTENSIONS
     FontFamily.configure({
         types: ['textStyle'],
     }),
     FontSize,
-    // END NEW EXTENSIONS
     TextAlign.configure({
         types: ['heading', 'paragraph'],
     }),
     Underline,
-    // Link extension with enhanced features
+    // Simple link extension for basic link support
     Link.configure({
-        openOnClick: false,
+        openOnClick: true,
         linkOnPaste: true,
         autolink: true,
         protocols: ['http', 'https', 'mailto', 'tel'],
@@ -69,7 +67,7 @@ export const getTipTapExtensions = () => [
             rel: 'noopener noreferrer',
             target: '_blank',
         },
-        validate: href => /^https?:\/\//.test(href) || /^mailto:/.test(href) || /^tel:/.test(href),
+        validate: (href: string) => /^https?:\/\//.test(href) || /^mailto:/.test(href) || /^tel:/.test(href),
     }),
     // Table extensions
     Table.configure({
@@ -112,16 +110,15 @@ export const getTipTapEditorProps = (extraClasses: string = '') => ({
 });
 
 // Complete Editor Configuration Factory
-//FIXME: adjust default content
 export const createTipTapConfig = (options: {
     content?: string;
     editable?: boolean;
     onCreate?: () => void;
     onUpdate?: (editor: any) => void;
-    extraClasses?: string; // allow callers to add more utility classes
+    extraClasses?: string;
 }) => ({
     extensions: getTipTapExtensions(),
-    content: options.content || "<p>123 Start writing your document...</p>",
+    content: options.content || "<p>Start writing your document...</p>",
     editable: options.editable !== false,
     // Performance optimizations
     enableInputRules: true,

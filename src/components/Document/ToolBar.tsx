@@ -2,7 +2,6 @@ import type { Editor } from "@tiptap/react";
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import LinkTooltip from "./LinkTooltip";
 import {
     Select,
     SelectContent,
@@ -40,12 +39,12 @@ import {
     MoreHorizontal,
     ChevronDown,
     Table,
-    Link,
     CheckSquare,
     IndentDecrease,
     IndentIncrease,
     Network,
-    Eraser
+    Eraser,
+    Link
 } from "lucide-react";
 
 const FONT_FAMILIES = [
@@ -120,13 +119,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     const [currentTextColor, setCurrentTextColor] = useState<string>('#000000');
     const [currentBackgroundColor, setCurrentBackgroundColor] = useState<string>('');
 
-    const [isInCodeBlock, setIsInCodeBlock] = useState(false);
     const [isInPreviewMode, setIsInPreviewMode] = useState(false);
-    const [linkTooltipOpen, setLinkTooltipOpen] = useState(false);
-    const [linkTooltipPosition, setLinkTooltipPosition] = useState({ x: 0, y: 0 });
-    const [selectedTextForLink, setSelectedTextForLink] = useState<string>('');
-    const [isEditingLink, setIsEditingLink] = useState(false);
-    const [existingLinkUrl, setExistingLinkUrl] = useState<string>('');
     const [maxIndentLevel, setMaxIndentLevel] = useState<number>(14);
 
     // Calculate dynamic maxIndentLevel based on window width
@@ -150,7 +143,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         const updateToolbarState = () => {
             // Check if we're in a code block first
             const inCodeBlock = editor.isActive('codeBlock');
-            setIsInCodeBlock(inCodeBlock);
 
             // Check specifically for Mermaid preview/error mode
             // Look for Mermaid preview containers or error indicators
@@ -321,8 +313,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
     useEffect(() => {
         // Throttled resize handler to improve performance and reduce lag
-        let isResizing = false;
-
         const handleResize = () => {
             const newWidth = window.innerWidth;
 
@@ -580,500 +570,466 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     };
 
     return (
-        <div ref={containerRef} className="toolbar flex items-center gap-1 p-3 m-2 rounded-sm border border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm overflow-x-auto w-full">
+        <>
+            <div ref={containerRef} className="toolbar flex items-center gap-1 p-3 m-2 rounded-sm border border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm overflow-x-auto w-full">
 
-            {/* ESSENTIAL FORMATTING - Always visible, scrollable like browser bookmarks */}
-            <div className="flex items-center gap-1 flex-shrink-0">
-                {/* Basic Text Formatting */}
-                <Button variant="outline" size="sm"
-                    onClick={() => {
-                        if (!isEditingDisabled) {
-                            editor.chain().focus().toggleBold().run();
-                        }
-                    }}
-                    disabled={isEditingDisabled}
-                    className={`h-8 w-8 p-0 ${isActive('bold') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                        } ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    title="Bold"
-                >
-                    <Bold className="w-4 h-4" />
-                </Button>
-
-                <Button variant="outline" size="sm"
-                    onClick={() => editor.chain().focus().toggleItalic().run()}
-                    className={`h-8 w-8 p-0 ${isActive('italic') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                        }`}
-                    title="Italic"
-                >
-                    <Italic className="w-4 h-4" />
-                </Button>
-
-                <Button variant="outline" size="sm"
-                    onClick={() => editor.chain().focus().toggleUnderline().run()}
-                    className={`h-8 w-8 p-0 ${isActive('underline') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                        }`}
-                    title="Underline"
-                >
-                    <Underline className="w-4 h-4" />
-                </Button>
-
-                <Button variant="outline" size="sm"
-                    onClick={() => editor.chain().focus().toggleStrike().run()}
-                    className={`h-8 w-8 p-0 ${isActive('strike') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                        }`}
-                    title="Strikethrough"
-                >
-                    <Strikethrough className="w-4 h-4" />
-                </Button>
-
-                <div className="w-px h-6 bg-gray-300 mx-1"></div>
-
-                {/* Headings & Blocks Dropdown */}
-                <Select
-                    value={
-                        isActive('heading', { level: 1 }) ? 'h1' :
-                            isActive('heading', { level: 2 }) ? 'h2' :
-                                isActive('heading', { level: 3 }) ? 'h3' :
-                                    isActive('heading', { level: 4 }) ? 'h4' :
-                                        isActive('heading', { level: 5 }) ? 'h5' :
-                                            isActive('blockquote') ? 'blockquote' :
-                                                isActive('codeBlock') ? 'codeBlock' : 'paragraph'
-                    }
-                    onValueChange={(value) => {
-                        // Determine current selection or cursor position
-
-                        // Helper to apply an exclusive block type
-                        const applyExclusive = (target: 'paragraph' | 'blockquote' | 'codeBlock' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5') => {
-                            const c = editor.chain().focus();
-                            // Clear conflicting wrappers first
-                            if (target !== 'codeBlock' && editor.isActive('codeBlock')) c.toggleCodeBlock();
-                            if (target !== 'blockquote' && editor.isActive('blockquote')) c.toggleBlockquote();
-
-                            // Normalize to paragraph before applying target to avoid mixed states
-                            c.setParagraph();
-
-                            switch (target) {
-                                case 'paragraph':
-                                    // already set above
-                                    break;
-                                case 'blockquote':
-                                    c.toggleBlockquote();
-                                    break;
-                                case 'codeBlock':
-                                    c.toggleCodeBlock();
-                                    break;
-                                case 'h1':
-                                    c.toggleHeading({ level: 1 });
-                                    break;
-                                case 'h2':
-                                    c.toggleHeading({ level: 2 });
-                                    break;
-                                case 'h3':
-                                    c.toggleHeading({ level: 3 });
-                                    break;
-                                case 'h4':
-                                    c.toggleHeading({ level: 4 });
-                                    break;
-                                case 'h5':
-                                    c.toggleHeading({ level: 5 });
-                                    break;
+                {/* ESSENTIAL FORMATTING - Always visible, scrollable like browser bookmarks */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* Basic Text Formatting */}
+                    <Button variant="outline" size="sm"
+                        onClick={() => {
+                            if (!isEditingDisabled) {
+                                editor.chain().focus().toggleBold().run();
                             }
-                            c.run();
-                        };
+                        }}
+                        disabled={isEditingDisabled}
+                        className={`h-8 w-8 p-0 ${isActive('bold') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                            } ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title="Bold"
+                    >
+                        <Bold className="w-4 h-4" />
+                    </Button>
 
-                        // Headings & Paragraph: if no selection, act on current block to improve UX
-                        if (value === 'paragraph' || value === 'h1' || value === 'h2' || value === 'h3' || value === 'h4' || value === 'h5') {
-                            applyExclusive(value as any);
-                            return;
+                    <Button variant="outline" size="sm"
+                        onClick={() => editor.chain().focus().toggleItalic().run()}
+                        className={`h-8 w-8 p-0 ${isActive('italic') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                            }`}
+                        title="Italic"
+                    >
+                        <Italic className="w-4 h-4" />
+                    </Button>
+
+                    <Button variant="outline" size="sm"
+                        onClick={() => editor.chain().focus().toggleUnderline().run()}
+                        className={`h-8 w-8 p-0 ${isActive('underline') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                            }`}
+                        title="Underline"
+                    >
+                        <Underline className="w-4 h-4" />
+                    </Button>
+
+                    <Button variant="outline" size="sm"
+                        onClick={() => editor.chain().focus().toggleStrike().run()}
+                        className={`h-8 w-8 p-0 ${isActive('strike') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                            }`}
+                        title="Strikethrough"
+                    >
+                        <Strikethrough className="w-4 h-4" />
+                    </Button>
+
+                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+                    {/* Headings & Blocks Dropdown */}
+                    <Select
+                        value={
+                            isActive('heading', { level: 1 }) ? 'h1' :
+                                isActive('heading', { level: 2 }) ? 'h2' :
+                                    isActive('heading', { level: 3 }) ? 'h3' :
+                                        isActive('heading', { level: 4 }) ? 'h4' :
+                                            isActive('heading', { level: 5 }) ? 'h5' :
+                                                isActive('blockquote') ? 'blockquote' :
+                                                    isActive('codeBlock') ? 'codeBlock' : 'paragraph'
                         }
+                        onValueChange={(value) => {
+                            // Determine current selection or cursor position
 
-                        // Quote & Code Block may apply to the current block even without selection
-                        if (value === 'blockquote' || value === 'codeBlock') {
-                            applyExclusive(value as any);
-                            return;
-                        }
-                    }}
-                >
-                    <SelectTrigger className="w-[150px] h-8 text-sm">
-                        <SelectValue>
-                            {isActive('heading', { level: 1 }) && "Heading 1"}
-                            {isActive('heading', { level: 2 }) && "Heading 2"}
-                            {isActive('heading', { level: 3 }) && "Heading 3"}
-                            {isActive('heading', { level: 4 }) && "Heading 4"}
-                            {isActive('heading', { level: 5 }) && "Heading 5"}
-                            {isActive('blockquote') && "Quote"}
-                            {isActive('codeBlock') && "Code Block"}
-                            {(!isActive('heading') && !isActive('blockquote') && !isActive('codeBlock')) && "Paragraph"}
-                        </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="paragraph">
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-normal">P</span>
-                                <span>Paragraph</span>
-                            </div>
-                        </SelectItem>
-                        <SelectItem value="h1">
-                            <div className="flex items-center gap-2">
-                                <span className="text-lg font-bold">H1</span>
-                                <span>Heading 1</span>
-                            </div>
-                        </SelectItem>
-                        <SelectItem value="h2">
-                            <div className="flex items-center gap-2">
-                                <span className="text-base font-bold">H2</span>
-                                <span>Heading 2</span>
-                            </div>
-                        </SelectItem>
-                        <SelectItem value="h3">
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm font-bold">H3</span>
-                                <span>Heading 3</span>
-                            </div>
-                        </SelectItem>
-                        <SelectItem value="h4">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold">H4</span>
-                                <span>Heading 4</span>
-                            </div>
-                        </SelectItem>
-                        <SelectItem value="h5">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold">H5</span>
-                                <span>Heading 5</span>
-                            </div>
-                        </SelectItem>
-                        <SelectItem value="blockquote">
-                            <div className="flex items-center gap-2">
-                                <Quote className="w-4 h-4" />
-                                <span>Quote</span>
-                            </div>
-                        </SelectItem>
-                        <SelectItem value="codeBlock">
-                            <div className="flex items-center gap-2">
-                                <Code className="w-4 h-4" />
-                                <span>Code Block</span>
-                            </div>
-                        </SelectItem>
-                    </SelectContent>
-                </Select>
+                            // Helper to apply an exclusive block type
+                            const applyExclusive = (target: 'paragraph' | 'blockquote' | 'codeBlock' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5') => {
+                                const c = editor.chain().focus();
+                                // Clear conflicting wrappers first
+                                if (target !== 'codeBlock' && editor.isActive('codeBlock')) c.toggleCodeBlock();
+                                if (target !== 'blockquote' && editor.isActive('blockquote')) c.toggleBlockquote();
 
-                <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                                // Normalize to paragraph before applying target to avoid mixed states
+                                c.setParagraph();
 
-                {/* Font Styling - Bookmark-style hiding */}
-                {true && ( // Font family always visible
-                    <div className="flex items-center gap-1">
-                        <Select
-                            value={isEditingDisabled ? '' : currentFontFamily}
-                            onValueChange={(value) => {
-                                if (!isEditingDisabled) {
-                                    editor.chain().focus().setFontFamily(value).run();
-                                    setCurrentFontFamily(value);
+                                switch (target) {
+                                    case 'paragraph':
+                                        // already set above
+                                        break;
+                                    case 'blockquote':
+                                        c.toggleBlockquote();
+                                        break;
+                                    case 'codeBlock':
+                                        c.toggleCodeBlock();
+                                        break;
+                                    case 'h1':
+                                        c.toggleHeading({ level: 1 });
+                                        break;
+                                    case 'h2':
+                                        c.toggleHeading({ level: 2 });
+                                        break;
+                                    case 'h3':
+                                        c.toggleHeading({ level: 3 });
+                                        break;
+                                    case 'h4':
+                                        c.toggleHeading({ level: 4 });
+                                        break;
+                                    case 'h5':
+                                        c.toggleHeading({ level: 5 });
+                                        break;
                                 }
-                            }}
-                            disabled={isEditingDisabled}
-                        >
-                            <SelectTrigger className={`w-[140px] h-8 text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                <SelectValue placeholder={isEditingDisabled ? '' : currentFontFamily} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {FONT_FAMILIES.map(f => (
-                                    <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                )}
+                                c.run();
+                            };
 
-                {true && ( // Font size always visible
-                    <div className="flex items-center gap-1">
-                        {/* Font Size Input with Dropdown - Unified Implementation */}
-                        <div className="relative flex items-center">
-                            <input
-                                type="text"
-                                value={isEditingDisabled ? '' : fontSizeInput}
-                                onChange={(e) => {
-                                    if (!isEditingDisabled) {
-                                        handleFontSizeChange(e.target.value);
-                                    }
-                                }}
-                                onKeyDown={handleFontSizeKeyDown}
-                                onBlur={handleFontSizeBlur}
-                                onFocus={() => setIsTyping(true)}
-                                disabled={isEditingDisabled}
-                                placeholder={isEditingDisabled ? '' : '16'}
-                                className={`w-14 h-8 text-sm text-center border border-gray-300 rounded-l-md bg-white mr-0
-                                       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`}
-                            />
+                            // Headings & Paragraph: if no selection, act on current block to improve UX
+                            if (value === 'paragraph' || value === 'h1' || value === 'h2' || value === 'h3' || value === 'h4' || value === 'h5') {
+                                applyExclusive(value as any);
+                                return;
+                            }
+
+                            // Quote & Code Block may apply to the current block even without selection
+                            if (value === 'blockquote' || value === 'codeBlock') {
+                                applyExclusive(value as any);
+                                return;
+                            }
+                        }}
+                    >
+                        <SelectTrigger className="w-[150px] h-8 text-sm">
+                            <SelectValue>
+                                {isActive('heading', { level: 1 }) && "Heading 1"}
+                                {isActive('heading', { level: 2 }) && "Heading 2"}
+                                {isActive('heading', { level: 3 }) && "Heading 3"}
+                                {isActive('heading', { level: 4 }) && "Heading 4"}
+                                {isActive('heading', { level: 5 }) && "Heading 5"}
+                                {isActive('blockquote') && "Quote"}
+                                {isActive('codeBlock') && "Code Block"}
+                                {(!isActive('heading') && !isActive('blockquote') && !isActive('codeBlock')) && "Paragraph"}
+                            </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="paragraph">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-normal">P</span>
+                                    <span>Paragraph</span>
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="h1">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-lg font-bold">H1</span>
+                                    <span>Heading 1</span>
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="h2">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-base font-bold">H2</span>
+                                    <span>Heading 2</span>
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="h3">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm font-bold">H3</span>
+                                    <span>Heading 3</span>
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="h4">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold">H4</span>
+                                    <span>Heading 4</span>
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="h5">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold">H5</span>
+                                    <span>Heading 5</span>
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="blockquote">
+                                <div className="flex items-center gap-2">
+                                    <Quote className="w-4 h-4" />
+                                    <span>Quote</span>
+                                </div>
+                            </SelectItem>
+                            <SelectItem value="codeBlock">
+                                <div className="flex items-center gap-2">
+                                    <Code className="w-4 h-4" />
+                                    <span>Code Block</span>
+                                </div>
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+
+                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+                    {/* Font Styling - Bookmark-style hiding */}
+                    {true && ( // Font family always visible
+                        <div className="flex items-center gap-1">
                             <Select
-                                value={isEditingDisabled ? '' : fontSizeInput}
+                                value={isEditingDisabled ? '' : currentFontFamily}
                                 onValueChange={(value) => {
                                     if (!isEditingDisabled) {
-                                        setIsTyping(false);
-                                        applyFontSize(value);
+                                        editor.chain().focus().setFontFamily(value).run();
+                                        setCurrentFontFamily(value);
                                     }
                                 }}
                                 disabled={isEditingDisabled}
                             >
-                                <SelectTrigger className={`h-8 w-6 border border-l-0 border-gray-300 rounded-l-none rounded-r-md bg-white p-0 flex items-center justify-center [&>svg]:w-3 [&>svg]:h-3
-   ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'outline-none focus:ring-offset-0 focus:outline-none hover:bg-gray-50 focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`} data-size="">
+                                <SelectTrigger className={`w-[140px] h-8 text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                    <SelectValue placeholder={isEditingDisabled ? '' : currentFontFamily} />
                                 </SelectTrigger>
-                                <SelectContent align="center" side="bottom" className="w-20">
-                                    {['4', '6', '8', '10', '12', '16', '20', '24', '28', '36', '48', '64', '72', '96'].map(size => (
-                                        <SelectItem key={size} value={size}>
-                                            {size}
-                                        </SelectItem>
+                                <SelectContent>
+                                    {FONT_FAMILIES.map(f => (
+                                        <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
                         </div>
-                    </div>
-                )}
+                    )}
 
-                {true && ( // Text color always visible
-                    <div className="flex items-center gap-1">
-                        <div className="w-px h-6 bg-gray-300 mx-1"></div>
-
-                        {/* Text Color with current color indicator */}
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <div className="h-8 w-8 p-0  flex flex-col justify-center items-center relative">
-                                    <Button variant="outline" size="sm"
-                                        className="h-7 w-8 bg-white hover:bg-gray-50"
-                                        title="Text Color"
-                                        disabled={isEditingDisabled}
-                                    >
-                                        <Highlighter className="w-3 h-3"
-                                            style={{
-                                                color: isEditingDisabled ? 'transparent' : (currentTextColor || '#ffffff'),
-                                            }} />
-                                    </Button>
-                                    <div
-                                        className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
-                                        style={{
-                                            backgroundColor: isEditingDisabled ? 'transparent' : currentTextColor,
-                                            borderColor: currentTextColor ? 'transparent' : '#d1d5db'
-                                        }}
-                                    />
-                                </div>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-64 p-4" side="bottom" align="center">
-                                <div className="space-y-3">
-                                    <h4 className="text-sm font-medium text-gray-700">Text Color</h4>
-
-                                    {/* Default Color */}
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
-                                            onClick={() => {
-                                                if (!isEditingDisabled) {
-                                                    editor.chain().focus().unsetColor().run();
-
-                                                    // Update state immediately and verify after operation
-                                                    setCurrentTextColor('#000000');
-
-                                                    // Double-check the actual state after a brief delay
-                                                    setTimeout(() => {
-                                                        if (editor.isActive('textStyle')) {
-                                                            const styleAttrs = editor.getAttributes('textStyle');
-                                                            const actualColor = styleAttrs.color || '#000000';
-                                                            setCurrentTextColor(actualColor);
-                                                        } else {
-                                                            setCurrentTextColor('#000000');
-                                                        }
-                                                    }, 100);
-                                                }
-                                            }}
-                                            title="Default (Auto)"
-                                        >
-                                            A
-                                        </button>
-                                        <span className="text-xs text-gray-500">Default</span>
-                                    </div>
-
-                                    {/* 8 Most Popular Colors for Light Theme */}
-                                    <div>
-                                        <p className="text-xs text-gray-500 mb-2">Popular Colors</p>
-                                        <div className="grid grid-cols-4 gap-2">
-                                            {[
-                                                { color: '#000000', name: 'Black' },
-                                                { color: '#6B7280', name: 'Gray' },
-                                                { color: '#DC2626', name: 'Red' },
-                                                { color: '#2563EB', name: 'Blue' },
-                                                { color: '#059669', name: 'Green' },
-                                                { color: '#D97706', name: 'Orange' },
-                                                { color: '#7C2D12', name: 'Brown' },
-                                                { color: '#7C3AED', name: 'Purple' }
-                                            ].map(({ color, name }) => (
-                                                <button
-                                                    key={color}
-                                                    className="w-10 h-10 rounded-lg border-2 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md"
-                                                    style={{
-                                                        backgroundColor: `${color}20`, // 20 = ~12% opacity
-                                                        borderColor: color
-                                                    }}
-                                                    onClick={() => {
-                                                        if (!isEditingDisabled) {
-                                                            editor.chain().focus().setColor(color).run();
-
-                                                            // Update state immediately
-                                                            setCurrentTextColor(color);
-                                                            console.log('Set text color to', color);
-
-                                                            // Verify the actual state after operation completes
-                                                            setTimeout(() => {
-                                                                if (editor.isActive('textStyle')) {
-                                                                    const styleAttrs = editor.getAttributes('textStyle');
-                                                                    const actualColor = styleAttrs.color || '#000000';
-                                                                    setCurrentTextColor(actualColor);
-                                                                } else {
-                                                                    // If textStyle is not active, the color should be default
-                                                                    setCurrentTextColor('#000000');
-                                                                }
-                                                            }, 100);
-                                                        }
-                                                    }}
-                                                    title={name}
-                                                />
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </PopoverContent>
-                        </Popover>
-                    </div>
-                )}
-
-                {/* Background Color with current color indicator */}
-                {true && ( // Background color always visible
-                    <div className="flex items-center gap-1">
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <div className="h-8 w-8 p-0 flex flex-col justify-center items-center relative">
-                                    <Button variant="outline" size="sm"
-                                        className="w-8 h-7 bg-white hover:bg-gray-50"
-                                        title="Background Color"
-                                        disabled={isEditingDisabled}
-                                        style={{
-                                            backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
-                                        }}
-                                    >
-                                        <Palette className="w-3 h-3" />
-                                    </Button>
-                                    <div
-                                        className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
-                                        style={{
-                                            backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
-                                            borderColor: currentBackgroundColor ? 'transparent' : '#d1d5db'
-                                        }}
-                                    />
-                                </div>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-80 p-4" side="bottom" align="center">
-                                <div className="space-y-4">
-                                    <h4 className="text-sm font-medium text-gray-700">Background Color</h4>
-
-                                    {/* Context Detection */}
-                                    <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
-                                        {(editor?.isActive('tableCell') || editor?.isActive('tableHeader'))
-                                            ? "💡 You're in a table cell - colors will be applied to the cell background"
-                                            : "💡 Colors will be applied as text highlighting"
+                    {true && ( // Font size always visible
+                        <div className="flex items-center gap-1">
+                            {/* Font Size Input with Dropdown - Unified Implementation */}
+                            <div className="relative flex items-center">
+                                <input
+                                    type="text"
+                                    value={isEditingDisabled ? '' : fontSizeInput}
+                                    onChange={(e) => {
+                                        if (!isEditingDisabled) {
+                                            handleFontSizeChange(e.target.value);
                                         }
-                                    </div>
+                                    }}
+                                    onKeyDown={handleFontSizeKeyDown}
+                                    onBlur={handleFontSizeBlur}
+                                    onFocus={() => setIsTyping(true)}
+                                    disabled={isEditingDisabled}
+                                    placeholder={isEditingDisabled ? '' : '16'}
+                                    className={`w-14 h-8 text-sm text-center border border-gray-300 rounded-l-md bg-white mr-0
+                                       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`}
+                                />
+                                <Select
+                                    value={isEditingDisabled ? '' : fontSizeInput}
+                                    onValueChange={(value) => {
+                                        if (!isEditingDisabled) {
+                                            setIsTyping(false);
+                                            applyFontSize(value);
+                                        }
+                                    }}
+                                    disabled={isEditingDisabled}
+                                >
+                                    <SelectTrigger className={`h-8 w-6 border border-l-0 border-gray-300 rounded-l-none rounded-r-md bg-white p-0 flex items-center justify-center [&>svg]:w-3 [&>svg]:h-3
+   ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'outline-none focus:ring-offset-0 focus:outline-none hover:bg-gray-50 focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`} data-size="">
+                                    </SelectTrigger>
+                                    <SelectContent align="center" side="bottom" className="w-20">
+                                        {['4', '6', '8', '10', '12', '16', '20', '24', '28', '36', '48', '64', '72', '96'].map(size => (
+                                            <SelectItem key={size} value={size}>
+                                                {size}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                    )}
 
-                                    {/* Default Background */}
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
-                                            onClick={() => {
-                                                if (!isEditingDisabled) {
-                                                    if (editor?.isActive('tableCell')) {
-                                                        // Remove cell background using our custom extension
-                                                        editor?.chain().focus().unsetTableCellBackgroundColor().run();
-                                                    } else if (editor?.isActive('tableHeader')) {
-                                                        // Remove header background using our custom extension
-                                                        editor?.chain().focus().unsetTableHeaderBackgroundColor().run();
-                                                    } else {
-                                                        // Remove text highlighting
-                                                        editor?.chain().focus().unsetHighlight().run();
-                                                    }
-                                                    setCurrentBackgroundColor('');
-                                                }
-                                            }}
-                                            title="No Background"
+                    {true && ( // Text color always visible
+                        <div className="flex items-center gap-1">
+                            <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+                            {/* Text Color with current color indicator */}
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <div className="h-8 w-8 p-0  flex flex-col justify-center items-center relative">
+                                        <Button variant="outline" size="sm"
+                                            className="h-7 w-8 bg-white hover:bg-gray-50"
+                                            title="Text Color"
+                                            disabled={isEditingDisabled}
                                         >
-                                            ✕
-                                        </button>
-                                        <span className="text-xs text-gray-500">No Background</span>
+                                            <Highlighter className="w-3 h-3"
+                                                style={{
+                                                    color: isEditingDisabled ? 'transparent' : (currentTextColor || '#ffffff'),
+                                                }} />
+                                        </Button>
+                                        <div
+                                            className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
+                                            style={{
+                                                backgroundColor: isEditingDisabled ? 'transparent' : currentTextColor,
+                                                borderColor: currentTextColor ? 'transparent' : '#d1d5db'
+                                            }}
+                                        />
                                     </div>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-64 p-4" side="bottom" align="center">
+                                    <div className="space-y-3">
+                                        <h4 className="text-sm font-medium text-gray-700">Text Color</h4>
 
-                                    {/* 8 Most Popular Background Colors for Light Theme */}
-                                    <div>
-                                        <p className="text-xs text-gray-500 mb-2">Popular Colors</p>
-                                        <div className="grid grid-cols-4 gap-2">
-                                            {[
-                                                { color: '#FEF3C7', name: 'Light Yellow' },
-                                                { color: '#DBEAFE', name: 'Light Blue' },
-                                                { color: '#DCFCE7', name: 'Light Green' },
-                                                { color: '#FEE2E2', name: 'Light Red' },
-                                                { color: '#F3E8FF', name: 'Light Purple' },
-                                                { color: '#FED7AA', name: 'Light Orange' },
-                                                { color: '#F3F4F6', name: 'Light Gray' },
-                                                { color: '#FDF2F8', name: 'Light Pink' }
-                                            ].map(({ color, name }) => (
-                                                <button
-                                                    key={color}
-                                                    className="w-10 h-10 rounded-lg border-2 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md"
-                                                    style={{
-                                                        backgroundColor: `${color}80`, // 80 = ~50% opacity for backgrounds
-                                                        borderColor: color
-                                                    }}
-                                                    onClick={() => {
-                                                        if (!isEditingDisabled) {
-                                                            if (editor?.isActive('tableCell')) {
-                                                                // Apply to table cell background using our custom extension
-                                                                editor?.chain().focus().setTableCellBackgroundColor(color).run();
-                                                            } else if (editor?.isActive('tableHeader')) {
-                                                                // Apply to table header background using our custom extension
-                                                                editor?.chain().focus().setTableHeaderBackgroundColor(color).run();
+                                        {/* Default Color */}
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
+                                                onClick={() => {
+                                                    if (!isEditingDisabled) {
+                                                        editor.chain().focus().unsetColor().run();
+
+                                                        // Update state immediately and verify after operation
+                                                        setCurrentTextColor('#000000');
+
+                                                        // Double-check the actual state after a brief delay
+                                                        setTimeout(() => {
+                                                            if (editor.isActive('textStyle')) {
+                                                                const styleAttrs = editor.getAttributes('textStyle');
+                                                                const actualColor = styleAttrs.color || '#000000';
+                                                                setCurrentTextColor(actualColor);
                                                             } else {
-                                                                // Apply as text highlighting
-                                                                editor?.chain().focus().setHighlight({ color }).run();
+                                                                setCurrentTextColor('#000000');
                                                             }
-                                                            setCurrentBackgroundColor(color);
-                                                        }
-                                                    }}
-                                                    title={name}
-                                                />
-                                            ))}
+                                                        }, 100);
+                                                    }
+                                                }}
+                                                title="Default (Auto)"
+                                            >
+                                                A
+                                            </button>
+                                            <span className="text-xs text-gray-500">Default</span>
                                         </div>
-                                    </div>
 
-                                    {/* Additional Table Cell Colors */}
-                                    {(editor?.isActive('tableCell') || editor?.isActive('tableHeader')) && (
+                                        {/* 8 Most Popular Colors for Light Theme */}
                                         <div>
-                                            <p className="text-xs text-gray-500 mb-2">Additional Cell Colors</p>
-                                            <div className="grid grid-cols-6 gap-1">
+                                            <p className="text-xs text-gray-500 mb-2">Popular Colors</p>
+                                            <div className="grid grid-cols-4 gap-2">
                                                 {[
-                                                    { color: '#E0E7FF', name: 'Light Indigo' },
-                                                    { color: '#FCE7F3', name: 'Light Pink' },
-                                                    { color: '#F0FDF4', name: 'Very Light Green' },
-                                                    { color: '#FEF7CD', name: 'Very Light Yellow' },
-                                                    { color: '#FDF4FF', name: 'Very Light Purple' },
-                                                    { color: '#F8FAFC', name: 'Very Light Gray' }
+                                                    { color: '#000000', name: 'Black' },
+                                                    { color: '#6B7280', name: 'Gray' },
+                                                    { color: '#DC2626', name: 'Red' },
+                                                    { color: '#2563EB', name: 'Blue' },
+                                                    { color: '#059669', name: 'Green' },
+                                                    { color: '#D97706', name: 'Orange' },
+                                                    { color: '#7C2D12', name: 'Brown' },
+                                                    { color: '#7C3AED', name: 'Purple' }
                                                 ].map(({ color, name }) => (
                                                     <button
                                                         key={color}
-                                                        className="w-8 h-8 rounded border border-gray-300 hover:scale-110 transition-transform"
-                                                        style={{ backgroundColor: color }}
+                                                        className="w-10 h-10 rounded-lg border-2 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md"
+                                                        style={{
+                                                            backgroundColor: `${color}20`, // 20 = ~12% opacity
+                                                            borderColor: color
+                                                        }}
                                                         onClick={() => {
                                                             if (!isEditingDisabled) {
-                                                                if (editor?.isActive('tableHeader')) {
-                                                                    // Use our custom table header extension
+                                                                editor.chain().focus().setColor(color).run();
+
+                                                                // Update state immediately
+                                                                setCurrentTextColor(color);
+                                                                console.log('Set text color to', color);
+
+                                                                // Verify the actual state after operation completes
+                                                                setTimeout(() => {
+                                                                    if (editor.isActive('textStyle')) {
+                                                                        const styleAttrs = editor.getAttributes('textStyle');
+                                                                        const actualColor = styleAttrs.color || '#000000';
+                                                                        setCurrentTextColor(actualColor);
+                                                                    } else {
+                                                                        // If textStyle is not active, the color should be default
+                                                                        setCurrentTextColor('#000000');
+                                                                    }
+                                                                }, 100);
+                                                            }
+                                                        }}
+                                                        title={name}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                    )}
+
+                    {/* Background Color with current color indicator */}
+                    {true && ( // Background color always visible
+                        <div className="flex items-center gap-1">
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <div className="h-8 w-8 p-0 flex flex-col justify-center items-center relative">
+                                        <Button variant="outline" size="sm"
+                                            className="w-8 h-7 bg-white hover:bg-gray-50"
+                                            title="Background Color"
+                                            disabled={isEditingDisabled}
+                                            style={{
+                                                backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
+                                            }}
+                                        >
+                                            <Palette className="w-3 h-3" />
+                                        </Button>
+                                        <div
+                                            className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
+                                            style={{
+                                                backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
+                                                borderColor: currentBackgroundColor ? 'transparent' : '#d1d5db'
+                                            }}
+                                        />
+                                    </div>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-80 p-4" side="bottom" align="center">
+                                    <div className="space-y-4">
+                                        <h4 className="text-sm font-medium text-gray-700">Background Color</h4>
+
+                                        {/* Context Detection */}
+                                        <div className="text-xs text-gray-500 bg-blue-50 p-2 rounded">
+                                            {(editor?.isActive('tableCell') || editor?.isActive('tableHeader'))
+                                                ? "💡 You're in a table cell - colors will be applied to the cell background"
+                                                : "💡 Colors will be applied as text highlighting"
+                                            }
+                                        </div>
+
+                                        {/* Default Background */}
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
+                                                onClick={() => {
+                                                    if (!isEditingDisabled) {
+                                                        if (editor?.isActive('tableCell')) {
+                                                            // Remove cell background using our custom extension
+                                                            editor?.chain().focus().unsetTableCellBackgroundColor().run();
+                                                        } else if (editor?.isActive('tableHeader')) {
+                                                            // Remove header background using our custom extension
+                                                            editor?.chain().focus().unsetTableHeaderBackgroundColor().run();
+                                                        } else {
+                                                            // Remove text highlighting
+                                                            editor?.chain().focus().unsetHighlight().run();
+                                                        }
+                                                        setCurrentBackgroundColor('');
+                                                    }
+                                                }}
+                                                title="No Background"
+                                            >
+                                                ✕
+                                            </button>
+                                            <span className="text-xs text-gray-500">No Background</span>
+                                        </div>
+
+                                        {/* 8 Most Popular Background Colors for Light Theme */}
+                                        <div>
+                                            <p className="text-xs text-gray-500 mb-2">Popular Colors</p>
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {[
+                                                    { color: '#FEF3C7', name: 'Light Yellow' },
+                                                    { color: '#DBEAFE', name: 'Light Blue' },
+                                                    { color: '#DCFCE7', name: 'Light Green' },
+                                                    { color: '#FEE2E2', name: 'Light Red' },
+                                                    { color: '#F3E8FF', name: 'Light Purple' },
+                                                    { color: '#FED7AA', name: 'Light Orange' },
+                                                    { color: '#F3F4F6', name: 'Light Gray' },
+                                                    { color: '#FDF2F8', name: 'Light Pink' }
+                                                ].map(({ color, name }) => (
+                                                    <button
+                                                        key={color}
+                                                        className="w-10 h-10 rounded-lg border-2 hover:scale-105 transition-all duration-200 shadow-sm hover:shadow-md"
+                                                        style={{
+                                                            backgroundColor: `${color}80`, // 80 = ~50% opacity for backgrounds
+                                                            borderColor: color
+                                                        }}
+                                                        onClick={() => {
+                                                            if (!isEditingDisabled) {
+                                                                if (editor?.isActive('tableCell')) {
+                                                                    // Apply to table cell background using our custom extension
+                                                                    editor?.chain().focus().setTableCellBackgroundColor(color).run();
+                                                                } else if (editor?.isActive('tableHeader')) {
+                                                                    // Apply to table header background using our custom extension
                                                                     editor?.chain().focus().setTableHeaderBackgroundColor(color).run();
                                                                 } else {
-                                                                    // Use our custom table cell extension
-                                                                    editor?.chain().focus().setTableCellBackgroundColor(color).run();
+                                                                    // Apply as text highlighting
+                                                                    editor?.chain().focus().setHighlight({ color }).run();
                                                                 }
                                                                 setCurrentBackgroundColor(color);
                                                             }
@@ -1083,441 +1039,517 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                                 ))}
                                             </div>
                                         </div>
-                                    )}
-                                </div>
-                            </PopoverContent>
-                        </Popover>
-                    </div>
-                )}
 
-                {/* Separator before Text Alignment - only show if alignment is visible */}
-                {shouldShowTextAlign() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
-
-                {/* Text Alignment */}
-                {shouldShowTextAlign() && (
-                    <div className="flex items-center gap-1">
-                        <Select
-                            value={
-                                editor.isActive({ textAlign: 'center' }) ? 'center' :
-                                    editor.isActive({ textAlign: 'right' }) ? 'right' :
-                                        editor.isActive({ textAlign: 'justify' }) ? 'justify' : 'left'
-                            }
-                            onValueChange={(value) => {
-                                editor.chain().focus().setTextAlign(value).run();
-                            }}
-                        >
-                            <SelectTrigger className="w-16 h-8 px-4 border border-gray-300 bg-white hover:bg-gray-50 [&>svg]:hidden">
-                                <div className="flex items-center justify-between w-full">
-                                    <div className="flex items-center">
-                                        {editor.isActive({ textAlign: 'center' }) && <AlignCenter className="w-4 h-4" />}
-                                        {editor.isActive({ textAlign: 'right' }) && <AlignRight className="w-4 h-4" />}
-                                        {editor.isActive({ textAlign: 'justify' }) && <AlignJustify className="w-4 h-4" />}
-                                        {(!editor.isActive({ textAlign: 'center' }) &&
-                                            !editor.isActive({ textAlign: 'right' }) &&
-                                            !editor.isActive({ textAlign: 'justify' })) && <AlignLeft className="w-4 h-4" />}
+                                        {/* Additional Table Cell Colors */}
+                                        {(editor?.isActive('tableCell') || editor?.isActive('tableHeader')) && (
+                                            <div>
+                                                <p className="text-xs text-gray-500 mb-2">Additional Cell Colors</p>
+                                                <div className="grid grid-cols-6 gap-1">
+                                                    {[
+                                                        { color: '#E0E7FF', name: 'Light Indigo' },
+                                                        { color: '#FCE7F3', name: 'Light Pink' },
+                                                        { color: '#F0FDF4', name: 'Very Light Green' },
+                                                        { color: '#FEF7CD', name: 'Very Light Yellow' },
+                                                        { color: '#FDF4FF', name: 'Very Light Purple' },
+                                                        { color: '#F8FAFC', name: 'Very Light Gray' }
+                                                    ].map(({ color, name }) => (
+                                                        <button
+                                                            key={color}
+                                                            className="w-8 h-8 rounded border border-gray-300 hover:scale-110 transition-transform"
+                                                            style={{ backgroundColor: color }}
+                                                            onClick={() => {
+                                                                if (!isEditingDisabled) {
+                                                                    if (editor?.isActive('tableHeader')) {
+                                                                        // Use our custom table header extension
+                                                                        editor?.chain().focus().setTableHeaderBackgroundColor(color).run();
+                                                                    } else {
+                                                                        // Use our custom table cell extension
+                                                                        editor?.chain().focus().setTableCellBackgroundColor(color).run();
+                                                                    }
+                                                                    setCurrentBackgroundColor(color);
+                                                                }
+                                                            }}
+                                                            title={name}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
-                                    <ChevronDown className="w-3 h-3 ml-1 text-gray-500" />
-                                </div>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="left">
-                                    <div className="flex items-center gap-2">
-                                        <AlignLeft className="w-4 h-4" />
-                                        <span>Left</span>
-                                    </div>
-                                </SelectItem>
-                                <SelectItem value="center">
-                                    <div className="flex items-center gap-2">
-                                        <AlignCenter className="w-4 h-4" />
-                                        <span>Center</span>
-                                    </div>
-                                </SelectItem>
-                                <SelectItem value="right">
-                                    <div className="flex items-center gap-2">
-                                        <AlignRight className="w-4 h-4" />
-                                        <span>Right</span>
-                                    </div>
-                                </SelectItem>
-                                <SelectItem value="justify">
-                                    <div className="flex items-center gap-2">
-                                        <AlignJustify className="w-4 h-4" />
-                                        <span>Justify</span>
-                                    </div>
-                                </SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                )}
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                    )}
 
-                {/* Separator before Lists - only show if lists are visible */}
-                {shouldShowLists() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
+                    {/* Separator before Text Alignment - only show if alignment is visible */}
+                    {shouldShowTextAlign() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
 
-                {/* Essential Lists */}
-                {shouldShowLists() && (
-                    <>
-                        <Button variant="outline" size="sm"
-                            onClick={() => editor.chain().focus().toggleBulletList().run()}
-                            className={`h-8 w-8 p-0 ${isActive('bulletList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                                }`}
-                            title="Bullet List"
-                        >
-                            <List className="w-4 h-4" />
-                        </Button>
-
-                        <Button variant="outline" size="sm"
-                            onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                            className={`h-8 w-8 p-0 ${isActive('orderedList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                                }`}
-                            title="Numbered List"
-                        >
-                            <ListOrdered className="w-4 h-4" />
-                        </Button>
-                        <Button variant="outline"
-                            onClick={() => editor.chain().focus().toggleTaskList().run()}
-                            className={`h-8 w-8 p-0 ${isActive('taskList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
-                                }`}
-                            title="Task List"
-                        >
-                            <CheckSquare className="w-4 h-4" />
-                        </Button>
-                    </>
-                )}
-
-                {/* Separator before Indent - only show if indent is visible */}
-                {shouldShowIndent() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
-
-                {/* Indentation Controls */}
-                {shouldShowIndent() && (
-                    <>
-                        <Button variant="outline"
-                            onClick={() => {
-                                if (!isEditingDisabled && editor) {
-                                    // Check current indentation level before allowing indent
-                                    let currentLevel = 0;
-                                    if (editor.isActive('paragraph')) {
-                                        const attrs = editor.getAttributes('paragraph');
-                                        currentLevel = attrs.indent || 0;
-                                    } else if (editor.isActive('heading')) {
-                                        const attrs = editor.getAttributes('heading');
-                                        currentLevel = attrs.indent || 0;
-                                    }
-
-                                    // Only indent if below maximum level
-                                    if (currentLevel < maxIndentLevel) {
-                                        if (editor.isActive('paragraph')) {
-                                            editor.chain().focus().indentParagraph().run();
-                                        } else if (editor.isActive('heading')) {
-                                            editor.chain().focus().indentHeading().run();
-                                        }
-                                    }
+                    {/* Text Alignment */}
+                    {shouldShowTextAlign() && (
+                        <div className="flex items-center gap-1">
+                            <Select
+                                value={
+                                    editor.isActive({ textAlign: 'center' }) ? 'center' :
+                                        editor.isActive({ textAlign: 'right' }) ? 'right' :
+                                            editor.isActive({ textAlign: 'justify' }) ? 'justify' : 'left'
                                 }
-                            }}
-                            disabled={isEditingDisabled}
-                            className={`h-8 w-8 p-0 rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title="Indent"
-                        >
-                            <IndentIncrease className="w-4 h-4" />
-                        </Button>
-
-                        <Button variant="outline"
-                            onClick={() => {
-                                if (!isEditingDisabled && editor) {
-                                    if (editor.isActive('paragraph')) {
-                                        editor.chain().focus().outdentParagraph().run();
-                                    } else if (editor.isActive('heading')) {
-                                        editor.chain().focus().outdentHeading().run();
-                                    }
-                                }
-                            }}
-                            disabled={isEditingDisabled}
-                            className={`h-8 w-8 p-0  rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title="Outdent"
-                        >
-                            <IndentDecrease className="w-4 h-4" />
-                        </Button>
-                    </>
-                )}
-
-                {/* Clear Formatting */}
-                {shouldShowClearFormatting() && (
-                    <Button variant="outline" size="sm"
-                        onClick={() => {
-                            if (!isEditingDisabled) {
-                                editor.chain().focus().clearNodes().unsetAllMarks().run();
-                            }
-                        }}
-                        disabled={isEditingDisabled}
-                        className={`h-8 w-8 p-0 bg-white hover:bg-gray-50 ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        title="Clear All Formatting"
-                    >
-                        <Eraser className="w-4 h-4" />
-                    </Button>
-                )}
-
-                {/* Separator before Insert Options - only show if insert options are visible */}
-                {shouldShowInsertOptions() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
-
-                {/* INSERT OPTIONS */}
-                {shouldShowInsertOptions() && (
-                    <div className="flex items-center gap-1">
-                        {/* Table Grid Selector */}
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline" size="sm"
-                                    className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
-                                    title="Insert Table"
-                                >
-                                    <Table className="w-4 h-4" />
-                                    <span className="hidden lg:inline">Table</span>
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-64 p-4" side="bottom" align="start">
-                                <div className="space-y-3">
-                                    <h4 className="text-sm font-medium text-gray-700">Insert Table</h4>
-                                    <TableGridSelector
-                                        onSelect={(rows, cols) => {
-                                            editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
-                                        }}
-                                    />
-                                </div>
-                            </PopoverContent>
-                        </Popover>
-
-                        <Button variant="outline" size="sm"
-                            onClick={() => {
-                                const defaultChart = `graph TD
-    A[Start] --> B{Decision}
-    B -->|Yes| C[Do something]
-    B -->|No| D[Do something else]
-    C --> E[End]
-    D --> E`;
-
-                                // Insert a Mermaid code block directly instead of using prompt
-                                editor?.chain().focus().toggleCodeBlock({ language: 'mermaid' }).insertContent(defaultChart).run();
-                            }}
-                            className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
-                            title="Insert Mermaid Diagram"
-                        >
-                            <Network className="w-4 h-4" />
-                            <span className="hidden lg:inline">Diagram</span>
-                        </Button>
-
-                        <Button variant="outline" size="sm"
-                            onClick={(e) => {
-                                // Check if we're currently in a link
-                                const currentLink = editor?.getAttributes('link');
-
-                                if (currentLink?.href) {
-                                    // If already a link, remove it
-                                    editor?.chain().focus().unsetLink().run();
-                                    return;
-                                }
-
-                                // Get selected text
-                                const { state } = editor || { state: null };
-                                if (!state) return;
-
-                                const { from, to } = state.selection;
-                                const selectedText = state.doc.textBetween(from, to, '');
-
-                                // Always show tooltip - with or without selected text
-                                setSelectedTextForLink(selectedText);
-                                setIsEditingLink(false);
-                                setExistingLinkUrl('');
-
-                                // Get cursor position for tooltip
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                setLinkTooltipPosition({
-                                    x: rect.left + rect.width / 2,
-                                    y: rect.bottom + 8
-                                });
-
-                                setLinkTooltipOpen(true);
-                            }}
-                            className={`flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm ${isActive('link') ? 'bg-blue-100 text-blue-600' : ''
-                                }`}
-                            title="Add Link"
-                        >
-                            <Link className="w-4 h-4" />
-                            <span className="hidden lg:inline">Link</span>
-                        </Button>
-                    </div>
-                )}
-
-                <div className="w-px h-6 bg-gray-300 mx-1"></div>
-            </div>
-
-            {/* MORE OPTIONS DROPDOWN - Shows when sections are hidden due to narrow width */}
-            {shouldShowMoreOptions() && (
-                <div className="relative ml-auto flex-shrink-0">
-                    <DropdownMenu open={showMoreOptions} onOpenChange={setShowMoreOptions}>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm"
-                                className="flex items-center px-2 h-8 bg-white hover:bg-gray-50"
-                                title="More Options"
+                                onValueChange={(value) => {
+                                    editor.chain().focus().setTextAlign(value).run();
+                                }}
                             >
-                                <MoreHorizontal className="w-4 h-4" />
+                                <SelectTrigger className="w-16 h-8 px-4 border border-gray-300 bg-white hover:bg-gray-50 [&>svg]:hidden">
+                                    <div className="flex items-center justify-between w-full">
+                                        <div className="flex items-center">
+                                            {editor.isActive({ textAlign: 'center' }) && <AlignCenter className="w-4 h-4" />}
+                                            {editor.isActive({ textAlign: 'right' }) && <AlignRight className="w-4 h-4" />}
+                                            {editor.isActive({ textAlign: 'justify' }) && <AlignJustify className="w-4 h-4" />}
+                                            {(!editor.isActive({ textAlign: 'center' }) &&
+                                                !editor.isActive({ textAlign: 'right' }) &&
+                                                !editor.isActive({ textAlign: 'justify' })) && <AlignLeft className="w-4 h-4" />}
+                                        </div>
+                                        <ChevronDown className="w-3 h-3 ml-1 text-gray-500" />
+                                    </div>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="left">
+                                        <div className="flex items-center gap-2">
+                                            <AlignLeft className="w-4 h-4" />
+                                            <span>Left</span>
+                                        </div>
+                                    </SelectItem>
+                                    <SelectItem value="center">
+                                        <div className="flex items-center gap-2">
+                                            <AlignCenter className="w-4 h-4" />
+                                            <span>Center</span>
+                                        </div>
+                                    </SelectItem>
+                                    <SelectItem value="right">
+                                        <div className="flex items-center gap-2">
+                                            <AlignRight className="w-4 h-4" />
+                                            <span>Right</span>
+                                        </div>
+                                    </SelectItem>
+                                    <SelectItem value="justify">
+                                        <div className="flex items-center gap-2">
+                                            <AlignJustify className="w-4 h-4" />
+                                            <span>Justify</span>
+                                        </div>
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    {/* Separator before Lists - only show if lists are visible */}
+                    {shouldShowLists() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
+
+                    {/* Essential Lists */}
+                    {shouldShowLists() && (
+                        <>
+                            <Button variant="outline" size="sm"
+                                onClick={() => editor.chain().focus().toggleBulletList().run()}
+                                className={`h-8 w-8 p-0 ${isActive('bulletList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                                    }`}
+                                title="Bullet List"
+                            >
+                                <List className="w-4 h-4" />
                             </Button>
-                        </DropdownMenuTrigger>
 
-                        <DropdownMenuContent align="end" className="w-50">
-                            {/* Categorized sections - only show categories when sections are hidden */}
+                            <Button variant="outline" size="sm"
+                                onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                                className={`h-8 w-8 p-0 ${isActive('orderedList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                                    }`}
+                                title="Numbered List"
+                            >
+                                <ListOrdered className="w-4 h-4" />
+                            </Button>
+                            <Button variant="outline"
+                                onClick={() => editor.chain().focus().toggleTaskList().run()}
+                                className={`h-8 w-8 p-0 ${isActive('taskList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                                    }`}
+                                title="Task List"
+                            >
+                                <CheckSquare className="w-4 h-4" />
+                            </Button>
+                        </>
+                    )}
 
-                            {/* INSERT CATEGORY */}
-                            {!shouldShowInsertOptions() && (
-                                <>
-                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
-                                        Insert
-                                    </div>
-                                    <DropdownMenuItem onClick={() => {
-                                        editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
-                                    }}>
-                                        <Table className="w-4 h-4 mr-2" />
-                                        <span>Table</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => {
-                                        const defaultChart = `graph TD
-    A[Start] --> B{Decision}
-    B -->|Yes| C[Do something]
-    B -->|No| D[Do something else]
-    C --> E[End]
-    D --> E`;
-                                        editor?.chain().focus().toggleCodeBlock({ language: 'mermaid' }).insertContent(defaultChart).run();
-                                    }}>
-                                        <Network className="w-4 h-4 mr-2" />
-                                        <span>Diagram</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => {
-                                        const url = window.prompt('Enter the URL:');
-                                        if (url) {
-                                            editor.chain().focus().setLink({ href: url }).run();
+                    {/* Separator before Indent - only show if indent is visible */}
+                    {shouldShowIndent() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
+
+                    {/* Indentation Controls */}
+                    {shouldShowIndent() && (
+                        <>
+                            <Button variant="outline"
+                                onClick={() => {
+                                    if (!isEditingDisabled && editor) {
+                                        // Check current indentation level before allowing indent
+                                        let currentLevel = 0;
+                                        if (editor.isActive('paragraph')) {
+                                            const attrs = editor.getAttributes('paragraph');
+                                            currentLevel = attrs.indent || 0;
+                                        } else if (editor.isActive('heading')) {
+                                            const attrs = editor.getAttributes('heading');
+                                            currentLevel = attrs.indent || 0;
                                         }
-                                    }}>
-                                        <Link className="w-4 h-4 mr-2" />
-                                        <span>Link</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                </>
-                            )}
 
-                            {/* ALIGNMENT CATEGORY */}
-                            {!shouldShowTextAlign() && (
-                                <>
-                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
-                                        Alignment
-                                    </div>
-                                    <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('left').run()}>
-                                        <AlignLeft className="w-4 h-4 mr-2" />
-                                        <span>Left</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('center').run()}>
-                                        <AlignCenter className="w-4 h-4 mr-2" />
-                                        <span>Center</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('right').run()}>
-                                        <AlignRight className="w-4 h-4 mr-2" />
-                                        <span>Right</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('justify').run()}>
-                                        <AlignJustify className="w-4 h-4 mr-2" />
-                                        <span>Justify</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                </>
-                            )}
-
-
-
-                            {/* INDENTATION CATEGORY */}
-                            {!shouldShowIndent() && (
-                                <>
-                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
-                                        Indentation
-                                    </div>
-                                    <DropdownMenuItem onClick={() => {
-                                        if (!isEditingDisabled && editor) {
-                                            let currentLevel = 0;
+                                        // Only indent if below maximum level
+                                        if (currentLevel < maxIndentLevel) {
                                             if (editor.isActive('paragraph')) {
-                                                const attrs = editor.getAttributes('paragraph');
-                                                currentLevel = attrs.indent || 0;
+                                                editor.chain().focus().indentParagraph().run();
                                             } else if (editor.isActive('heading')) {
-                                                const attrs = editor.getAttributes('heading');
-                                                currentLevel = attrs.indent || 0;
+                                                editor.chain().focus().indentHeading().run();
                                             }
+                                        }
+                                    }
+                                }}
+                                disabled={isEditingDisabled}
+                                className={`h-8 w-8 p-0 rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title="Indent"
+                            >
+                                <IndentIncrease className="w-4 h-4" />
+                            </Button>
 
-                                            // Only indent if below maximum level
-                                            if (currentLevel < maxIndentLevel) {
-                                                if (editor.isActive('paragraph')) {
-                                                    editor.chain().focus().indentParagraph().run();
-                                                } else if (editor.isActive('heading')) {
-                                                    editor.chain().focus().indentHeading().run();
+                            <Button variant="outline"
+                                onClick={() => {
+                                    if (!isEditingDisabled && editor) {
+                                        if (editor.isActive('paragraph')) {
+                                            editor.chain().focus().outdentParagraph().run();
+                                        } else if (editor.isActive('heading')) {
+                                            editor.chain().focus().outdentHeading().run();
+                                        }
+                                    }
+                                }}
+                                disabled={isEditingDisabled}
+                                className={`h-8 w-8 p-0  rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                title="Outdent"
+                            >
+                                <IndentDecrease className="w-4 h-4" />
+                            </Button>
+                        </>
+                    )}
+
+                    {/* Clear Formatting */}
+                    {shouldShowClearFormatting() && (
+                        <Button variant="outline" size="sm"
+                            onClick={() => {
+                                if (!isEditingDisabled) {
+                                    editor.chain().focus().clearNodes().unsetAllMarks().run();
+                                }
+                            }}
+                            disabled={isEditingDisabled}
+                            className={`h-8 w-8 p-0 bg-white hover:bg-gray-50 ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            title="Clear All Formatting"
+                        >
+                            <Eraser className="w-4 h-4" />
+                        </Button>
+                    )}
+
+                    {/* Separator before Insert Options - only show if insert options are visible */}
+                    {shouldShowInsertOptions() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
+
+                    {/* INSERT OPTIONS */}
+                    {shouldShowInsertOptions() && (
+                        <div className="flex items-center gap-1">
+                            {/* Table Grid Selector */}
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button variant="outline" size="sm"
+                                        className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
+                                        title="Insert Table"
+                                    >
+                                        <Table className="w-4 h-4" />
+                                        <span className="hidden lg:inline">Table</span>
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-64 p-4" side="bottom" align="start">
+                                    <div className="space-y-3">
+                                        <h4 className="text-sm font-medium text-gray-700">Insert Table</h4>
+                                        <TableGridSelector
+                                            onSelect={(rows, cols) => {
+                                                editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+                                            }}
+                                        />
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+
+                            <Button variant="outline" size="sm"
+                                onClick={() => {
+                                    const defaultChart = `graph TD
+                                                    A[Start] --> B{Decision}
+                                                    B -->|Yes| C[Do something]
+                                                    B -->|No| D[Do something else]
+                                                    C --> E[End]
+                                                    D --> E`;
+
+                                    // Insert a Mermaid code block directly instead of using prompt
+                                    editor?.chain().focus().toggleCodeBlock({ language: 'mermaid' }).insertContent(defaultChart).run();
+                                }}
+                                className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
+                                title="Insert Mermaid Diagram"
+                            >
+                                <Network className="w-4 h-4" />
+                                <span className="hidden lg:inline">Diagram</span>
+                            </Button>
+
+                            <Button variant="outline" size="sm"
+                                onClick={() => {
+                                    // Check if cursor is in a link
+                                    const isInLink = editor.isActive('link');
+
+                                    if (isInLink) {
+                                        // If cursor is in a link, remove the link
+                                        editor.chain().focus().unsetLink().run();
+                                    } else {
+                                        // Check if text is selected
+                                        const { state } = editor;
+                                        const { from, to } = state.selection;
+                                        const hasSelection = from !== to;
+
+                                        if (hasSelection) {
+                                            // Get selected text
+                                            const selectedText = state.doc.textBetween(from, to, ' ', ' ').trim();
+
+                                            // Check if the selected text is a valid URL
+                                            const urlPattern = /^https?:\/\/.+/i;
+                                            if (urlPattern.test(selectedText)) {
+                                                // If selected text is a valid URL, make it a link
+                                                editor.chain().focus().setLink({ href: selectedText }).run();
+                                            }
+                                            // If selected text is not a valid URL, do nothing
+                                        } else {
+                                            // No text selected, prompt for URL and insert new link
+                                            const url = window.prompt('Enter URL:', 'https://');
+                                            if (url && url.trim()) {
+                                                const linkText = window.prompt('Enter link text (optional):', '');
+                                                if (linkText && linkText.trim()) {
+                                                    // Insert link with custom text
+                                                    editor.chain().focus().insertContent(`<a href="${url.trim()}">${linkText.trim()}</a>`).run();
+                                                } else {
+                                                    // Insert link with URL as text
+                                                    editor.chain().focus().insertContent(`<a href="${url.trim()}">${url.trim()}</a>`).run();
                                                 }
                                             }
                                         }
-                                    }}>
-                                        <IndentIncrease className="w-4 h-4 mr-2" />
-                                        <span>Indent</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => {
-                                        if (!isEditingDisabled && editor) {
-                                            if (editor.isActive('paragraph')) {
-                                                editor.chain().focus().outdentParagraph().run();
-                                            } else if (editor.isActive('heading')) {
-                                                editor.chain().focus().outdentHeading().run();
-                                            }
-                                        }
-                                    }}>
-                                        <IndentDecrease className="w-4 h-4 mr-2" />
-                                        <span>Outdent</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                </>
-                            )}
+                                    }
+                                }}
+                                className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
+                                title="Insert Link"
+                            >
+                                <Link className="w-4 h-4" />
+                                <span className="hidden lg:inline">Link</span>
+                            </Button>
+                        </div>
+                    )}
 
-                            {/* LISTS CATEGORY */}
-                            {!shouldShowLists() && (
-                                <>
-                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
-                                        List
-                                    </div>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
-                                        <CheckSquare className="w-4 h-4 mr-2" />
-                                        <span>Task List</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().toggleBulletList().run()}>
-                                        <List className="w-4 h-4 mr-2" />
-                                        <span>Bullet List</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().toggleOrderedList().run()}>
-                                        <ListOrdered className="w-4 h-4 mr-2" />
-                                        <span>Ordered List</span>
-                                    </DropdownMenuItem>
-                                </>
-                            )}
-
-                            {/* CLEAR FORMATTING CATEGORY */}
-                            {!shouldShowClearFormatting() && (
-                                <>
-                                    <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
-                                        More
-                                    </div>
-                                    <DropdownMenuItem onClick={() => {
-                                        if (!isEditingDisabled) {
-                                            editor.chain().focus().clearNodes().unsetAllMarks().run();
-                                        }
-                                    }}>
-                                        <Eraser className="w-4 h-4 mr-2" />
-                                        <span>Clear Formatting</span>
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                </>
-                            )}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
                 </div>
-            )}
-        </div>
 
+                {/* MORE OPTIONS DROPDOWN - Shows when sections are hidden due to narrow width */}
+                {shouldShowMoreOptions() && (
+                    <div className="relative ml-auto flex-shrink-0">
+                        <DropdownMenu open={showMoreOptions} onOpenChange={setShowMoreOptions}>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="sm"
+                                    className="flex items-center px-2 h-8 bg-white hover:bg-gray-50"
+                                    title="More Options"
+                                >
+                                    <MoreHorizontal className="w-4 h-4" />
+                                </Button>
+                            </DropdownMenuTrigger>
+
+                            <DropdownMenuContent align="end" className="w-50">
+                                {/* Categorized sections - only show categories when sections are hidden */}
+
+                                {/* INSERT CATEGORY */}
+                                {!shouldShowInsertOptions() && (
+                                    <>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                            Insert
+                                        </div>
+                                        <DropdownMenuItem onClick={() => {
+                                            editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+                                        }}>
+                                            <Table className="w-4 h-4 mr-2" />
+                                            <span>Table</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => {
+                                            const defaultChart = `graph TD
+    A[Start] --> B{Decision}
+    B -->|Yes| C[Do something]
+    B -->|No| D[Do something else]
+    C --> E[End]
+    D --> E`;
+                                            editor?.chain().focus().toggleCodeBlock({ language: 'mermaid' }).insertContent(defaultChart).run();
+                                        }}>
+                                            <Network className="w-4 h-4 mr-2" />
+                                            <span>Diagram</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => {
+                                            // Check if cursor is in a link
+                                            const isInLink = editor.isActive('link');
+
+                                            if (isInLink) {
+                                                // If cursor is in a link, remove the link
+                                                editor.chain().focus().unsetLink().run();
+                                            } else {
+                                                // Check if text is selected
+                                                const { state } = editor;
+                                                const { from, to } = state.selection;
+                                                const hasSelection = from !== to;
+
+                                                if (hasSelection) {
+                                                    // Get selected text
+                                                    const selectedText = state.doc.textBetween(from, to, ' ', ' ').trim();
+
+                                                    // Check if the selected text is a valid URL
+                                                    const urlPattern = /^https?:\/\/.+/i;
+                                                    if (urlPattern.test(selectedText)) {
+                                                        // If selected text is a valid URL, make it a link
+                                                        editor.chain().focus().setLink({ href: selectedText }).run();
+                                                    }
+                                                    // If selected text is not a valid URL, do nothing
+                                                } else {
+                                                    // No text selected, prompt for URL and insert new link
+                                                    const url = window.prompt('Enter URL:', 'https://');
+                                                    if (url && url.trim()) {
+                                                        const linkText = window.prompt('Enter link text (optional):', '');
+                                                        if (linkText && linkText.trim()) {
+                                                            // Insert link with custom text
+                                                            editor.chain().focus().insertContent(`<a href="${url.trim()}">${linkText.trim()}</a>`).run();
+                                                        } else {
+                                                            // Insert link with URL as text
+                                                            editor.chain().focus().insertContent(`<a href="${url.trim()}">${url.trim()}</a>`).run();
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }}>
+                                            <Link className="w-4 h-4 mr-2" />
+                                            <span>Link</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
+
+                                {/* ALIGNMENT CATEGORY */}
+                                {!shouldShowTextAlign() && (
+                                    <>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                            Alignment
+                                        </div>
+                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('left').run()}>
+                                            <AlignLeft className="w-4 h-4 mr-2" />
+                                            <span>Left</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('center').run()}>
+                                            <AlignCenter className="w-4 h-4 mr-2" />
+                                            <span>Center</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('right').run()}>
+                                            <AlignRight className="w-4 h-4 mr-2" />
+                                            <span>Right</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('justify').run()}>
+                                            <AlignJustify className="w-4 h-4 mr-2" />
+                                            <span>Justify</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
+
+
+
+                                {/* INDENTATION CATEGORY */}
+                                {!shouldShowIndent() && (
+                                    <>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                            Indentation
+                                        </div>
+                                        <DropdownMenuItem onClick={() => {
+                                            if (!isEditingDisabled && editor) {
+                                                let currentLevel = 0;
+                                                if (editor.isActive('paragraph')) {
+                                                    const attrs = editor.getAttributes('paragraph');
+                                                    currentLevel = attrs.indent || 0;
+                                                } else if (editor.isActive('heading')) {
+                                                    const attrs = editor.getAttributes('heading');
+                                                    currentLevel = attrs.indent || 0;
+                                                }
+
+                                                // Only indent if below maximum level
+                                                if (currentLevel < maxIndentLevel) {
+                                                    if (editor.isActive('paragraph')) {
+                                                        editor.chain().focus().indentParagraph().run();
+                                                    } else if (editor.isActive('heading')) {
+                                                        editor.chain().focus().indentHeading().run();
+                                                    }
+                                                }
+                                            }
+                                        }}>
+                                            <IndentIncrease className="w-4 h-4 mr-2" />
+                                            <span>Indent</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => {
+                                            if (!isEditingDisabled && editor) {
+                                                if (editor.isActive('paragraph')) {
+                                                    editor.chain().focus().outdentParagraph().run();
+                                                } else if (editor.isActive('heading')) {
+                                                    editor.chain().focus().outdentHeading().run();
+                                                }
+                                            }
+                                        }}>
+                                            <IndentDecrease className="w-4 h-4 mr-2" />
+                                            <span>Outdent</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
+
+                                {/* LISTS CATEGORY */}
+                                {!shouldShowLists() && (
+                                    <>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                            List
+                                        </div>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
+                                            <CheckSquare className="w-4 h-4 mr-2" />
+                                            <span>Task List</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleBulletList().run()}>
+                                            <List className="w-4 h-4 mr-2" />
+                                            <span>Bullet List</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+                                            <ListOrdered className="w-4 h-4 mr-2" />
+                                            <span>Ordered List</span>
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
+
+                                {/* CLEAR FORMATTING CATEGORY */}
+                                {!shouldShowClearFormatting() && (
+                                    <>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                            More
+                                        </div>
+                                        <DropdownMenuItem onClick={() => {
+                                            if (!isEditingDisabled) {
+                                                editor.chain().focus().clearNodes().unsetAllMarks().run();
+                                            }
+                                        }}>
+                                            <Eraser className="w-4 h-4 mr-2" />
+                                            <span>Clear Formatting</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </div>
+                )}
+            </div>
+        </>
     );
 }
 

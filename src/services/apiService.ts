@@ -11,19 +11,25 @@ import type { Document, Project } from '@/types';
  */
 export const fetchDocument = async (documentId: string): Promise<Document> => {
   console.log('📄 Fetching document:', documentId);
+  console.log('📄 API URL:', API_ENDPOINTS.document(documentId));
   
   try {
     const response = await fetch(API_ENDPOINTS.document(documentId));
+    console.log('📄 Response status:', response.status, response.statusText);
     
     if (!response.ok) {
       if (response.status === 404) {
-        console.log('📄 Document not found, using mock data for:', documentId);
+        console.log('📄 Document not found (404), using mock data for:', documentId);
         // Import mock data dynamically to avoid circular dependencies
         const { getMockDocument, createMockDocument } = await import('@/utils/mockProjectData');
         const mockDoc = getMockDocument(documentId);
-        return mockDoc || createMockDocument(documentId);
+        const fallbackDoc = mockDoc || createMockDocument(documentId);
+        console.log('📄 Using fallback document:', fallbackDoc.DocumentName);
+        return fallbackDoc;
       }
-      throw new Error(`Failed to fetch document: ${response.status}`);
+      const errorText = await response.text();
+      console.error('📄 API Error response:', errorText);
+      throw new Error(`Failed to fetch document: ${response.status} - ${errorText}`);
     }
     
     const data = await response.json();
@@ -34,6 +40,7 @@ export const fetchDocument = async (documentId: string): Promise<Document> => {
     
     return documentData;
   } catch (error) {
+    console.error('📄 Fetch error:', error);
     // If there's a network error or other issue, fall back to mock data
     if (error instanceof TypeError && error.message.includes('fetch')) {
       console.log('📄 Network error, using mock data for:', documentId);
@@ -50,20 +57,23 @@ export const fetchDocument = async (documentId: string): Promise<Document> => {
  */
 export const fetchProject = async (projectId: string): Promise<Project> => {
   console.log('🏗️ Fetching project:', projectId);
+  console.log('🏗️ API URL:', API_ENDPOINTS.project(projectId));
   
   try {
     const response = await fetch(API_ENDPOINTS.project(projectId));
+    console.log('🏗️ Response status:', response.status, response.statusText);
     
     if (!response.ok) {
       if (response.status === 404) {
-        console.log('🏗️ Project not found, using mock data for:', projectId);
+        console.log('🏗️ Project not found (404), using mock data for:', projectId);
         const { getMockProject } = await import('@/utils/mockProjectData');
         const mockProject = getMockProject(projectId);
         if (mockProject) {
+          console.log('🏗️ Using mock project:', mockProject.ProjectName);
           return mockProject;
         }
         // Create a default mock project if none exists
-        return {
+        const defaultProject = {
           id: projectId,
           ProjectName: `Sample Project (${projectId})`,
           User_Id: "mock-user-1",
@@ -72,8 +82,12 @@ export const fetchProject = async (projectId: string): Promise<Project> => {
           Created_Time: new Date('2024-10-15T12:00:00Z'),
           Updated_Time: new Date('2024-10-15T12:00:00Z')
         };
+        console.log('🏗️ Using default mock project');
+        return defaultProject;
       }
-      throw new Error(`Failed to fetch project: ${response.status}`);
+      const errorText = await response.text();
+      console.error('🏗️ API Error response:', errorText);
+      throw new Error(`Failed to fetch project: ${response.status} - ${errorText}`);
     }
     
     const data = await response.json();
@@ -112,17 +126,23 @@ export const fetchProject = async (projectId: string): Promise<Project> => {
  */
 export const fetchProjectDocuments = async (projectId: string): Promise<Document[]> => {
   console.log('📋 Fetching documents for project:', projectId);
+  console.log('📋 API URL:', API_ENDPOINTS.projectDocuments(projectId));
   
   try {
     const response = await fetch(API_ENDPOINTS.projectDocuments(projectId));
+    console.log('📋 Response status:', response.status, response.statusText);
     
     if (!response.ok) {
       if (response.status === 404) {
-        console.log('📋 Project documents not found, using mock data for:', projectId);
+        console.log('📋 Project documents not found (404), using mock data for:', projectId);
         const { getMockDocumentsByProject } = await import('@/utils/mockProjectData');
-        return getMockDocumentsByProject(projectId);
+        const mockDocs = getMockDocumentsByProject(projectId);
+        console.log('📋 Using mock documents:', mockDocs.length, 'documents');
+        return mockDocs;
       }
-      throw new Error(`Failed to fetch project documents: ${response.status}`);
+      const errorText = await response.text();
+      console.error('📋 API Error response:', errorText);
+      throw new Error(`Failed to fetch project documents: ${response.status} - ${errorText}`);
     }
     
     const data = await response.json();
