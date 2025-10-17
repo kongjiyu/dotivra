@@ -56,10 +56,17 @@ const DocumentContext = memo(({ editor, children, onOpenChat }: DocumentContextP
 
     return (
         <div className="document-context h-full min-h-0">
+
             {/* Centered page like Google Docs */}
             <div className="w-full flex justify-center">
+
                 <div className="relative w-[816px] max-w-full bg-white border border-gray-200 rounded-sm shadow-md">
-                    <div className="p-[56px] sm:p-[64px]" ref={editorContentRef}>
+                    <div className="absolute top-[50px] left-[50px] w-9 h-9 border-t-1 border-l-1 border-gray-350/50"></div>
+                    <div className="absolute top-[50px] right-[50px] w-9 h-9 border-t-1 border-r-1 border-gray-350/50"></div>
+                    <div className="absolute bottom-[50px] left-[50px] w-9 h-9 border-b-1 border-l-1 border-gray-350/50"></div>
+                    <div className="absolute bottom-[50px] right-[50px] w-9 h-9 border-b-1 border-r-1 border-gray-350/50"></div>
+                    <div className=" p-[56px] sm:p-[64px]" ref={editorContentRef}>
+
                         <EditorContent
                             editor={editor}
                             className="tiptap prose prose-stale prose-lg max-w-none focus:outline-none text-base"
@@ -68,6 +75,7 @@ const DocumentContext = memo(({ editor, children, onOpenChat }: DocumentContextP
                         />
                         {/* Custom content overlay/children */}
                         {children && (
+
                             <div className="absolute inset-0 pointer-events-none">
                                 {children}
                             </div>

@@ -4,11 +4,11 @@ import { Input } from "@/components/ui/input";
 import {
     History,
     Cloud,
-    MessageCircle,
     FileText,
     FolderOpen,
     Dock,
-    Folder
+    Folder,
+    Sparkles
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import DocumentMenu from "@/components/document/DocumentMenu";
@@ -46,7 +46,7 @@ export default function DocumentLayout({
 
     useEffect(() => {
         const chatFunction = (message?: string) => {
-        
+
             if (message && message.trim()) {
                 setInitialChatMessage(message);
 
@@ -318,13 +318,13 @@ export default function DocumentLayout({
                 <Button
                     onClick={handleAIGenerate}
                     disabled={isAIGenerating}
-                    className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full shadow-lg transition-all duration-200 bg-purple-500 hover:bg-purple-600 text-white"
+                    className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full shadow-lg transition-all duration-200 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white flex items-center justify-center"
                     title="AI Assistant"
                 >
                     {isAIGenerating ? (
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
                     ) : (
-                        <MessageCircle className="w-6 h-6" />
+                        <Sparkles className="w-6 h-6 text-white" />
                     )}
                 </Button>
             )}

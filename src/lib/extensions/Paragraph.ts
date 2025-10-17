@@ -29,7 +29,7 @@ export const Paragraph = TiptapParagraph.extend<ParagraphOptions>({
   addOptions() {
     return {
       HTMLAttributes: {},
-      maxIndent: 21, // Maximum 21 levels of indentation to prevent overflow
+      maxIndent: 10, // Basic limit to prevent content overflow - reasonable default
     }
   },
 
@@ -142,20 +142,8 @@ export const Paragraph = TiptapParagraph.extend<ParagraphOptions>({
 
   addKeyboardShortcuts() {
     return {
-      'Tab': () => {
-        // Only indent if we're in a paragraph (not in a list)
-        if (this.editor.isActive(this.name) && !this.editor.isActive('listItem')) {
-          return this.editor.commands.indentParagraph()
-        }
-        return false
-      },
-      'Shift-Tab': () => {
-        // Only outdent if we're in a paragraph (not in a list)
-        if (this.editor.isActive(this.name) && !this.editor.isActive('listItem')) {
-          return this.editor.commands.outdentParagraph()
-        }
-        return false
-      },
+      // Tab shortcuts removed to prevent double indentation
+      // ToolBar.tsx handles Tab/Shift-Tab with proper maxIndentLevel checking
     }
   },
 })

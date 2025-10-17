@@ -29,14 +29,14 @@ export const getTipTapExtensions = () => [
         paragraph: false, // we'll use our custom paragraph extension
         codeBlock: false, // we'll use our custom code block extension
     }),
-    // Custom paragraph extension with limited indent support to prevent overflow
+    // Custom paragraph extension with basic indent limit to prevent overflow
     Paragraph.configure({
-        maxIndent: 21, // Maximum 21 levels (42rem = ~336px) to prevent content overflow
+        maxIndent: 10, // Basic limit to prevent content overflow
     }),
-    // Custom heading extension with limited indent support to prevent overflow
+    // Custom heading extension with basic indent limit to prevent overflow
     Heading.configure({
         levels: [1, 2, 3, 4, 5],
-        maxIndent: 21, // Maximum 21 levels (42rem = ~336px) to prevent content overflow
+        maxIndent: 10, // Basic limit to prevent content overflow
     }),
     // Custom code block extension with highlight.js support
     CodeBlockWithHighlight,

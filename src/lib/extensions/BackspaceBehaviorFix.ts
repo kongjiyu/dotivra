@@ -39,6 +39,35 @@ export const BackspaceBehaviorFix = Extension.create({
                         const grandParentNode = $from.node(-2)
                         const grandParentType = grandParentNode?.type.name
                         
+                        
+                        // Check if we're in an indented paragraph or heading
+                        const isIndentedContent = (currentBlockType === 'paragraph' || currentBlockType === 'heading') && 
+                                                 currentBlockNode.attrs.indent && 
+                                                 currentBlockNode.attrs.indent > 0;
+                        
+                        if (isIndentedContent) {
+                            // For indented content, reduce indent level instead of converting to paragraph
+                            event.preventDefault()
+                            
+                            const currentIndent = currentBlockNode.attrs.indent || 0
+                            const newIndent = Math.max(0, currentIndent - 1)
+                            
+                            let tr = state.tr.setNodeMarkup(currentBlockPos, undefined, {
+                                ...currentBlockNode.attrs,
+                                indent: newIndent,
+                            })
+                            
+                            // Keep cursor at the beginning of the line
+                            const newCursorPos = $from.pos
+                            tr = tr.setSelection(TextSelection.create(tr.doc, newCursorPos))
+                            
+                            if (dispatch) {
+                                dispatch(tr)
+                            }
+                            
+                            return true
+                        }
+                        
                         // Check if we're in a special block that should convert to paragraph
                         const shouldConvertToParagraph = [
                             'heading',

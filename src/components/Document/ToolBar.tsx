@@ -127,30 +127,21 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     const [selectedTextForLink, setSelectedTextForLink] = useState<string>('');
     const [isEditingLink, setIsEditingLink] = useState(false);
     const [existingLinkUrl, setExistingLinkUrl] = useState<string>('');
-    const [maxIndentLevel, setMaxIndentLevel] = useState<number>(5);
+    const [maxIndentLevel, setMaxIndentLevel] = useState<number>(14);
+
+    // Calculate dynamic maxIndentLevel based on window width
+    // Wider screens can handle more indentation levels without content overflow
+    const calculateMaxIndentLevel = (width: number): number => {
+        if (width >= 1600) return 18;      // Very wide screens: 18 levels
+        if (width >= 1400) return 15;      // Wide screens: 12 levels
+        if (width >= 1200) return 12;      // Standard screens: 10 levels
+        if (width >= 1000) return 10;       // Medium screens: 8 levels
+        if (width >= 800) return 8;        // Small screens: 6 levels
+        return 6;                          // Very small screens: 4 levels
+    };
 
     // Check if editing should be disabled - moved to top to avoid hoisting issues
     const isEditingDisabled = readOnly || isInPreviewMode;
-
-    // Calculate maximum indentation based on editor width
-    const calculateMaxIndentation = () => {
-        if (!editor) return 5;
-
-        const editorElement = (editor.view as any).dom;
-        if (!editorElement) return 5;
-
-        const editorWidth = editorElement.offsetWidth || editorElement.clientWidth;
-        const baseWidth = 600; // Base width for reference
-        const baseMaxIndent = 5; // Base maximum indentation levels
-        const indentWidth = 40; // Approximate width per indent level
-
-        // Calculate dynamic max indentation
-        const availableWidth = editorWidth - 100; // Reserve space for content
-        const calculatedMax = Math.floor(availableWidth / indentWidth);
-
-        // Ensure reasonable bounds (minimum 2, maximum 10)
-        return Math.max(2, Math.min(10, calculatedMax));
-    };
 
     // Get current font attributes and heading state from editor when selection changes
     useEffect(() => {
@@ -316,40 +307,19 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     useEffect(() => {
         if (!editor) return;
 
-        const updateIndentLimits = () => {
-            const newMaxIndent = calculateMaxIndentation();
-            setMaxIndentLevel(newMaxIndent);
-        };
-
-        const editorElement = (editor.view as any).dom;
-        if (!editorElement) return;
-
-        // Initial calculation
-        updateIndentLimits();
-
         // Note: Resize monitoring is handled by the bookmark-style hiding useEffect below
     }, [editor]);
 
     // Width-based responsive toolbar - show/hide sections based on specific window width breakpoints
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
 
+    // Initialize maxIndentLevel based on initial window width
     useEffect(() => {
-        // Also update indent limits when resizing
-        if (editor) {
-            const editorElement = editor.view.dom.closest('.editor-container') || editor.view.dom.parentElement;
-            if (editorElement) {
-                const containerWidth = editorElement.clientWidth;
-                const avgCharWidth = 8;
-                const maxCharsPerLine = Math.floor(containerWidth / avgCharWidth);
-                const newMaxIndentLevel = Math.max(1, Math.min(6, Math.floor(maxCharsPerLine / 40)));
+        const initialMaxIndentLevel = calculateMaxIndentLevel(windowWidth);
+        setMaxIndentLevel(initialMaxIndentLevel);
+    }, []); // Run once on mount
 
-                // Only update if the value actually changed to prevent infinite loops
-                if (newMaxIndentLevel !== maxIndentLevel) {
-                    setMaxIndentLevel(newMaxIndentLevel);
-                }
-            }
-        }
-
+    useEffect(() => {
         // Throttled resize handler to improve performance and reduce lag
         let isResizing = false;
 
@@ -364,6 +334,11 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             if (oldThreshold === newThreshold && Math.abs(newWidth - windowWidth) < 50) return;
             console.log('� ========== WIDTH-BASED TOOLBAR DEBUG ==========');
             console.log('� Window width changed:', windowWidth, '→', newWidth);
+
+            // Update maxIndentLevel based on new width
+            const newMaxIndentLevel = calculateMaxIndentLevel(newWidth);
+            setMaxIndentLevel(newMaxIndentLevel);
+            console.log('� Max indent level updated:', maxIndentLevel, '→', newMaxIndentLevel);
 
             // Calculated width breakpoints based on actual toolbar section sizes
             // Core sections (always visible): Bold, Italic, Underline, Font Size, Font Color, Background Color ≈ 400px
@@ -426,7 +401,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             if (debounceTimer) clearTimeout(debounceTimer);
             if (rafId) cancelAnimationFrame(rafId);
         };
-    }, [editor, maxIndentLevel]);
+    }, [editor]);
 
     // Helper functions to determine section visibility based on calculated window width breakpoints  
     const shouldShowInsertOptions = () => windowWidth >= 1390;      // Table, Diagram, Link buttons
@@ -442,7 +417,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
         const handleKeyDown = (event: KeyboardEvent) => {
             if (event.key !== 'Tab') return; // Ignore all other keys
-            event.preventDefault(); // Prevent default tab behavior
+            event.preventDefault(); // Prevent default tab behavior (moved to be conditional)
 
             // Tab pressed
             if (isEditingDisabled) {
@@ -452,31 +427,30 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             if (event.shiftKey) {
                 // Shift + Tab = Outdent
                 if (editor.isActive('paragraph')) {
-                    event.preventDefault();
                     editor.chain().focus().outdentParagraph().run();
                 } else if (editor.isActive('heading')) {
-                    event.preventDefault();
                     editor.chain().focus().outdentHeading().run();
                 }
             } else {
-                // Tab = Indent
-                let currentLevel = 0;
-
+                // Tab = Indent - check max level same as button logic
                 if (editor.isActive('paragraph')) {
-                    currentLevel = editor.getAttributes('paragraph').indent || 0;
-                } else if (editor.isActive('heading')) {
-                    currentLevel = editor.getAttributes('heading').indent || 0;
-                }
+                    // Check current indent level against maxIndentLevel (same as button logic)
+                    const attrs = editor.getAttributes('paragraph');
+                    const currentLevel = attrs.indent || 0;
 
-                if (currentLevel < maxIndentLevel) {
-                    event.preventDefault();
-                    if (editor.isActive('paragraph')) {
+                    // Only indent if below maximum level (same check as indent button)
+                    if (currentLevel < maxIndentLevel) {
                         editor.chain().focus().indentParagraph().run();
-                    } else if (editor.isActive('heading')) {
+                    }
+                } else if (editor.isActive('heading')) {
+                    // Check current indent level against maxIndentLevel (same as button logic)
+                    const attrs = editor.getAttributes('heading');
+                    const currentLevel = attrs.indent || 0;
+
+                    // Only indent if below maximum level (same check as indent button)
+                    if (currentLevel < maxIndentLevel) {
                         editor.chain().focus().indentHeading().run();
                     }
-                } else {
-                    // no preventDefault here → normal Tab navigation continues
                 }
             }
 
@@ -1240,7 +1214,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                             }}
                             disabled={isEditingDisabled}
                             className={`h-8 w-8 p-0 rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            title={`Indent (Max: ${maxIndentLevel} levels)`}
+                            title="Indent"
                         >
                             <IndentIncrease className="w-4 h-4" />
                         </Button>
@@ -1462,9 +1436,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                     </div>
                                     <DropdownMenuItem onClick={() => {
                                         if (!isEditingDisabled && editor) {
-                                            // Calculate current max indent dynamically
-                                            const currentMaxIndent = calculateMaxIndentation();
-
                                             let currentLevel = 0;
                                             if (editor.isActive('paragraph')) {
                                                 const attrs = editor.getAttributes('paragraph');
@@ -1475,7 +1446,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                             }
 
                                             // Only indent if below maximum level
-                                            if (currentLevel < currentMaxIndent) {
+                                            if (currentLevel < maxIndentLevel) {
                                                 if (editor.isActive('paragraph')) {
                                                     editor.chain().focus().indentParagraph().run();
                                                 } else if (editor.isActive('heading')) {

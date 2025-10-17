@@ -1,7 +1,8 @@
-﻿import { useEffect } from "react";
+﻿import { useEffect, useMemo } from "react";
 import DocumentLayout from "./DocumentLayout";
 import TipTap from "@/components/document/TipTap";
-import { useDocument } from "../../context/DocumentContext";
+import { useDocument } from "@/context/DocumentContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function DocumentSummary() {
     const {
@@ -12,31 +13,62 @@ export default function DocumentSummary() {
         setCurrentEditor
     } = useDocument();
 
-    useEffect(() => {
-        if (!summaryContent && documentContent) {
-            generateDocumentSummary();
-        }
+    // Generate document statistics
+    const documentStats = useMemo(() => {
+        if (!documentContent) return null;
+
+        const plainText = documentContent.replace(/<[^>]*>/g, '');
+        const words = plainText.trim().split(/\s+/).filter(word => word.length > 0);
+        const sentences = plainText.split(/[.!?]+/).filter(s => s.trim().length > 0);
+        const paragraphs = documentContent.split(/<\/p>|<\/h[1-6]>|<\/li>/).filter(p => 
+            p.trim().replace(/<[^>]*>/g, '').length > 0
+        );
+
+        return {
+            wordCount: words.length,
+            sentenceCount: sentences.length,
+            paragraphCount: paragraphs.length,
+            charactersWithSpaces: plainText.length,
+            charactersWithoutSpaces: plainText.replace(/\s/g, '').length,
+            averageWordsPerSentence: sentences.length > 0 ? Math.round(words.length / sentences.length) : 0,
+            readingTime: Math.ceil(words.length / 200) // Average reading speed: 200 words per minute
+        };
     }, [documentContent]);
 
-    const generateDocumentSummary = () => {
-        if (documentContent) {
-            const words = documentContent.split(" ").length;
-            const sentences = documentContent.split(/[.!?]+/).length;
-            const paragraphs = documentContent.split("\n\n").length;
-
-            const summaryText = `Document Summary for "${documentTitle}":
-        
-Word Count: ${words} words
-Sentences: ${sentences}
-Paragraphs: ${paragraphs}
-
-Content Preview:
-${documentContent.substring(0, 300)}${documentContent.length > 300 ? "..." : ""}
-      `;
-            setSummaryContent(summaryText);
-        } else {
-            setSummaryContent("No content available to summarize.");
+    // Generate enhanced summary content
+    useEffect(() => {
+        if (!summaryContent && documentContent && documentStats) {
+            const enhancedSummary = generateEnhancedSummary();
+            setSummaryContent(enhancedSummary);
         }
+    }, [documentContent, documentStats, summaryContent, setSummaryContent]);
+
+    const generateEnhancedSummary = () => {
+        if (!documentStats || !documentContent) return '';
+
+        const plainText = documentContent.replace(/<[^>]*>/g, '');
+        const preview = plainText.substring(0, 300) + (plainText.length > 300 ? "..." : "");
+
+        return `<h1>Document Summary: ${documentTitle}</h1>
+
+<h2>📊 Document Statistics</h2>
+<ul>
+<li><strong>Word Count:</strong> ${documentStats.wordCount} words</li>
+<li><strong>Reading Time:</strong> ~${documentStats.readingTime} minutes</li>
+<li><strong>Sentences:</strong> ${documentStats.sentenceCount}</li>
+<li><strong>Paragraphs:</strong> ${documentStats.paragraphCount}</li>
+<li><strong>Characters:</strong> ${documentStats.charactersWithSpaces} (with spaces)</li>
+<li><strong>Average Words/Sentence:</strong> ${documentStats.averageWordsPerSentence}</li>
+</ul>
+
+<h2>📝 Content Overview</h2>
+<p>This document contains ${documentStats.wordCount} words organized across ${documentStats.paragraphCount} paragraphs. The estimated reading time is approximately ${documentStats.readingTime} minute${documentStats.readingTime !== 1 ? 's' : ''}.</p>
+
+<h3>Content Preview</h3>
+<blockquote>${preview}</blockquote>
+
+<h3>Last Updated</h3>
+<p>${new Date().toLocaleString()}</p>`;
     };
 
     const handleSummaryUpdate = (content: string) => {
@@ -44,18 +76,51 @@ ${documentContent.substring(0, 300)}${documentContent.length > 300 ? "..." : ""}
     };
 
     const handleSummaryEditorReady = (editor: any) => {
-        // Set the current editor in context so the toolbar can use it
         setCurrentEditor(editor);
     };
 
     return (
         <DocumentLayout showDocumentMenu={true}>
-            {/* Summary Content - TipTap includes its own toolbar */}
-            <TipTap
-                initialContent={summaryContent || "Click 'Generate Summary' to create a document summary."}
-                onUpdate={handleSummaryUpdate}
-                onEditorReady={handleSummaryEditorReady}
-            />
+            <div className="max-w-4xl mx-auto space-y-6">
+                {/* Statistics Card */}
+                {documentStats && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Document Statistics</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold text-blue-600">{documentStats.wordCount}</div>
+                                    <div className="text-sm text-gray-500">Words</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold text-green-600">{documentStats.readingTime}</div>
+                                    <div className="text-sm text-gray-500">Min Read</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold text-purple-600">{documentStats.sentenceCount}</div>
+                                    <div className="text-sm text-gray-500">Sentences</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-2xl font-bold text-orange-600">{documentStats.paragraphCount}</div>
+                                    <div className="text-sm text-gray-500">Paragraphs</div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+
+                {/* Summary Editor */}
+                <div className="bg-white rounded-lg border">
+                    <TipTap
+                        initialContent={summaryContent || "Document summary will appear here..."}
+                        onUpdate={handleSummaryUpdate}
+                        onEditorReady={handleSummaryEditorReady}
+                        className="min-h-[500px]"
+                    />
+                </div>
+            </div>
         </DocumentLayout>
     );
 }
