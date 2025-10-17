@@ -9,6 +9,7 @@ import { createAppAuth } from '@octokit/auth-app';
 import { Octokit } from '@octokit/rest';
 import { WebSocketServer } from 'ws';
 import http from 'http';
+import crypto from 'crypto';
 import fetch from 'node-fetch';
 
 // Import regular Firebase
@@ -25,6 +26,7 @@ import {
   doc, 
   updateDoc, 
   deleteDoc,
+  getDoc,
   Timestamp 
 } from 'firebase/firestore';
 
