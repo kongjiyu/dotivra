@@ -5,6 +5,7 @@ import { useDocument } from "@/context/DocumentContext";
 import { useRef, useEffect, useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
 import { API_ENDPOINTS } from "@/lib/apiConfig";
+import { fetchDocument } from "@/services/apiService";
 import { useAuth } from "@/context/AuthContext";
 
 import { EnhancedAIContentWriter } from '@/utils/enhancedAIContentWriter';
@@ -147,10 +148,6 @@ export default function DocumentEditor() {
     // AI Editing State
     const [showAIAction, setShowAIAction] = useState(false);
 
-    // Debug showAIAction changes
-    useEffect(() => {
-        console.log('🔍 DocumentEditor showAIAction state changed to:', showAIAction, 'type:', typeof showAIAction);
-    }, [showAIAction]);
     const [operationType, setOperationType] = useState<'addition' | 'removal' | 'replacement' | null>(null);
     const [currentOperation, setCurrentOperation] = useState<AIOperation | null>(null);
     const [currentOperationId, setCurrentOperationId] = useState<string | null>(null);
@@ -178,68 +175,63 @@ export default function DocumentEditor() {
 
             setIsLoadingDocument(true);
             try {
-                console.log('📄 Loading document with ID:', documentId);
-                
-                // Fetch document from API
-                const response = await fetch(API_ENDPOINTS.document(documentId));
-                if (!response.ok) {
-                    throw new Error(`Failed to load document: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                console.log('📄 Loaded document data:', data);
-                
-                // Handle both API response formats: direct document data or wrapped in success/document
-                const documentData = data.success ? data.document : data;
-                
+                console.log('📄 Loading document using apiService:', documentId);
+
+                // Use the improved fetchDocument function with fallback logic
+                const documentData = await fetchDocument(documentId);
+
                 if (documentData && documentData.id) {
                     setDocumentId(documentId);
-                    setDocumentTitle(documentData.Title || documentData.DocumentName || "Untitled Document");
+                    setDocumentTitle(documentData.DocumentName || "Untitled Document");
                     const content = documentData.Content || "";
-                    console.log('📄 Document content from DB:', content ? `"${content.substring(0, 100)}..."` : '(empty)');
-                    console.log('📄 Using content:', content ? content : '(empty - will show blank editor)');
                     setDocumentContent(content); // Use exact content from DB, empty if empty
-                    
+
+                    console.log('📄 Document loaded successfully:', documentData.DocumentName);
+
                     // Load project information if document has a project ID
-                    const projectIdFromDoc = documentData.Project_Id || documentData.ProjectId;
+                    const projectIdFromDoc = documentData.Project_Id;
                     if (projectIdFromDoc) {
-                        console.log('📂 Loading project information for project:', projectIdFromDoc);
                         setProjectId(projectIdFromDoc);
-                        
-                        // Load project details to get repository information
-                        try {
-                            const projectResponse = await fetch(API_ENDPOINTS.project(projectIdFromDoc));
-                            if (projectResponse.ok) {
-                                const projectData = await projectResponse.json();
-                                const project = projectData.success ? projectData.project : projectData;
-                                
-                                if (project && project.GitHubRepo) {
-                                    console.log('🔗 Found GitHub repository:', project.GitHubRepo);
-                                    
-                                    // Parse GitHub repository URL to get owner/repo
-                                    const repoMatch = project.GitHubRepo.match(/github\.com\/([^\/]+\/[^\/]+)/) || 
-                                                    project.GitHubRepo.match(/^([^\/]+\/[^\/]+)$/);
-                                    
-                                    if (repoMatch) {
-                                        const fullName = repoMatch[1];
-                                        const [owner, repo] = fullName.split('/');
-                                        setRepositoryInfo({ owner, repo });
-                                        console.log('✅ Repository context set:', { owner, repo });
+
+                        // Skip API call for mock projects
+                        if (projectIdFromDoc.startsWith('mock-')) {
+                            console.log('📋 Skipping API call for mock project:', projectIdFromDoc);
+                        } else {
+                            // Load project details to get repository information
+                            try {
+                                const projectResponse = await fetch(API_ENDPOINTS.project(projectIdFromDoc));
+                                if (projectResponse.ok) {
+                                    const projectData = await projectResponse.json();
+                                    const project = projectData.success ? projectData.project : projectData;
+
+                                    if (project && project.GitHubRepo) {
+
+                                        // Parse GitHub repository URL to get owner/repo
+                                        const repoMatch = project.GitHubRepo.match(/github\.com\/([^\/]+\/[^\/]+)/) ||
+                                            project.GitHubRepo.match(/^([^\/]+\/[^\/]+)$/);
+
+                                        if (repoMatch) {
+                                            const fullName = repoMatch[1];
+                                            const [owner, repo] = fullName.split('/');
+                                            setRepositoryInfo({ owner, repo });
+                                        }
                                     }
+                                } else {
+                                    console.warn('Project API returned error status:', projectResponse.status);
                                 }
+                            } catch (projectError) {
+                                console.warn('Could not load project information:', projectError);
                             }
-                        } catch (projectError) {
-                            console.warn('Could not load project information:', projectError);
                         }
                     }
                 } else {
-                    console.warn('📄 No document data found in response:', data);
+                    console.warn('📄 No document data found in response:', documentData);
                     setDocumentContent("");
                     setDocumentTitle("Document Not Found");
                 }
             } catch (error) {
                 console.error('❌ Error loading document:', error);
-                // Show empty editor on error
+                // Show empty editor on error - but this should rarely happen now with fallback logic
                 setDocumentContent("");
                 setDocumentTitle("Document Load Error");
             } finally {
@@ -252,7 +244,7 @@ export default function DocumentEditor() {
 
     const handleDocumentUpdate = useCallback((content: string) => {
         setDocumentContent(content);
-        
+
         // Auto-save to database if we have a documentId
         if (documentId) {
             // Debounce the save operation
@@ -260,8 +252,6 @@ export default function DocumentEditor() {
             (window as any).autoSaveTimeout = setTimeout(async () => {
                 try {
                     setIsSaving(true);
-                    console.log('💾 Auto-saving document...', documentId);
-                    console.log('💾 Content to save (first 100 chars):', content.substring(0, 100) + '...');
                     const response = await fetch(API_ENDPOINTS.document(documentId), {
                         method: 'PUT',
                         headers: {
@@ -272,10 +262,9 @@ export default function DocumentEditor() {
                             EditedBy: user?.uid || 'anonymous', // Use actual user ID from auth
                         }),
                     });
-                    
+
                     if (response.ok) {
                         const result = await response.json();
-                        console.log('💾 Document auto-saved successfully:', result.UpdatedAt);
                     } else {
                         console.error('❌ Failed to auto-save document:', response.status, await response.text());
                     }
@@ -305,14 +294,12 @@ export default function DocumentEditor() {
         const chatAIWriter = (window as any).currentChatAIWriter;
 
         if (chatOperationId && chatAIWriter) {
-            console.log('🎯 Accepting chat operation:', chatOperationId);
             chatAIWriter.acceptChange(chatOperationId);
             // Clear the global references
             (window as any).currentChatOperationId = null;
             (window as any).currentChatAIWriter = null;
             setShowAIAction(false);
         } else if (currentOperationId && aiWriter) {
-            console.log('🎯 Accepting sidebar operation:', currentOperationId);
             aiWriter.acceptChange(currentOperationId);
             setShowAIAction(false);
             setCurrentOperationId(null);
@@ -329,14 +316,12 @@ export default function DocumentEditor() {
         const chatAIWriter = (window as any).currentChatAIWriter;
 
         if (chatOperationId && chatAIWriter) {
-            console.log('🎯 Rejecting chat operation:', chatOperationId);
             chatAIWriter.rejectChange(chatOperationId);
             // Clear the global references
             (window as any).currentChatOperationId = null;
             (window as any).currentChatAIWriter = null;
             setShowAIAction(false);
         } else if (currentOperationId && aiWriter) {
-            console.log('🎯 Rejecting sidebar operation:', currentOperationId);
             aiWriter.rejectChange(currentOperationId);
             setShowAIAction(false);
             setCurrentOperationId(null);
@@ -356,7 +341,6 @@ export default function DocumentEditor() {
         const chatAIWriter = (window as any).currentChatAIWriter;
 
         if (chatOperationId && chatAIWriter) {
-            console.log('🎯 Regenerating chat operation:', chatOperationId);
             chatAIWriter.rejectChange(chatOperationId);
             // Clear the global references
             (window as any).currentChatOperationId = null;
@@ -364,7 +348,6 @@ export default function DocumentEditor() {
             setShowAIAction(false);
             // Note: Chat regeneration could be implemented by re-running the last chat command
         } else if (currentOperationId && aiWriter && currentOperation) {
-            console.log('🎯 Regenerating sidebar operation:', currentOperationId);
             // First reject the current change
             aiWriter.rejectChange(currentOperationId);
 
@@ -458,28 +441,15 @@ export default function DocumentEditor() {
 
     // Function to show AI actions - this will be called from ChatSidebar (memoized to prevent re-renders)
     const showAIActionsContainer = useCallback((content: string, beforeContent: string) => {
-        console.log('🎯 DocumentEditor showAIActionsContainer called with:', {
-            content,
-            beforeContent,
-            currentShowAIAction: showAIAction,
-            showAIActionType: typeof showAIAction,
-            setShowAIActionFunction: !!setShowAIAction,
-            setShowAIActionType: typeof setShowAIAction
-        });
 
         // Always show for AI operations from chat (more permissive)
         if (content && content.trim()) {
-            console.log('✅ About to set showAIAction to true for operation:', content);
             setBeforeAIContent(beforeContent || documentContent);
 
             // Use a more explicit state setting with callback to confirm
             setShowAIAction(prev => {
-                console.log('🔧 setShowAIAction callback - prev:', prev, 'setting to: true');
                 return true;
             });
-
-            console.log('🔍 setShowAIAction called - state will be updated on next render');
-
             // Add visual notification that action container is ready
             (window as any).currentAIContentSummary = content;
 
@@ -526,8 +496,6 @@ export default function DocumentEditor() {
                     }
                 }
             }, 100);
-        } else {
-            console.log('❌ Ignoring AI action call - empty content');
         }
     }, [documentContent]);
 
@@ -550,13 +518,9 @@ export default function DocumentEditor() {
 
     // Register AI actions function with context (run only once)
     useEffect(() => {
-        console.log('🔧 DocumentEditor: Registering showAIActionsContainer with context');
-        console.log('🔧 setShowAIActions function:', !!setShowAIActions);
-        console.log('🔧 showAIActionsContainer function:', !!showAIActionsContainer);
 
         if (setShowAIActions && showAIActionsContainer) {
             setShowAIActions(showAIActionsContainer);
-            console.log('🔧 DocumentEditor: showAIActionsContainer registered successfully');
 
             // Store globally for debugging
             (window as any).currentShowAIActionsFunction = showAIActionsContainer;
@@ -564,10 +528,6 @@ export default function DocumentEditor() {
             console.error('❌ Cannot register showAIActionsContainer - missing functions');
         }
     }, [setShowAIActions, showAIActionsContainer]);
-
-    useEffect(() => {
-        console.log('DocumentEditor onOpenChat function:', onOpenChat);
-    }, [onOpenChat]);
 
     const effectiveContent = documentContent || "";
 

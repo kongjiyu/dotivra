@@ -55,7 +55,7 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
     })
     const [open, setOpen] = useState(false)
     const [searchValue, setSearchValue] = useState('')
-    const [isPreviewMode, setIsPreviewMode] = useState(false)
+    const [isPreviewMode, setIsPreviewMode] = useState(node.attrs.language === 'mermaid')
     const [mermaidError, setMermaidError] = useState<string | null>(null)
     const [mermaidSvg, setMermaidSvg] = useState<string>('')
     const codeRef = useRef<HTMLPreElement>(null)
@@ -86,6 +86,10 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
         updateAttributes({ language })
         setOpen(false)
         setSearchValue('')
+        // Auto-enable preview mode for Mermaid language
+        if (language === 'mermaid') {
+            setIsPreviewMode(true)
+        }
     }, [updateAttributes])
 
     const handleCopy = useCallback(async () => {
@@ -183,14 +187,6 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
                 }
             }
 
-            console.log('Mermaid content extraction:', {
-                fromEditor: editor ? 'attempted' : 'not available',
-                textContent: node.textContent,
-                contentSize: node.content?.size,
-                domElement: codeRef.current?.textContent,
-                finalContent: codeContent
-            })
-
             if (!codeContent.trim()) {
                 setMermaidSvg('')
                 setMermaidError(null)
@@ -203,11 +199,9 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
             // Clear previous error
             setMermaidError(null)
 
-            console.log('Rendering Mermaid with content:', codeContent)
 
             // Render the diagram
             const { svg } = await mermaid.render(diagramId, codeContent)
-            console.log('Mermaid render successful, SVG length:', svg.length)
             setMermaidSvg(svg)
         } catch (error) {
             console.error('Mermaid render error:', error)

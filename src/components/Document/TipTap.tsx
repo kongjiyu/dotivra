@@ -3,6 +3,8 @@ import DocumentContext from "./DocumentContext";
 import ToolBar from "./ToolBar";
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { createTipTapConfig } from "../../config/tiptap-config";
+import { useLinkPreview } from '../../hooks/useLinkPreview';
+import LinkPreviewEditor from './LinkPreviewEditor';
 
 interface TiptapProps {
     initialContent?: string;
@@ -22,7 +24,8 @@ const Tiptap = ({
     onOpenChat
 }: TiptapProps) => {
     const [isReady, setIsReady] = useState(false);
-    const initialAppliedRef = useRef(false); // NEW
+    const initialAppliedRef = useRef(false);
+
     // Create editor configuration using the config file
     const editorConfig = useMemo(() =>
         createTipTapConfig({
@@ -41,18 +44,69 @@ const Tiptap = ({
         [initialContent, editable, onUpdate]
     );
 
-
     const editor = useEditor(editorConfig);
-
-    // Debug onOpenChat prop
-    useEffect(() => {
-        console.log('TipTap onOpenChat prop:', onOpenChat);
-    }, [onOpenChat]);
-
-
+    const { previewState, showPreview, hidePreview, resetPreview } = useLinkPreview();
+    const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
     // Memoize the context value to prevent unnecessary re-renders
     const contextValue = useMemo(() => ({ editor }), [editor]);
+
+    // Add link hover detection to the editor
+    useEffect(() => {
+        if (!editor) return;
+
+        const clearHideTimeout = () => {
+            if (hideTimeoutRef.current) {
+                clearTimeout(hideTimeoutRef.current);
+                hideTimeoutRef.current = null;
+            }
+        };
+
+        const handleMouseOver = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+
+            // Look for any link element (a tag with href)
+            const linkElement = target.closest('a[href]') as HTMLAnchorElement | null;
+            if (!linkElement) return;
+
+            const href = linkElement.getAttribute('href') || '';
+            if (!href || !/^https?:\/\//.test(href)) return;
+
+            clearHideTimeout();
+            showPreview(href, linkElement);
+        };
+
+        const handleMouseOut = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            const relatedTarget = event.relatedTarget as HTMLElement | null;
+
+            const linkElement = target.closest('a[href]') as HTMLAnchorElement | null;
+            if (!linkElement) return;
+
+            if (relatedTarget && linkElement.contains(relatedTarget)) return;
+
+            // Longer delay to avoid flicker and allow movement to popup
+            clearHideTimeout();
+            hideTimeoutRef.current = setTimeout(() => {
+                hidePreview();
+            }, 800);
+        };
+
+        const editorElement = editor.options.element as HTMLElement | null;
+        if (editorElement) {
+            editorElement.addEventListener('mouseover', handleMouseOver);
+            editorElement.addEventListener('mouseout', handleMouseOut);
+        }
+
+        return () => {
+            clearHideTimeout();
+            if (editorElement) {
+                editorElement.removeEventListener('mouseover', handleMouseOver);
+                editorElement.removeEventListener('mouseout', handleMouseOut);
+            }
+            resetPreview();
+        };
+    }, [editor, showPreview, hidePreview, resetPreview]);
 
     // Cleanup on unmount
     const handleDestroy = useCallback(() => {
@@ -65,19 +119,6 @@ const Tiptap = ({
         return handleDestroy;
     }, [handleDestroy]);
 
-    // Update editor content when initialContent changes (DISABLED - causes editing issues)
-    // useEffect(() => {
-    //     if (editor && initialContent && editor.getHTML() !== initialContent) {
-    //         editor.commands.setContent(initialContent);
-    //         // Only dispatch if editor.view exists
-    //         if (editor.view) {
-    //             editor.view.dispatch(
-    //                 editor.state.tr.setMeta('addToHistory', false)
-    //             );
-    //         }
-    //     }
-    // }, [editor, initialContent]);
-
     // Prevent first undo from reverting to empty document:
     // Apply initialContent exactly once, suppress history + update.
     useEffect(() => {
@@ -88,7 +129,7 @@ const Tiptap = ({
         if (editor.getHTML() !== initialContent) {
             // false => do not emit update event, avoids extra history noise
             editor.commands.setContent(initialContent, { emitUpdate: false });
-            // Ensure no history entry for this transaction - fix typo
+            // Ensure no history entry for this transaction
             if (editor.view) {
                 const tr = editor.state.tr.setMeta('addToHistory', false);
                 editor.view.dispatch(tr);
@@ -137,10 +178,52 @@ const Tiptap = ({
                     </div>
                 </div>
 
+                {/* Link Preview Editor (hover) */}
+                <LinkPreviewEditor
+                    url={previewState.url}
+                    isVisible={previewState.isVisible}
+                    position={previewState.position}
+                    onClose={hidePreview}
+                    onMouseEnter={() => {
+                        // Clear any pending hide timeout when entering popup
+                        if (hideTimeoutRef.current) {
+                            clearTimeout(hideTimeoutRef.current);
+                            hideTimeoutRef.current = null;
+                        }
+                    }}
+                    onMouseLeave={() => {
+                        // Set a timeout to hide when leaving popup
+                        hideTimeoutRef.current = setTimeout(() => {
+                            hidePreview();
+                        }, 800);
+                    }}
+                    onSave={(newUrl, topic) => {
+                        if (!editor || !previewState.target) return;
+                        try {
+                            // Find the position of the target link element in the editor
+                            const linkElement = previewState.target as HTMLAnchorElement;
+
+                            // Convert DOM range to TipTap position
+                            const from = editor.view.posAtDOM(linkElement, 0);
+                            const to = editor.view.posAtDOM(linkElement, linkElement.childNodes.length);
+
+                            // Replace the link content with the new content
+                            editor.chain()
+                                .focus()
+                                .setTextSelection({ from, to })
+                                .unsetLink()
+                                .insertContent(`<a href="${newUrl}">${topic || newUrl}</a>`)
+                                .run();
+                        } catch (e) {
+                            console.error('Failed to update link', e);
+                            // Fallback: just insert at cursor
+                            editor.chain().focus().insertContent(`<a href="${newUrl}">${topic || newUrl}</a>`).run();
+                        }
+                    }}
+                />
 
             </div>
         </EditorContext.Provider>
-
     );
 };
 

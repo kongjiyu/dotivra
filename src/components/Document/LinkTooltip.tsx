@@ -28,15 +28,29 @@ export const LinkTooltip: React.FC<LinkTooltipProps> = ({
 
     useEffect(() => {
         if (isOpen) {
-            setTopic(selectedText || '');
-            setUrl(existingUrl || '');
+            // Check if selected text is a valid HTTP/HTTPS URL
+            const isValidUrl = selectedText && /^https?:\/\/.+/.test(selectedText.trim());
 
-            // If topic is pre-filled (selected text), focus on URL input
-            // Otherwise focus on topic input
+            if (isValidUrl) {
+                // If selected text is a valid URL, use it as the URL and clear topic
+                setTopic('');
+                setUrl(selectedText.trim());
+            } else {
+                // Otherwise, use selected text as topic (link text)
+                setTopic(selectedText || '');
+                setUrl(existingUrl || '');
+            }
+
+            // Focus management: If we auto-filled URL, focus on topic; otherwise focus appropriately
             setTimeout(() => {
-                if (selectedText && selectedText.trim()) {
+                if (isValidUrl) {
+                    // URL is auto-filled, focus on topic input for user to enter display text
+                    topicInputRef.current?.focus();
+                } else if (selectedText && selectedText.trim()) {
+                    // Topic is pre-filled, focus on URL input
                     urlInputRef.current?.focus();
                 } else {
+                    // Nothing pre-filled, focus on topic input
                     topicInputRef.current?.focus();
                 }
             }, 100);
@@ -113,7 +127,7 @@ export const LinkTooltip: React.FC<LinkTooltipProps> = ({
                     <input
                         ref={topicInputRef}
                         type="text"
-                        placeholder="Link text (topic)"
+                        placeholder={url && /^https?:\/\/.+/.test(url) ? "Display text (optional)" : "Link text (display name)"}
                         value={topic}
                         onChange={(e) => setTopic(e.target.value)}
                     />

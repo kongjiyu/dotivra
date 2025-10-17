@@ -1,5 +1,5 @@
 import DocumentLayout from "./DocumentLayout";
-import VersionHistory from "@/components/Document/VersionHistory";
+import VersionHistory from "@/components/document/VersionHistory";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -17,7 +17,6 @@ export default function DocumentHistory() {
 
     const handlePreviewVersion = (content: string) => {
         // Could implement preview functionality
-        console.log("Preview version:", content.slice(0, 100) + "...");
     };
 
     return (
