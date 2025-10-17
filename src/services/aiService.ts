@@ -3,13 +3,16 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { repositoryContextService, type RepositoryContext } from './repositoryContextService';
 import type { User } from 'firebase/auth';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyBlRfTwZ7HAQ3Yv_sCWvNKiHdZyR2yTPe8';
+const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
 
 class AIService {
     private genAI: GoogleGenerativeAI;
     private model: any;
 
     constructor() {
+        if (!GEMINI_API_KEY) {
+            throw new Error('VITE_GEMINI_API_KEY environment variable is required');
+        }
         this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
         this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
     }
