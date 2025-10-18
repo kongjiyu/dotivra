@@ -21,7 +21,16 @@ export default function SimpleShare({ documentId = "doc123" }: SimpleShareProps)
 
     const generateShareLink = () => {
         const baseUrl = window.location.origin;
-        const link = `${baseUrl}/shared/${documentId}`;
+        // Use current pathname if it's a document page, otherwise use documentId
+        const currentPath = window.location.pathname;
+
+        // If already on a document page, use that URL
+        if (currentPath.includes('/document/')) {
+            return `${baseUrl}${currentPath}`;
+        }
+
+        // Otherwise, generate URL with documentId
+        const link = documentId ? `${baseUrl}/document/${documentId}` : `${baseUrl}/document/editor`;
         return link;
     };
 

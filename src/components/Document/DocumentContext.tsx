@@ -34,11 +34,50 @@ const DocumentContext = memo(({ editor, children, onOpenChat }: DocumentContextP
             });
         };
 
+        const handleClick = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+
+            // More robust check: detect if click is on blank space (not on actual content nodes)
+            // Check if target is container/wrapper, not actual content elements
+            const isEditorContainer = target.classList.contains('tiptap') ||
+                target.classList.contains('ProseMirror') ||
+                target === editorContentRef.current;
+
+            // Also check if clicking on the wrapper divs (document-context, prose container)
+            const isWrapperElement = target.classList.contains('document-context') ||
+                target.classList.contains('prose') ||
+                target.closest('.document-context') === target;
+
+            // Check if clicked element has no text content or is just whitespace
+            const hasNoContent = !target.textContent?.trim() &&
+                target.nodeName !== 'P' &&
+                target.nodeName !== 'H1' &&
+                target.nodeName !== 'H2' &&
+                target.nodeName !== 'H3' &&
+                target.nodeName !== 'H4' &&
+                target.nodeName !== 'H5' &&
+                target.nodeName !== 'H6' &&
+                target.nodeName !== 'LI' &&
+                target.nodeName !== 'TD' &&
+                target.nodeName !== 'TH' &&
+                !target.closest('p, h1, h2, h3, h4, h5, h6, li, td, th, a, code, pre');
+
+            if (isEditorContainer || isWrapperElement || hasNoContent) {
+                // Move cursor to the end of the document
+                const { doc } = editor.state;
+                const endPos = doc.content.size;
+                editor.commands.focus();
+                editor.commands.setTextSelection(endPos);
+            }
+        };
+
         const editorElement = editorContentRef.current;
         editorElement.addEventListener('contextmenu', handleContextMenu);
+        editorElement.addEventListener('click', handleClick);
 
         return () => {
             editorElement.removeEventListener('contextmenu', handleContextMenu);
+            editorElement.removeEventListener('click', handleClick);
         };
     }, [editor]);
 

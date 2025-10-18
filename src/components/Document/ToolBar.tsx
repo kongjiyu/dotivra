@@ -1,6 +1,6 @@
 import type { Editor } from "@tiptap/react";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
     Select,
@@ -44,7 +44,12 @@ import {
     IndentIncrease,
     Network,
     Eraser,
-    Link
+    Link,
+    GripVertical,
+    GripHorizontal,
+    ArrowLeftRight,
+    ArrowUpDown,
+    Type
 } from "lucide-react";
 
 const FONT_FAMILIES = [
@@ -121,6 +126,298 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
     const [isInPreviewMode, setIsInPreviewMode] = useState(false);
     const [maxIndentLevel, setMaxIndentLevel] = useState<number>(14);
+
+    // Draggable toolbar state
+    const [toolbarPosition, setToolbarPosition] = useState<{ x: number; y: number } | null>(null);
+    const [isDragging, setIsDragging] = useState(false);
+    const [isVertical, setIsVertical] = useState<boolean>(false);
+    const dragStartPos = useRef<{ x: number; y: number; toolbarX: number; toolbarY: number } | null>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
+
+    // Load toolbar orientation preference from cookies on mount
+    useEffect(() => {
+        const savedOrientation = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('toolbarOrientation='))
+            ?.split('=')[1];
+
+        if (savedOrientation === 'vertical') {
+            setIsVertical(true);
+        }
+    }, []);
+
+    // Save toolbar orientation to cookies
+    const toggleOrientation = () => {
+        const newOrientation = !isVertical;
+        setIsVertical(newOrientation);
+
+        // Save to cookies (expires in 1 year)
+        const expires = new Date();
+        expires.setFullYear(expires.getFullYear() + 1);
+        document.cookie = `toolbarOrientation=${newOrientation ? 'vertical' : 'horizontal'}; expires=${expires.toUTCString()}; path=/`;
+    };
+
+    // Drag handlers for toolbar - Optimized with useCallback to prevent lag
+    const handleDragStart = useCallback((e: React.MouseEvent) => {
+        e.preventDefault();
+        const toolbar = containerRef.current;
+        if (!toolbar) return;
+
+        try {
+            const rect = toolbar.getBoundingClientRect();
+
+            // Validate rect to prevent errors
+            if (rect.width <= 0 || rect.height <= 0) {
+                console.warn('Invalid toolbar dimensions during drag start');
+                return;
+            }
+
+            // CRITICAL: Always use getBoundingClientRect for accurate position
+            // This prevents blinking by using the actual rendered position
+            const currentX = rect.left;
+            const currentY = rect.top;
+
+            dragStartPos.current = {
+                x: e.clientX,
+                y: e.clientY,
+                toolbarX: currentX,
+                toolbarY: currentY
+            };
+
+            // Set position immediately to transition from static to fixed positioning
+            setToolbarPosition({ x: currentX, y: currentY });
+            setIsDragging(true);
+        } catch (error) {
+            console.error('Error starting toolbar drag:', error);
+            // Fallback: reset to default position
+            setToolbarPosition(null);
+        }
+    }, []); // Empty dependencies - no recreations
+
+    const handleDragMove = useCallback((e: MouseEvent) => {
+        if (!dragStartPos.current) return;
+
+        try {
+            // Calculate position immediately for instant response
+            const deltaX = e.clientX - dragStartPos.current.x;
+            const deltaY = e.clientY - dragStartPos.current.y;
+            let newX = dragStartPos.current.toolbarX + deltaX;
+            let newY = dragStartPos.current.toolbarY + deltaY;
+
+            // Get toolbar dimensions for boundary checking
+            const toolbar = containerRef.current;
+            if (toolbar) {
+                const toolbarRect = toolbar.getBoundingClientRect();
+
+                // Validate dimensions
+                if (toolbarRect.width <= 0 || toolbarRect.height <= 0) {
+                    return; // Skip this frame if dimensions are invalid
+                }
+
+                // Find the tiptap-container boundary
+                const tiptapContainer = document.querySelector('.tiptap-container');
+                if (tiptapContainer) {
+                    const containerRect = tiptapContainer.getBoundingClientRect();
+
+                    // Validate container dimensions
+                    if (containerRect.width > 0 && containerRect.height > 0) {
+                        // Clamp position within tiptap-container boundaries
+                        newX = Math.max(containerRect.left, Math.min(newX, containerRect.right - toolbarRect.width));
+                        newY = Math.max(containerRect.top, Math.min(newY, containerRect.bottom - toolbarRect.height));
+                    }
+                }
+            }
+
+            // Validate final position before setting
+            if (isFinite(newX) && isFinite(newY)) {
+                // Direct state update without requestAnimationFrame for zero lag
+                setToolbarPosition({ x: newX, y: newY });
+            }
+        } catch (error) {
+            console.error('Error during toolbar drag:', error);
+            // Stop dragging on error
+            setIsDragging(false);
+            dragStartPos.current = null;
+            // Fallback to default position
+            setToolbarPosition(null);
+        }
+    }, []);
+
+    const handleDragEnd = useCallback(() => {
+        setIsDragging(false);
+        dragStartPos.current = null;
+    }, []);
+
+    // Set up drag event listeners - Optimized to prevent re-creation
+    useEffect(() => {
+        if (isDragging) {
+            document.addEventListener('mousemove', handleDragMove);
+            document.addEventListener('mouseup', handleDragEnd);
+            return () => {
+                document.removeEventListener('mousemove', handleDragMove);
+                document.removeEventListener('mouseup', handleDragEnd);
+            };
+        }
+    }, [isDragging, handleDragMove, handleDragEnd]);
+
+    // Ref to track if we're currently updating position (prevent infinite loops)
+    const isUpdatingPosition = useRef(false);
+
+    // Helper function to calculate smart position when orientation changes
+    const getSmartPositionForOrientation = useCallback((currentPos: { x: number; y: number } | null): { x: number; y: number } | null => {
+        if (!currentPos || !containerRef.current) return null;
+
+        try {
+            const tiptapContainer = document.querySelector('.tiptap-container');
+
+            if (!tiptapContainer) return null;
+
+            const containerRect = tiptapContainer.getBoundingClientRect();
+
+            // Wait for toolbar to re-render with new dimensions
+            setTimeout(() => {
+                if (!containerRef.current) return;
+                const toolbarRect = containerRef.current.getBoundingClientRect();
+
+                if (toolbarRect.width <= 0 || toolbarRect.height <= 0) return;
+
+                // Check if toolbar would overflow with current position
+                const wouldOverflowRight = currentPos.x + toolbarRect.width > containerRect.right;
+                const wouldOverflowBottom = currentPos.y + toolbarRect.height > containerRect.bottom;
+                const wouldOverflowLeft = currentPos.x < containerRect.left;
+                const wouldOverflowTop = currentPos.y < containerRect.top;
+
+                const willOverflow = wouldOverflowRight || wouldOverflowBottom || wouldOverflowLeft || wouldOverflowTop;
+
+                // Only reposition if there's an overflow
+                if (!willOverflow) {
+                    // No overflow, keep current position
+                    return;
+                }
+
+                // Overflow detected - apply smart repositioning
+                const centerX = containerRect.left + containerRect.width / 2;
+                const centerY = containerRect.top + containerRect.height / 2;
+
+                const isOnLeft = currentPos.x < centerX;
+                const isOnTop = currentPos.y < centerY;
+
+                let newX: number;
+                let newY: number;
+                const padding = 16; // Padding from edges
+
+                // Determine new position based on which quadrant the toolbar was in
+                if (isOnLeft && isOnTop) {
+                    // Top-left quadrant → position at top-left
+                    newX = containerRect.left + padding;
+                    newY = containerRect.top + padding;
+                } else if (!isOnLeft && isOnTop) {
+                    // Top-right quadrant → position at top-right
+                    newX = containerRect.right - toolbarRect.width - padding;
+                    newY = containerRect.top + padding;
+                } else if (isOnLeft && !isOnTop) {
+                    // Bottom-left quadrant → position at bottom-left
+                    newX = containerRect.left + padding;
+                    newY = containerRect.bottom - toolbarRect.height - padding;
+                } else {
+                    // Bottom-right quadrant → position at bottom-right
+                    newX = containerRect.right - toolbarRect.width - padding;
+                    newY = containerRect.bottom - toolbarRect.height - padding;
+                }
+
+                // Ensure position is within bounds
+                newX = Math.max(containerRect.left, Math.min(newX, containerRect.right - toolbarRect.width));
+                newY = Math.max(containerRect.top, Math.min(newY, containerRect.bottom - toolbarRect.height));
+
+                setToolbarPosition({ x: newX, y: newY });
+            }, 50); // Small delay to let DOM update
+
+            return currentPos; // Return current position temporarily
+        } catch (error) {
+            console.error('Error calculating smart position:', error);
+            return null;
+        }
+    }, []);
+
+    // Helper function to safely clamp position with error handling
+    const safeClampPosition = useCallback((position: { x: number; y: number } | null): { x: number; y: number } | null => {
+        if (!position || !containerRef.current || isUpdatingPosition.current) return position;
+
+        try {
+            const toolbar = containerRef.current;
+            const toolbarRect = toolbar.getBoundingClientRect();
+            const tiptapContainer = document.querySelector('.tiptap-container');
+
+            if (!tiptapContainer) return position;
+
+            const containerRect = tiptapContainer.getBoundingClientRect();
+
+            // Validate rect dimensions to prevent invalid calculations
+            if (toolbarRect.width <= 0 || toolbarRect.height <= 0 ||
+                containerRect.width <= 0 || containerRect.height <= 0) {
+                return null; // Fallback to default position
+            }
+
+            // Clamp position within boundaries
+            const clampedX = Math.max(containerRect.left, Math.min(position.x, containerRect.right - toolbarRect.width));
+            const clampedY = Math.max(containerRect.top, Math.min(position.y, containerRect.bottom - toolbarRect.height));
+
+            // Check if position actually changed (prevent unnecessary updates)
+            const hasChanged = Math.abs(clampedX - position.x) > 1 || Math.abs(clampedY - position.y) > 1;
+
+            return hasChanged ? { x: clampedX, y: clampedY } : position;
+        } catch (error) {
+            console.error('Error clamping toolbar position:', error);
+            return null; // Fallback to default position on error
+        }
+    }, []);
+
+    // Handle window resize to re-clamp toolbar position within new boundaries
+    useEffect(() => {
+        let resizeTimeout: NodeJS.Timeout;
+
+        const handleResize = () => {
+            // Debounce resize handler to prevent too many updates
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                if (!toolbarPosition || isUpdatingPosition.current) return;
+
+                isUpdatingPosition.current = true;
+                const newPosition = safeClampPosition(toolbarPosition);
+
+                if (newPosition && newPosition !== toolbarPosition) {
+                    setToolbarPosition(newPosition);
+                }
+
+                // Reset flag after a delay
+                setTimeout(() => {
+                    isUpdatingPosition.current = false;
+                }, 100);
+            }, 150); // Debounce by 150ms
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            clearTimeout(resizeTimeout);
+        };
+    }, [toolbarPosition, safeClampPosition]);
+
+    // Check position when orientation changes and apply smart repositioning
+    useEffect(() => {
+        if (isUpdatingPosition.current || !toolbarPosition) return;
+
+        isUpdatingPosition.current = true;
+
+        // Use smart positioning based on current quadrant
+        getSmartPositionForOrientation(toolbarPosition);
+
+        // Reset flag after processing
+        setTimeout(() => {
+            isUpdatingPosition.current = false;
+        }, 200);
+
+    }, [isVertical, getSmartPositionForOrientation]); // Only trigger on orientation change
 
     // Calculate dynamic maxIndentLevel based on window width
     // Wider screens can handle more indentation levels without content overflow
@@ -371,10 +668,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             // Final cleanup after resize stops
             debounceTimer = setTimeout(() => {
                 requestAnimationFrame(() => {
-                    const finalWidth = window.innerWidth;
-                    if (Math.abs(finalWidth - windowWidth) > 10) {
-                        handleResize();
-                    }
+                    handleResize(); // Always update after resize stops
                 });
                 debounceTimer = null;
             }, 150);
@@ -391,15 +685,20 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             if (debounceTimer) clearTimeout(debounceTimer);
             if (rafId) cancelAnimationFrame(rafId);
         };
-    }, [editor]);
+    }, [windowWidth, maxIndentLevel]); // Fixed: Added windowWidth and maxIndentLevel to dependencies
 
     // Helper functions to determine section visibility based on calculated window width breakpoints  
-    const shouldShowInsertOptions = () => windowWidth >= 1390;      // Table, Diagram, Link buttons
-    const shouldShowIndent = () => windowWidth >= 1150;              // Increase/Decrease indent buttons (earlier hiding)
-    const shouldShowClearFormatting = () => windowWidth >= 1150;    // Clear formatting button
-    const shouldShowLists = () => windowWidth >= 990;               // Bullet, Ordered, Task list buttons (earlier hiding)
-    const shouldShowTextAlign = () => windowWidth >= 880;          // Left, Center, Right, Justify alignment
-    const shouldShowMoreOptions = () => !shouldShowInsertOptions() || !shouldShowTextAlign() || !shouldShowClearFormatting() || !shouldShowIndent() || !shouldShowLists();
+    // In vertical mode, show only essential options (up to font/color), wrap Lists/Indent/Align/Insert in More Options
+    // Memoize these functions to prevent unnecessary recalculations
+    const shouldShowInsertOptions = useMemo(() => isVertical ? false : windowWidth >= 1390, [isVertical, windowWidth]);
+    const shouldShowIndent = useMemo(() => isVertical ? false : windowWidth >= 1150, [isVertical, windowWidth]);
+    const shouldShowClearFormatting = useMemo(() => isVertical ? false : windowWidth >= 1150, [isVertical, windowWidth]);
+    const shouldShowLists = useMemo(() => isVertical ? false : windowWidth >= 990, [isVertical, windowWidth]);
+    const shouldShowTextAlign = useMemo(() => isVertical ? false : windowWidth >= 880, [isVertical, windowWidth]);
+    const shouldShowMoreOptions = useMemo(() =>
+        isVertical ? true : (!shouldShowInsertOptions || !shouldShowTextAlign || !shouldShowClearFormatting || !shouldShowIndent || !shouldShowLists),
+        [isVertical, shouldShowInsertOptions, shouldShowTextAlign, shouldShowClearFormatting, shouldShowIndent, shouldShowLists]
+    );
 
     // Add keyboard shortcut handlers for indentation with dynamic limits
     useEffect(() => {
@@ -447,7 +746,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         };
 
 
-        const editorElement = (editor.view as any).dom;
+        const editorElement = editor.view ? (editor.view as any).dom : null;
         if (editorElement) {
             editorElement.addEventListener('keydown', handleKeyDown);
 
@@ -461,8 +760,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
     // Helper for active state
     const isActive = (name: string, attrs?: any) => editor.isActive(name, attrs);
-
-    const containerRef = useRef<HTMLDivElement | null>(null);
 
     // Close the dropdown when clicking outside without blocking scroll via overlays
     useEffect(() => {
@@ -480,6 +777,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     // Font size input handling with typing state
     const [fontSizeInput, setFontSizeInput] = useState<string>('16');
     const [isTyping, setIsTyping] = useState(false);
+    const [showFontSizePopover, setShowFontSizePopover] = useState(false);
 
     // Sync input field with current font size only when not typing
     useEffect(() => {
@@ -569,12 +867,118 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         }
     };
 
+    // Helper function to determine dropdown alignment based on toolbar position
+    const getDropdownAlignment = useCallback((): { side: 'top' | 'bottom' | 'left' | 'right'; align: 'start' | 'center' | 'end' } => {
+        if (!containerRef.current) {
+            return isVertical ? { side: 'right', align: 'start' } : { side: 'bottom', align: 'end' };
+        }
+
+        try {
+            const toolbarRect = containerRef.current.getBoundingClientRect();
+            const tiptapContainer = document.querySelector('.tiptap-container');
+
+            if (!tiptapContainer) {
+                return isVertical ? { side: 'right', align: 'start' } : { side: 'bottom', align: 'end' };
+            }
+
+            const containerRect = tiptapContainer.getBoundingClientRect();
+
+            if (isVertical) {
+                // Vertical toolbar: check if at left or right edge
+                const distanceFromLeft = toolbarRect.left - containerRect.left;
+
+                // If toolbar is closer to left edge (within 100px), popup to right
+                // Otherwise, popup to left
+                if (distanceFromLeft < 100) {
+                    return { side: 'right', align: 'start' };
+                } else {
+                    return { side: 'left', align: 'start' };
+                }
+            } else {
+                // Horizontal toolbar: check if at top or bottom edge
+                const distanceFromTop = toolbarRect.top - containerRect.top;
+
+                // If toolbar is closer to top edge (within 100px), popup to bottom
+                // Otherwise, popup to top
+                if (distanceFromTop < 100) {
+                    return { side: 'bottom', align: 'end' };
+                } else {
+                    return { side: 'top', align: 'end' };
+                }
+            }
+        } catch (error) {
+            console.error('Error calculating dropdown alignment:', error);
+            return isVertical ? { side: 'right', align: 'start' } : { side: 'bottom', align: 'end' };
+        }
+    }, [isVertical]);
+
+    // Memoize dropdown alignment to avoid recalculating on every render
+    const dropdownAlignment = useMemo(() => getDropdownAlignment(), [getDropdownAlignment, toolbarPosition, isVertical, showMoreOptions]);
+
     return (
         <>
-            <div ref={containerRef} className="toolbar flex items-center gap-1 p-3 m-2 rounded-sm border border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-sm overflow-x-auto w-full">
+            <div
+                ref={containerRef}
+                className={`toolbar ${isVertical
+                    ? 'flex-col items-center w-fit'
+                    : 'flex items-center overflow-x-auto'
+                    } gap-0 p-1.5 rounded-md border border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-lg`}
+                style={toolbarPosition ? {
+                    position: 'fixed',
+                    left: `${toolbarPosition.x}px`,
+                    top: `${toolbarPosition.y}px`,
+                    cursor: isDragging ? 'grabbing' : 'default',
+                    zIndex: 50,
+                    ...(isVertical && { maxHeight: '600px', overflowY: 'auto' }),
+                    transition: isDragging ? 'none' : undefined
+                } : isVertical ? {
+                    // Vertical mode: Top-left of drag area (tiptap-container)
+                    position: 'fixed' as const,
+                    left: '16px', // Left edge with 16px padding, or left of centered 1000px container
+                    top: '168px', // Top of drag area (152px content start + 8px padding)
+                    zIndex: 50,
+                    maxHeight: '600px',
+                    overflowY: 'auto' as const
+                } : {
+                    // Horizontal mode: Top-center of drag area (tiptap-container)
+                    position: 'fixed' as const,
+                    left: '50%',
+                    top: '168px', // Top of drag area (152px content start + 8px padding)
+                    transform: 'translateX(-50%)',
+                    zIndex: 50
+                }}
+            >
+                {/* Drag Handle and Orientation Toggle */}
+                <div className={`flex ${isVertical ? 'flex-col gap-1 items-center' : 'items-center gap-1'} flex-shrink-0`}>
+                    {/* Drag Handle */}
+                    <div
+                        className={`flex items-center justify-center h-8 ${isVertical ? 'w-8' : 'w-8'} cursor-grab active:cursor-grabbing hover:bg-gray-100 rounded transition-colors flex-shrink-0`}
+                        onMouseDown={handleDragStart}
+                        title="Drag to reposition toolbar"
+                    >
+                        {isVertical ? (
+                            <GripHorizontal className="w-4 h-4 text-gray-400" />
+                        ) : (
+                            <GripVertical className="w-4 h-4 text-gray-400" />
+                        )}
+                    </div>
 
-                {/* ESSENTIAL FORMATTING - Always visible, scrollable like browser bookmarks */}
-                <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* Orientation Toggle Button - Separate row in vertical mode */}
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={toggleOrientation}
+                        className={`h-8 ${isVertical ? 'w-8' : 'w-8'} p-0 bg-white hover:bg-gray-50 border-gray-300 flex items-center justify-center`}
+                        title={isVertical ? "Switch to Horizontal" : "Switch to Vertical"}
+                    >
+                        {isVertical ? <ArrowLeftRight className="w-4 h-4" /> : <ArrowUpDown className="w-4 h-4" />}
+                    </Button>
+                </div>
+
+                <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>
+
+                {/* ESSENTIAL FORMATTING - Always visible */}
+                <div className={`flex ${isVertical ? 'flex-col gap-1 items-center' : 'items-center gap-0.5'} flex-shrink-0`}>
                     {/* Basic Text Formatting */}
                     <Button variant="outline" size="sm"
                         onClick={() => {
@@ -617,7 +1021,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                         <Strikethrough className="w-4 h-4" />
                     </Button>
 
-                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                    <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>
 
                     {/* Headings & Blocks Dropdown */}
                     <Select
@@ -685,16 +1089,31 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                             }
                         }}
                     >
-                        <SelectTrigger className="w-[150px] h-8 text-sm">
+                        <SelectTrigger className={isVertical ? "w-8 h-8 p-0 [&>svg]:hidden flex items-center justify-center" : "w-[150px] h-8 text-sm"}>
                             <SelectValue>
-                                {isActive('heading', { level: 1 }) && "Heading 1"}
-                                {isActive('heading', { level: 2 }) && "Heading 2"}
-                                {isActive('heading', { level: 3 }) && "Heading 3"}
-                                {isActive('heading', { level: 4 }) && "Heading 4"}
-                                {isActive('heading', { level: 5 }) && "Heading 5"}
-                                {isActive('blockquote') && "Quote"}
-                                {isActive('codeBlock') && "Code Block"}
-                                {(!isActive('heading') && !isActive('blockquote') && !isActive('codeBlock')) && "Paragraph"}
+                                {isVertical ? (
+                                    // Icon-only display in vertical mode
+                                    isActive('heading', { level: 1 }) ? <span className="text-lg font-bold">H1</span> :
+                                        isActive('heading', { level: 2 }) ? <span className="text-base font-bold">H2</span> :
+                                            isActive('heading', { level: 3 }) ? <span className="text-sm font-bold">H3</span> :
+                                                isActive('heading', { level: 4 }) ? <span className="text-xs font-bold">H4</span> :
+                                                    isActive('heading', { level: 5 }) ? <span className="text-xs font-bold">H5</span> :
+                                                        isActive('blockquote') ? <Quote className="w-4 h-4" /> :
+                                                            isActive('codeBlock') ? <Code className="w-4 h-4" /> :
+                                                                <span className="text-sm font-normal">P</span>
+                                ) : (
+                                    // Full text display in horizontal mode
+                                    <>
+                                        {isActive('heading', { level: 1 }) && "Heading 1"}
+                                        {isActive('heading', { level: 2 }) && "Heading 2"}
+                                        {isActive('heading', { level: 3 }) && "Heading 3"}
+                                        {isActive('heading', { level: 4 }) && "Heading 4"}
+                                        {isActive('heading', { level: 5 }) && "Heading 5"}
+                                        {isActive('blockquote') && "Quote"}
+                                        {isActive('codeBlock') && "Code Block"}
+                                        {(!isActive('heading') && !isActive('blockquote') && !isActive('codeBlock')) && "Paragraph"}
+                                    </>
+                                )}
                             </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
@@ -749,81 +1168,157 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                         </SelectContent>
                     </Select>
 
-                    <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                    <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>
 
                     {/* Font Styling - Bookmark-style hiding */}
                     {true && ( // Font family always visible
-                        <div className="flex items-center gap-1">
-                            <Select
-                                value={isEditingDisabled ? '' : currentFontFamily}
-                                onValueChange={(value) => {
-                                    if (!isEditingDisabled) {
-                                        editor.chain().focus().setFontFamily(value).run();
-                                        setCurrentFontFamily(value);
-                                    }
-                                }}
-                                disabled={isEditingDisabled}
-                            >
-                                <SelectTrigger className={`w-[140px] h-8 text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                    <SelectValue placeholder={isEditingDisabled ? '' : currentFontFamily} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {FONT_FAMILIES.map(f => (
-                                        <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-
-                    {true && ( // Font size always visible
-                        <div className="flex items-center gap-1">
-                            {/* Font Size Input with Dropdown - Unified Implementation */}
-                            <div className="relative flex items-center">
-                                <input
-                                    type="text"
-                                    value={isEditingDisabled ? '' : fontSizeInput}
-                                    onChange={(e) => {
-                                        if (!isEditingDisabled) {
-                                            handleFontSizeChange(e.target.value);
-                                        }
-                                    }}
-                                    onKeyDown={handleFontSizeKeyDown}
-                                    onBlur={handleFontSizeBlur}
-                                    onFocus={() => setIsTyping(true)}
-                                    disabled={isEditingDisabled}
-                                    placeholder={isEditingDisabled ? '' : '16'}
-                                    className={`w-14 h-8 text-sm text-center border border-gray-300 rounded-l-md bg-white mr-0
-                                       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`}
-                                />
+                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
+                            {isVertical ? (
+                                // Vertical mode: Popover with icon trigger showing font list
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className={`h-8 w-8 p-0 flex items-center justify-center ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            disabled={isEditingDisabled}
+                                            title="Font Family"
+                                        >
+                                            <Type className="w-4 h-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent side="right" align="center" className="w-48 p-2">
+                                        <div className="space-y-1">
+                                            <h4 className="text-xs font-medium text-gray-700 mb-2">Font Family</h4>
+                                            {FONT_FAMILIES.map(f => (
+                                                <button
+                                                    key={f}
+                                                    onClick={() => {
+                                                        if (!isEditingDisabled) {
+                                                            editor.chain().focus().setFontFamily(f).run();
+                                                            setCurrentFontFamily(f);
+                                                        }
+                                                    }}
+                                                    className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 transition-colors ${currentFontFamily === f ? 'bg-blue-50 text-blue-700 font-medium' : ''
+                                                        }`}
+                                                    style={{ fontFamily: f }}
+                                                >
+                                                    {f}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            ) : (
+                                // Horizontal mode: Dropdown selector
                                 <Select
-                                    value={isEditingDisabled ? '' : fontSizeInput}
+                                    value={isEditingDisabled ? '' : currentFontFamily}
                                     onValueChange={(value) => {
                                         if (!isEditingDisabled) {
-                                            setIsTyping(false);
-                                            applyFontSize(value);
+                                            editor.chain().focus().setFontFamily(value).run();
+                                            setCurrentFontFamily(value);
                                         }
                                     }}
                                     disabled={isEditingDisabled}
                                 >
-                                    <SelectTrigger className={`h-8 w-6 border border-l-0 border-gray-300 rounded-l-none rounded-r-md bg-white p-0 flex items-center justify-center [&>svg]:w-3 [&>svg]:h-3
-   ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'outline-none focus:ring-offset-0 focus:outline-none hover:bg-gray-50 focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`} data-size="">
+                                    <SelectTrigger className={`w-[140px] h-8 text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                        <SelectValue placeholder={isEditingDisabled ? '' : currentFontFamily} />
                                     </SelectTrigger>
-                                    <SelectContent align="center" side="bottom" className="w-20">
-                                        {['4', '6', '8', '10', '12', '16', '20', '24', '28', '36', '48', '64', '72', '96'].map(size => (
-                                            <SelectItem key={size} value={size}>
-                                                {size}
-                                            </SelectItem>
+                                    <SelectContent side="bottom">
+                                        {FONT_FAMILIES.map(f => (
+                                            <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
-                            </div>
+                            )}
+                        </div>
+                    )}
+
+                    {true && ( // Font size always visible
+                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
+                            {/* Font Size Input with Dropdown - Unified Implementation */}
+                            {isVertical ? (
+                                // Vertical mode: Button that opens popover to pick size
+                                <Popover open={showFontSizePopover} onOpenChange={setShowFontSizePopover}>
+                                    <PopoverTrigger asChild>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className={`h-8 w-8 p-0 flex items-center justify-center text-xs font-medium ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                            disabled={isEditingDisabled}
+                                            title={`Font Size: ${fontSizeInput}px`}
+                                        >
+                                            {fontSizeInput}
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent side="right" align="center" className="w-20 p-2">
+                                        <div className="space-y-1">
+                                            <h4 className="text-xs font-medium text-gray-700 mb-2">Size</h4>
+                                            {['4', '6', '8', '10', '12', '14', '16', '18', '20', '24', '28', '32', '36', '48', '64', '72', '96'].map(size => (
+                                                <button
+                                                    key={size}
+                                                    onClick={() => {
+                                                        setIsTyping(false);
+                                                        applyFontSize(size);
+                                                        setShowFontSizePopover(false);
+                                                    }}
+                                                    className={`w-full text-center px-2 py-1.5 text-sm rounded hover:bg-gray-100 transition-colors ${fontSizeInput === size ? 'bg-blue-50 text-blue-700 font-medium' : ''
+                                                        }`}
+                                                >
+                                                    {size}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </PopoverContent>
+                                </Popover>
+                            ) : (
+                                // Horizontal mode: full input + dropdown
+                                <div className="relative flex items-center">
+                                    <input
+                                        type="text"
+                                        value={isEditingDisabled ? '' : fontSizeInput}
+                                        onChange={(e) => {
+                                            if (!isEditingDisabled) {
+                                                handleFontSizeChange(e.target.value);
+                                            }
+                                        }}
+                                        onKeyDown={handleFontSizeKeyDown}
+                                        onBlur={handleFontSizeBlur}
+                                        onFocus={() => setIsTyping(true)}
+                                        disabled={isEditingDisabled}
+                                        placeholder={isEditingDisabled ? '' : '16'}
+                                        className={`w-14 h-8 text-sm text-center border border-gray-300 rounded-l-md bg-white mr-0
+                                           ${isEditingDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`}
+                                    />
+                                    <Select
+                                        value={isEditingDisabled ? '' : fontSizeInput}
+                                        onValueChange={(value) => {
+                                            if (!isEditingDisabled) {
+                                                setIsTyping(false);
+                                                applyFontSize(value);
+                                            }
+                                        }}
+                                        disabled={isEditingDisabled}
+                                    >
+                                        <SelectTrigger className={`h-8 w-6 border border-l-0 border-gray-300 rounded-l-none rounded-r-md bg-white p-0 flex items-center justify-center [&>svg]:w-3 [&>svg]:h-3
+       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'outline-none focus:ring-offset-0 focus:outline-none hover:bg-gray-50 focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`} data-size="">
+                                        </SelectTrigger>
+                                        <SelectContent align="center" side="bottom" className="w-20">
+                                            {['4', '6', '8', '10', '12', '16', '20', '24', '28', '36', '48', '64', '72', '96'].map(size => (
+                                                <SelectItem key={size} value={size}>
+                                                    {size}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
                         </div>
                     )}
 
                     {true && ( // Text color always visible
-                        <div className="flex items-center gap-1">
-                            <div className="w-px h-6 bg-gray-300 mx-1"></div>
+                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
+                            <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>
 
                             {/* Text Color with current color indicator */}
                             <Popover>
@@ -848,7 +1343,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                         />
                                     </div>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-64 p-4" side="bottom" align="center">
+                                <PopoverContent className="w-64 p-4" side={isVertical ? "right" : "bottom"} align="center">
                                     <div className="space-y-3">
                                         <h4 className="text-sm font-medium text-gray-700">Text Color</h4>
 
@@ -937,7 +1432,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
                     {/* Background Color with current color indicator */}
                     {true && ( // Background color always visible
-                        <div className="flex items-center gap-1">
+                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <div className="h-8 w-8 p-0 flex flex-col justify-center items-center relative">
@@ -960,7 +1455,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                         />
                                     </div>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-80 p-4" side="bottom" align="center">
+                                <PopoverContent className="w-80 p-4" side={isVertical ? "right" : "bottom"} align="center">
                                     <div className="space-y-4">
                                         <h4 className="text-sm font-medium text-gray-700">Background Color</h4>
 
@@ -1082,11 +1577,11 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     )}
 
                     {/* Separator before Text Alignment - only show if alignment is visible */}
-                    {shouldShowTextAlign() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
+                    {shouldShowTextAlign && <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>}
 
                     {/* Text Alignment */}
-                    {shouldShowTextAlign() && (
-                        <div className="flex items-center gap-1">
+                    {shouldShowTextAlign && (
+                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
                             <Select
                                 value={
                                     editor.isActive({ textAlign: 'center' }) ? 'center' :
@@ -1141,10 +1636,10 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     )}
 
                     {/* Separator before Lists - only show if lists are visible */}
-                    {shouldShowLists() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
+                    {shouldShowLists && <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>}
 
                     {/* Essential Lists */}
-                    {shouldShowLists() && (
+                    {shouldShowLists && (
                         <>
                             <Button variant="outline" size="sm"
                                 onClick={() => editor.chain().focus().toggleBulletList().run()}
@@ -1175,10 +1670,10 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     )}
 
                     {/* Separator before Indent - only show if indent is visible */}
-                    {shouldShowIndent() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
+                    {shouldShowIndent && <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>}
 
                     {/* Indentation Controls */}
-                    {shouldShowIndent() && (
+                    {shouldShowIndent && (
                         <>
                             <Button variant="outline"
                                 onClick={() => {
@@ -1230,7 +1725,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     )}
 
                     {/* Clear Formatting */}
-                    {shouldShowClearFormatting() && (
+                    {shouldShowClearFormatting && (
                         <Button variant="outline" size="sm"
                             onClick={() => {
                                 if (!isEditingDisabled) {
@@ -1246,23 +1741,23 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     )}
 
                     {/* Separator before Insert Options - only show if insert options are visible */}
-                    {shouldShowInsertOptions() && <div className="w-px h-6 bg-gray-300 mx-1"></div>}
+                    {shouldShowInsertOptions && <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>}
 
                     {/* INSERT OPTIONS */}
-                    {shouldShowInsertOptions() && (
-                        <div className="flex items-center gap-1">
+                    {shouldShowInsertOptions && (
+                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
                             {/* Table Grid Selector */}
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <Button variant="outline" size="sm"
-                                        className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
+                                        className={isVertical ? "h-8 w-8 p-0" : "flex items-center gap-1.5 px-2 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"}
                                         title="Insert Table"
                                     >
                                         <Table className="w-4 h-4" />
-                                        <span className="hidden lg:inline">Table</span>
+                                        {!isVertical && <span className="hidden lg:inline">Table</span>}
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-64 p-4" side="bottom" align="start">
+                                <PopoverContent className="w-64 p-4" side={isVertical ? "right" : "bottom"} align="start">
                                     <div className="space-y-3">
                                         <h4 className="text-sm font-medium text-gray-700">Insert Table</h4>
                                         <TableGridSelector
@@ -1286,11 +1781,11 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                     // Insert a Mermaid code block directly instead of using prompt
                                     editor?.chain().focus().toggleCodeBlock({ language: 'mermaid' }).insertContent(defaultChart).run();
                                 }}
-                                className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
+                                className={isVertical ? "h-8 w-8 p-0" : "flex items-center gap-1.5 px-2 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"}
                                 title="Insert Mermaid Diagram"
                             >
                                 <Network className="w-4 h-4" />
-                                <span className="hidden lg:inline">Diagram</span>
+                                {!isVertical && <span className="hidden lg:inline">Diagram</span>}
                             </Button>
 
                             <Button variant="outline" size="sm"
@@ -1334,20 +1829,25 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                         }
                                     }
                                 }}
-                                className="flex items-center gap-2 px-3 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"
+                                className={isVertical ? "h-8 w-8 p-0" : "flex items-center gap-1.5 px-2 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"}
                                 title="Insert Link"
                             >
                                 <Link className="w-4 h-4" />
-                                <span className="hidden lg:inline">Link</span>
+                                {!isVertical && <span className="hidden lg:inline">Link</span>}
                             </Button>
                         </div>
                     )}
 
                 </div>
 
+                {/* Spacing before More Options */}
+                {shouldShowMoreOptions && (
+                    <div className={isVertical ? 'h-2 w-full' : 'w-px h-6 bg-gray-300 mx-2'}></div>
+                )}
+
                 {/* MORE OPTIONS DROPDOWN - Shows when sections are hidden due to narrow width */}
-                {shouldShowMoreOptions() && (
-                    <div className="relative ml-auto flex-shrink-0">
+                {shouldShowMoreOptions && (
+                    <div className="relative flex-shrink-0">
                         <DropdownMenu open={showMoreOptions} onOpenChange={setShowMoreOptions}>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" size="sm"
@@ -1358,11 +1858,15 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                 </Button>
                             </DropdownMenuTrigger>
 
-                            <DropdownMenuContent align="end" className="w-50">
+                            <DropdownMenuContent
+                                side={dropdownAlignment.side}
+                                align={dropdownAlignment.align}
+                                className="w-50"
+                            >
                                 {/* Categorized sections - only show categories when sections are hidden */}
 
                                 {/* INSERT CATEGORY */}
-                                {!shouldShowInsertOptions() && (
+                                {!shouldShowInsertOptions && (
                                     <>
                                         <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
                                             Insert
@@ -1433,7 +1937,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                 )}
 
                                 {/* ALIGNMENT CATEGORY */}
-                                {!shouldShowTextAlign() && (
+                                {!shouldShowTextAlign && (
                                     <>
                                         <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
                                             Alignment
@@ -1461,7 +1965,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
 
                                 {/* INDENTATION CATEGORY */}
-                                {!shouldShowIndent() && (
+                                {!shouldShowIndent && (
                                     <>
                                         <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
                                             Indentation
@@ -1507,7 +2011,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                 )}
 
                                 {/* LISTS CATEGORY */}
-                                {!shouldShowLists() && (
+                                {!shouldShowLists && (
                                     <>
                                         <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
                                             List
@@ -1528,7 +2032,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                 )}
 
                                 {/* CLEAR FORMATTING CATEGORY */}
-                                {!shouldShowClearFormatting() && (
+                                {!shouldShowClearFormatting && (
                                     <>
                                         <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
                                             More

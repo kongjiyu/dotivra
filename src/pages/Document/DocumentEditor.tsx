@@ -40,6 +40,8 @@ export default function DocumentEditor() {
         onOpenChat
     } = useDocument();
     const documentContentRef = useRef<HTMLDivElement>(null);
+    const latestContentRef = useRef<string>("");
+    const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // AI Editing State
     const [showAIAction, setShowAIAction] = useState(false);
@@ -137,8 +139,55 @@ export default function DocumentEditor() {
         loadDocument();
     }, [documentId]); // Remove state setters from dependencies to prevent infinite loop
 
+    // Optimized onUpdate: avoid re-rendering via context on each keystroke
+    const handleDocumentUpdateOptimized = useCallback((content: string) => {
+        latestContentRef.current = content;
+
+        if (documentId) {
+            if (autoSaveTimeoutRef.current) {
+                clearTimeout(autoSaveTimeoutRef.current);
+            }
+            autoSaveTimeoutRef.current = setTimeout(async () => {
+                try {
+                    setIsSaving(true);
+                    const contentToSave = latestContentRef.current;
+                    const response = await fetch(API_ENDPOINTS.document(documentId), {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            content: contentToSave,
+                            EditedBy: user?.uid || 'anonymous',
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        console.error('? Failed to auto-save document:', response.status, await response.text());
+                    }
+
+                    // Periodically reflect saved content to context
+                    setDocumentContent(contentToSave);
+                } catch (error) {
+                    console.error('? Auto-save error:', error);
+                } finally {
+                    setIsSaving(false);
+                }
+            }, 2000);
+        }
+    }, [documentId, setDocumentContent, user?.uid]);
+
+    // Cleanup pending autosave on unmount
+    useEffect(() => {
+        return () => {
+            if (autoSaveTimeoutRef.current) {
+                clearTimeout(autoSaveTimeoutRef.current);
+            }
+        };
+    }, []);
+
     const handleDocumentUpdate = useCallback((content: string) => {
-        setDocumentContent(content);
+        latestContentRef.current = content;
 
         // Auto-save to database if we have a documentId
         if (documentId) {
@@ -432,7 +481,7 @@ export default function DocumentEditor() {
             <div ref={documentContentRef} className="w-full h-full relative">
                 <TipTap
                     initialContent={effectiveContent}
-                    onUpdate={handleDocumentUpdate}
+                    onUpdate={handleDocumentUpdateOptimized}
                     onEditorReady={handleEditorReady}
                     onOpenChat={onOpenChat}
                     className=""

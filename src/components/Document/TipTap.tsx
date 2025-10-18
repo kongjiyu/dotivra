@@ -165,15 +165,12 @@ const Tiptap = ({
 
     return (
         <EditorContext.Provider value={contextValue}>
-            <div className={`tiptap-container h-full min-h-0 ${className}`}>
-                <div className="mx-auto w-[75vw] max-w-[1200px] min-w-[320px] space-y-0 h-full min-h-0">
-                    {/* Toolbar (fixed under the fixed menu), slightly wider than content */}
-                    <div className="fixed left-1/2 -translate-x-1/2 top-[144px] z-20 w-[96vw] max-w-[1680px] min-w-[360px] px-3">
-                        <ToolBar editor={editor} />
-                    </div>
-                    {/* Spacer to offset fixed toolbar height */}
-                    <div className="h-[56px]"></div>
+            <div className={`tiptap-container h-full min-h-0 relative ${className}`}>
+                {/* Toolbar - Now handles its own positioning internally, constrained to this container */}
+                <ToolBar editor={editor} />
 
+                {/* Document Content Container */}
+                <div className="mx-auto w-[1000px] max-w-[95vw] min-w-[320px] space-y-0 h-full min-h-0 pt-20">
                     {/* Document Content */}
                     <div className="min-h-0">
                         <DocumentContext editor={editor} onOpenChat={onOpenChat}>
