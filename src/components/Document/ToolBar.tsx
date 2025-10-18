@@ -162,52 +162,84 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         const toolbar = containerRef.current;
         if (!toolbar) return;
 
-        const rect = toolbar.getBoundingClientRect();
+        try {
+            const rect = toolbar.getBoundingClientRect();
 
-        // CRITICAL: Always use getBoundingClientRect for accurate position
-        // This prevents blinking by using the actual rendered position
-        const currentX = rect.left;
-        const currentY = rect.top;
+            // Validate rect to prevent errors
+            if (rect.width <= 0 || rect.height <= 0) {
+                console.warn('Invalid toolbar dimensions during drag start');
+                return;
+            }
 
-        dragStartPos.current = {
-            x: e.clientX,
-            y: e.clientY,
-            toolbarX: currentX,
-            toolbarY: currentY
-        };
+            // CRITICAL: Always use getBoundingClientRect for accurate position
+            // This prevents blinking by using the actual rendered position
+            const currentX = rect.left;
+            const currentY = rect.top;
 
-        // Set position immediately to transition from static to fixed positioning
-        setToolbarPosition({ x: currentX, y: currentY });
-        setIsDragging(true);
+            dragStartPos.current = {
+                x: e.clientX,
+                y: e.clientY,
+                toolbarX: currentX,
+                toolbarY: currentY
+            };
+
+            // Set position immediately to transition from static to fixed positioning
+            setToolbarPosition({ x: currentX, y: currentY });
+            setIsDragging(true);
+        } catch (error) {
+            console.error('Error starting toolbar drag:', error);
+            // Fallback: reset to default position
+            setToolbarPosition(null);
+        }
     }, []); // Empty dependencies - no recreations
 
     const handleDragMove = useCallback((e: MouseEvent) => {
         if (!dragStartPos.current) return;
 
-        // Calculate position immediately for instant response
-        const deltaX = e.clientX - dragStartPos.current.x;
-        const deltaY = e.clientY - dragStartPos.current.y;
-        let newX = dragStartPos.current.toolbarX + deltaX;
-        let newY = dragStartPos.current.toolbarY + deltaY;
+        try {
+            // Calculate position immediately for instant response
+            const deltaX = e.clientX - dragStartPos.current.x;
+            const deltaY = e.clientY - dragStartPos.current.y;
+            let newX = dragStartPos.current.toolbarX + deltaX;
+            let newY = dragStartPos.current.toolbarY + deltaY;
 
-        // Get toolbar dimensions for boundary checking
-        const toolbar = containerRef.current;
-        if (toolbar) {
-            const toolbarRect = toolbar.getBoundingClientRect();
+            // Get toolbar dimensions for boundary checking
+            const toolbar = containerRef.current;
+            if (toolbar) {
+                const toolbarRect = toolbar.getBoundingClientRect();
 
-            // Find the tiptap-container boundary
-            const tiptapContainer = document.querySelector('.tiptap-container');
-            if (tiptapContainer) {
-                const containerRect = tiptapContainer.getBoundingClientRect();
+                // Validate dimensions
+                if (toolbarRect.width <= 0 || toolbarRect.height <= 0) {
+                    return; // Skip this frame if dimensions are invalid
+                }
 
-                // Clamp position within tiptap-container boundaries
-                newX = Math.max(containerRect.left, Math.min(newX, containerRect.right - toolbarRect.width));
-                newY = Math.max(containerRect.top, Math.min(newY, containerRect.bottom - toolbarRect.height));
+                // Find the tiptap-container boundary
+                const tiptapContainer = document.querySelector('.tiptap-container');
+                if (tiptapContainer) {
+                    const containerRect = tiptapContainer.getBoundingClientRect();
+
+                    // Validate container dimensions
+                    if (containerRect.width > 0 && containerRect.height > 0) {
+                        // Clamp position within tiptap-container boundaries
+                        newX = Math.max(containerRect.left, Math.min(newX, containerRect.right - toolbarRect.width));
+                        newY = Math.max(containerRect.top, Math.min(newY, containerRect.bottom - toolbarRect.height));
+                    }
+                }
             }
-        }
 
-        // Direct state update without requestAnimationFrame for zero lag
-        setToolbarPosition({ x: newX, y: newY });
+            // Validate final position before setting
+            if (isFinite(newX) && isFinite(newY)) {
+                // Direct state update without requestAnimationFrame for zero lag
+                setToolbarPosition({ x: newX, y: newY });
+            }
+        } catch (error) {
+            console.error('Error during toolbar drag:', error);
+            // Stop dragging on error
+            setIsDragging(false);
+            dragStartPos.current = null;
+            // Fallback to default position
+            setToolbarPosition(null);
+        }
     }, []);
 
     const handleDragEnd = useCallback(() => {
@@ -226,6 +258,100 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             };
         }
     }, [isDragging, handleDragMove, handleDragEnd]);
+
+    // Ref to track if we're currently updating position (prevent infinite loops)
+    const isUpdatingPosition = useRef(false);
+
+    // Helper function to safely clamp position with error handling
+    const safeClampPosition = useCallback((position: { x: number; y: number } | null): { x: number; y: number } | null => {
+        if (!position || !containerRef.current || isUpdatingPosition.current) return position;
+
+        try {
+            const toolbar = containerRef.current;
+            const toolbarRect = toolbar.getBoundingClientRect();
+            const tiptapContainer = document.querySelector('.tiptap-container');
+
+            if (!tiptapContainer) return position;
+
+            const containerRect = tiptapContainer.getBoundingClientRect();
+
+            // Validate rect dimensions to prevent invalid calculations
+            if (toolbarRect.width <= 0 || toolbarRect.height <= 0 ||
+                containerRect.width <= 0 || containerRect.height <= 0) {
+                return null; // Fallback to default position
+            }
+
+            // Clamp position within boundaries
+            const clampedX = Math.max(containerRect.left, Math.min(position.x, containerRect.right - toolbarRect.width));
+            const clampedY = Math.max(containerRect.top, Math.min(position.y, containerRect.bottom - toolbarRect.height));
+
+            // Check if position actually changed (prevent unnecessary updates)
+            const hasChanged = Math.abs(clampedX - position.x) > 1 || Math.abs(clampedY - position.y) > 1;
+
+            return hasChanged ? { x: clampedX, y: clampedY } : position;
+        } catch (error) {
+            console.error('Error clamping toolbar position:', error);
+            return null; // Fallback to default position on error
+        }
+    }, []);
+
+    // Handle window resize to re-clamp toolbar position within new boundaries
+    useEffect(() => {
+        let resizeTimeout: NodeJS.Timeout;
+
+        const handleResize = () => {
+            // Debounce resize handler to prevent too many updates
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(() => {
+                if (!toolbarPosition || isUpdatingPosition.current) return;
+
+                isUpdatingPosition.current = true;
+                const newPosition = safeClampPosition(toolbarPosition);
+
+                if (newPosition && newPosition !== toolbarPosition) {
+                    setToolbarPosition(newPosition);
+                }
+
+                // Reset flag after a delay
+                setTimeout(() => {
+                    isUpdatingPosition.current = false;
+                }, 100);
+            }, 150); // Debounce by 150ms
+        };
+
+        window.addEventListener('resize', handleResize);
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            clearTimeout(resizeTimeout);
+        };
+    }, [toolbarPosition, safeClampPosition]);
+
+    // Check position once when orientation changes (prevent infinite loops)
+    useEffect(() => {
+        if (isUpdatingPosition.current) return;
+
+        // Use timeout to ensure DOM has updated after orientation change
+        const timeoutId = setTimeout(() => {
+            if (!toolbarPosition || !containerRef.current) return;
+
+            isUpdatingPosition.current = true;
+            const newPosition = safeClampPosition(toolbarPosition);
+
+            if (newPosition && newPosition !== toolbarPosition) {
+                setToolbarPosition(newPosition);
+            } else if (!newPosition) {
+                // Fallback: reset to default position if calculation failed
+                setToolbarPosition(null);
+            }
+
+            // Reset flag after a delay
+            setTimeout(() => {
+                isUpdatingPosition.current = false;
+            }, 100);
+        }, 100);
+
+        return () => clearTimeout(timeoutId);
+    }, [isVertical]); // Only trigger on orientation change
 
     // Calculate dynamic maxIndentLevel based on window width
     // Wider screens can handle more indentation levels without content overflow
@@ -694,11 +820,19 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     zIndex: 50,
                     ...(isVertical && { maxHeight: '600px', overflowY: 'auto' }),
                     transition: isDragging ? 'none' : undefined
+                } : isVertical ? {
+                    // Vertical mode: Top-left of drag area (tiptap-container)
+                    position: 'fixed' as const,
+                    left: '16px', // Left edge with 16px padding, or left of centered 1000px container
+                    top: '168px', // Top of drag area (152px content start + 8px padding)
+                    zIndex: 50,
+                    maxHeight: '600px',
+                    overflowY: 'auto' as const
                 } : {
-                    // Default static positioning - centered below header (136px top offset)
+                    // Horizontal mode: Top-center of drag area (tiptap-container)
                     position: 'fixed' as const,
                     left: '50%',
-                    top: '136px',
+                    top: '168px', // Top of drag area (152px content start + 8px padding)
                     transform: 'translateX(-50%)',
                     zIndex: 50
                 }}
@@ -1591,14 +1725,14 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
                 </div>
 
-                {/* Spacing before More Options in vertical mode */}
-                {shouldShowMoreOptions && isVertical && (
-                    <div className="h-2 w-full"></div>
+                {/* Spacing before More Options */}
+                {shouldShowMoreOptions && (
+                    <div className={isVertical ? 'h-2 w-full' : 'w-px h-6 bg-gray-300 mx-2'}></div>
                 )}
 
                 {/* MORE OPTIONS DROPDOWN - Shows when sections are hidden due to narrow width */}
                 {shouldShowMoreOptions && (
-                    <div className="relative ml-auto flex-shrink-0">
+                    <div className="relative flex-shrink-0">
                         <DropdownMenu open={showMoreOptions} onOpenChange={setShowMoreOptions}>
                             <DropdownMenuTrigger asChild>
                                 <Button variant="outline" size="sm"
