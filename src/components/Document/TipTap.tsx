@@ -24,10 +24,10 @@ const Tiptap = ({
     onOpenChat
 }: TiptapProps) => {
     const [isReady, setIsReady] = useState(false);
-    const initialAppliedRef = useRef(false);
+    const lastAppliedContentRef = useRef<string | null>(null);
 
     // Create editor configuration using the config file
-    const editorConfig = useMemo(() =>
+    const editorConfig = useMemo(() => 
         createTipTapConfig({
             content: initialContent,
             editable,
@@ -119,14 +119,16 @@ const Tiptap = ({
         return handleDestroy;
     }, [handleDestroy]);
 
-    // Prevent first undo from reverting to empty document:
-    // Apply initialContent exactly once, suppress history + update.
+    // Apply initialContent when it changes, suppress history + update.
     useEffect(() => {
-        if (!editor) return;
-        if (!initialContent) return;
-        if (initialAppliedRef.current) return;
+        if (!editor || !initialContent) return;
+        
+        // Check if this content was already applied
+        if (lastAppliedContentRef.current === initialContent) return;
 
-        if (editor.getHTML() !== initialContent) {
+        const currentHTML = editor.getHTML();
+        
+        if (currentHTML !== initialContent) {
             // false => do not emit update event, avoids extra history noise
             editor.commands.setContent(initialContent, { emitUpdate: false });
             // Ensure no history entry for this transaction
@@ -135,7 +137,9 @@ const Tiptap = ({
                 editor.view.dispatch(tr);
             }
         }
-        initialAppliedRef.current = true;
+        
+        // Mark this content as applied
+        lastAppliedContentRef.current = initialContent;
     }, [editor, initialContent]);
 
     // Call onEditorReady when editor is ready

@@ -353,19 +353,39 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                   ))}
                 </select>
               ) : (
-                <div className="space-y-2">
-                  <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
-                    <span className="text-sm text-gray-600">
-                      No GitHub repositories found. Please connect your GitHub account via OAuth in your profile settings, or you can create the project without GitHub integration.
-                    </span>
+                <div className="space-y-3">
+                  <div className="w-full px-4 py-3 border border-yellow-300 bg-yellow-50 rounded-lg">
+                    <div className="flex items-start space-x-2">
+                      <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-yellow-800">GitHub Account Not Connected</p>
+                        <p className="text-xs text-yellow-700 mt-1">
+                          To browse and select your repositories, please connect your GitHub account in your{' '}
+                          <a href="/profile" className="font-semibold underline hover:text-yellow-900" onClick={(e) => {
+                            e.preventDefault();
+                            window.location.href = '/profile';
+                          }}>
+                            Profile Settings
+                          </a>.
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                  <input
-                    type="text"
-                    value={formData.selectedRepo}
-                    onChange={(e) => handleInputChange('selectedRepo', e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Or enter GitHub repository URL manually (optional)"
-                  />
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Or enter GitHub repository manually (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.selectedRepo}
+                      onChange={(e) => handleInputChange('selectedRepo', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                      placeholder="e.g., username/repository-name or https://github.com/username/repo"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      You can manually enter a repository URL or skip this step and add it later.
+                    </p>
+                  </div>
                 </div>
               )}
               

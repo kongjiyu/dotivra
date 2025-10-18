@@ -1,6 +1,6 @@
 // src/services/aiService.ts
 import { GoogleGenerativeAI } from '@google/generative-ai';
-import { repositoryContextService, type RepositoryContext } from './repositoryContextService';
+import { repositoryContextService } from './repositoryContextService';
 import type { User } from 'firebase/auth';
 
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
@@ -14,7 +14,8 @@ class AIService {
             throw new Error('VITE_GEMINI_API_KEY environment variable is required');
         }
         this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+        // Using Gemini 2.5 Pro for better quality document generation
+        this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
     }
 
     async generateContent(prompt: string, context?: string): Promise<string> {
@@ -187,6 +188,386 @@ Generate a helpful response that leverages the repository knowledge:`;
             // Fallback to regular generation without repository context
             return this.generateFromPrompt(prompt, documentContext);
         }
+    }
+
+    /**
+     * ITERATIVE AI GENERATION - AI requests files it needs
+     * Generate document from template and repository with iterative file requests
+     */
+    async generateDocumentFromTemplateAndRepoIterative(
+        user: User,
+        templatePrompt: string,
+        repositoryInfo: { owner: string; repo: string; fullName: string },
+        documentRole: string,
+        documentName: string,
+        onProgress?: (step: string, detail?: string) => void
+    ): Promise<string> {
+        try {
+            onProgress?.('init', 'Starting iterative AI generation...');
+            console.log('🔄 Starting iterative AI document generation...');
+
+            // Step 1: Get repository structure
+            onProgress?.('structure', 'Fetching repository structure...');
+            const repoContext = await repositoryContextService.getRepositoryContext(
+                user,
+                repositoryInfo.owner,
+                repositoryInfo.repo
+            );
+
+            if (!repoContext) {
+                throw new Error('Could not fetch repository context');
+            }
+
+            const directoryTree = this.buildDirectoryTree(repoContext.structure);
+            onProgress?.('structure', `Found ${repoContext.structure.length} items`);
+
+            // Step 2: Initial AI request
+            onProgress?.('analysis', 'AI analyzing repository...');
+            const initialPrompt = `You are creating a ${documentRole} document.
+
+**Template:** ${templatePrompt}
+**Document:** ${documentName}
+**Repository:** ${repositoryInfo.fullName}
+**Structure:**
+${directoryTree}
+**README:**
+${repoContext.readme?.substring(0, 1000) || 'None'}
+
+**Instructions:**
+1. FIRST: Respond with JSON listing files you need:
+   {"needFiles": true, "files": ["path1", "path2"], "reason": "why"}
+2. AFTER receiving files: Either request more OR generate:
+   {"needFiles": false, "content": "<h1>Title</h1><p>Content</p>"}
+
+Start - which files do you need? JSON only:`;
+
+            let iteration = 0;
+            const maxIter = 5;
+            let content = '';
+            const provided: string[] = [];
+
+            while (iteration < maxIter) {
+                iteration++;
+                console.log(`\n${'='.repeat(60)}`);
+                console.log(`🔄 ITERATION ${iteration}/${maxIter}`);
+                console.log(`${'='.repeat(60)}`);
+                onProgress?.('iteration', `AI iteration ${iteration} of ${maxIter}...`);
+
+                let prompt = '';
+                if (iteration === 1) {
+                    prompt = initialPrompt;
+                    console.log('📋 Sending initial prompt with repository structure...');
+                } else {
+                    console.log(`📦 Fetching ${provided.length} requested files...`);
+                    const fileContents = await this.getFileContents(user, repositoryInfo, provided);
+                    console.log(`✅ Files fetched successfully (${fileContents.length} chars)`);
+                    prompt = `You previously requested these files. Here they are:
+
+${fileContents}
+
+**IMPORTANT NOTES:**
+- Files marked with ❌ NOT FOUND do not exist in the repository
+- Do NOT request files that were marked as NOT FOUND again
+- Work with the files that were successfully fetched (marked with ✅)
+- If you have enough information, generate the document now
+
+Now respond with JSON:
+- If you need MORE files (that exist): {"needFiles": true, "files": ["path1", "path2"], "reason": "why"}
+- If you're ready to generate: {"needFiles": false, "content": "<h1>Title</h1><p>Content</p>"}
+
+Your JSON response:`;
+                    console.log('📋 Sending files to AI and asking for next step...');
+                }
+
+                console.log(`🤖 Calling Gemini API (prompt length: ${prompt.length} chars)...`);
+                const resp = await this.model.generateContent(prompt);
+                const text = await resp.response.text();
+                console.log(`📥 AI Response received (${text.length} chars)`);
+                console.log('📄 AI Response preview:', text.substring(0, 200));
+                
+                let parsed: any;
+                try {
+                    const match = text.match(/\{[\s\S]*\}/);
+                    if (match) {
+                        parsed = JSON.parse(match[0]);
+                        console.log('✅ Successfully parsed JSON response:', JSON.stringify(parsed, null, 2));
+                    } else {
+                        console.log('⚠️ No JSON found in response, treating as raw content');
+                        parsed = null;
+                    }
+                } catch (parseError) {
+                    console.log('❌ JSON parsing failed:', parseError);
+                    console.log('📝 Using raw AI response as content');
+                    content = this.cleanHTMLContent(text);
+                    break;
+                }
+
+                if (!parsed) {
+                    console.log('📝 No parsed JSON, using raw text as content');
+                    content = this.cleanHTMLContent(text);
+                    break;
+                }
+
+                if (parsed.needFiles && parsed.files?.length > 0) {
+                    console.log(`📂 AI REQUESTED FILES: ${JSON.stringify(parsed.files)}`);
+                    console.log(`💭 AI's reason: ${parsed.reason || 'No reason provided'}`);
+                    onProgress?.('files', `AI requesting ${parsed.files.length} files: ${parsed.files.slice(0, 2).join(', ')}${parsed.files.length > 2 ? '...' : ''}`);
+                    
+                    // Clear and set new files to fetch
+                    provided.length = 0;
+                    provided.push(...parsed.files);
+                    console.log(`📋 Files queued for next iteration: ${provided.join(', ')}`);
+                } else if (parsed.needFiles === false && parsed.content) {
+                    console.log(`✅ AI READY TO GENERATE!`);
+                    console.log(`📄 Content received: ${parsed.content.length} chars`);
+                    console.log(`📄 Content preview: ${parsed.content.substring(0, 200)}...`);
+                    content = parsed.content;
+                    break;
+                } else {
+                    console.log(`⚠️ Unexpected AI response format:`, parsed);
+                    console.log('📝 Using raw text as fallback');
+                    content = text;
+                    break;
+                }
+            }
+
+            if (!content) {
+                content = this.generateFallbackContent(templatePrompt, repositoryInfo, documentName, documentRole);
+            }
+
+            onProgress?.('done', 'Complete!');
+            return this.cleanHTMLContent(content);
+
+        } catch (error) {
+            console.error('❌ Iterative error:', error);
+            onProgress?.('error', error instanceof Error ? error.message : 'Failed');
+            throw error;
+        }
+    }
+
+    private buildDirectoryTree(structure: any[]): string {
+        const tree: string[] = [];
+        const sorted = structure.slice(0, 100).sort((a, b) => {
+            if (a.type === 'dir' && b.type !== 'dir') return -1;
+            if (a.type !== 'dir' && b.type === 'dir') return 1;
+            return a.path.localeCompare(b.path);
+        });
+        for (const item of sorted) {
+            tree.push(`${'  '.repeat((item.path.match(/\//g) || []).length)}${item.type === 'dir' ? '📁' : '📄'} ${item.path}`);
+        }
+        if (structure.length > 100) tree.push(`... +${structure.length - 100} more`);
+        return tree.join('\n');
+    }
+
+    private async getFileContents(user: User, repoInfo: { owner: string; repo: string }, paths: string[]): Promise<string> {
+        const contents: string[] = [];
+        const successFiles: string[] = [];
+        const failedFiles: string[] = [];
+        
+        console.log(`📦 Attempting to fetch ${paths.length} files...`);
+        
+        for (const path of paths) {
+            try {
+                console.log(`  Fetching: ${path}...`);
+                const file = await repositoryContextService.getFileWithContext(user, repoInfo.owner, repoInfo.repo, path);
+                if (file?.content) {
+                    const truncated = file.content.length > 5000;
+                    const contentToShow = file.content.substring(0, 5000);
+                    contents.push(`**${path}** ${truncated ? `(${file.content.length} chars, showing first 5000)` : `(${file.content.length} chars)`}\n\`\`\`${file.language || 'text'}\n${contentToShow}\n\`\`\``);
+                    successFiles.push(path);
+                    console.log(`  ✅ ${path} - ${file.content.length} chars`);
+                } else {
+                    contents.push(`**${path}**: ⚠️ File exists but has no content`);
+                    failedFiles.push(path);
+                    console.log(`  ⚠️ ${path} - No content`);
+                }
+            } catch (error) {
+                const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+                contents.push(`**${path}**: ❌ NOT FOUND (${errorMsg})`);
+                failedFiles.push(path);
+                console.log(`  ❌ ${path} - ${errorMsg}`);
+            }
+        }
+        
+        console.log(`📊 File fetch summary: ${successFiles.length} succeeded, ${failedFiles.length} failed`);
+        if (successFiles.length > 0) {
+            console.log(`  ✅ Success: ${successFiles.join(', ')}`);
+        }
+        if (failedFiles.length > 0) {
+            console.log(`  ❌ Failed: ${failedFiles.join(', ')}`);
+        }
+        
+        // Add summary at the beginning
+        const summary = `**FILE FETCH SUMMARY:**
+- ✅ Successfully fetched: ${successFiles.length} files
+- ❌ Failed/Not found: ${failedFiles.length} files
+${failedFiles.length > 0 ? `\n**Files that don't exist:** ${failedFiles.join(', ')}` : ''}
+
+---
+
+`;
+        
+        return summary + contents.join('\n\n');
+    }
+
+    /**
+     * Generate document content from template and GitHub repository
+     * This method fetches the template prompt from Firestore, analyzes the repository,
+     * and generates HTML-formatted documentation content using Gemini AI
+     */
+    async generateDocumentFromTemplateAndRepo(
+        user: User,
+        templatePrompt: string,
+        repositoryInfo: { owner: string; repo: string; fullName: string },
+        documentRole: string,
+        documentName: string
+    ): Promise<string> {
+        try {
+            console.log('🤖 Starting AI document generation...');
+            console.log('📋 Template:', templatePrompt.substring(0, 100) + '...');
+            console.log('📦 Repository:', repositoryInfo.fullName);
+            console.log('👤 Role:', documentRole);
+
+            // Get repository context
+            const repoContext = await repositoryContextService.getRepositoryContext(
+                user,
+                repositoryInfo.owner,
+                repositoryInfo.repo
+            );
+
+            if (!repoContext) {
+                throw new Error('Failed to fetch repository context');
+            }
+
+            // Format repository context for AI
+            const contextFormatted = repositoryContextService.formatContextForAI(repoContext);
+
+            // Build comprehensive prompt for Gemini
+            const aiPrompt = `You are a technical documentation expert tasked with creating comprehensive, professional documentation for a software project.
+
+## PROJECT INFORMATION
+Repository: ${repositoryInfo.fullName}
+Description: ${repoContext.repository.description || 'No description provided'}
+Primary Language: ${repoContext.repository.language}
+
+## DOCUMENTATION TASK
+Create a ${documentName} document for the ${documentRole} role.
+
+## TEMPLATE INSTRUCTIONS
+${templatePrompt}
+
+## REPOSITORY CONTEXT
+${contextFormatted}
+
+## OUTPUT REQUIREMENTS
+1. Generate the documentation in **clean HTML format** suitable for a rich text editor
+2. Use semantic HTML5 tags: <h1>, <h2>, <h3>, <p>, <ul>, <ol>, <li>, <strong>, <em>, <code>, <pre>
+3. Structure the content with clear headings and sections
+4. Include specific examples from the repository where relevant
+5. Reference actual file paths, code snippets, and project structure
+6. Make the content comprehensive but readable
+7. Adapt the tone and depth based on the ${documentRole} role
+8. DO NOT include markdown formatting (no \`\`\`, no ##, no **)
+9. DO NOT wrap the content in <html>, <body>, or <div> tags
+10. Start directly with the document heading (<h1>)
+
+## EXAMPLE OUTPUT STRUCTURE
+<h1>${documentName}</h1>
+
+<h2>Overview</h2>
+<p>Brief introduction to the project and this document...</p>
+
+<h2>Key Features</h2>
+<ul>
+  <li>Feature 1 with specific details from the repository</li>
+  <li>Feature 2 referencing actual code</li>
+</ul>
+
+<h2>Technical Details</h2>
+<p>Detailed technical information based on repository analysis...</p>
+
+<h3>File Structure</h3>
+<p>Description of the project structure with actual paths...</p>
+
+<h3>Key Components</h3>
+<p>Analysis of important files and their purposes...</p>
+
+Now generate the complete ${documentName} document following these guidelines:`;
+
+            console.log('🚀 Sending request to Gemini AI...');
+            
+            // Generate content using Gemini
+            const generatedContent = await this.model.generateContent(aiPrompt);
+            const response = await generatedContent.response;
+            let htmlContent = response.text();
+
+            console.log('✅ AI generation complete');
+            console.log('📄 Generated content length:', htmlContent.length);
+
+            // Clean up the response
+            htmlContent = this.cleanHTMLContent(htmlContent);
+
+            return htmlContent;
+
+        } catch (error) {
+            console.error('❌ Error generating document from template and repo:', error);
+            
+            // Fallback to basic template-based content
+            return this.generateFallbackContent(templatePrompt, repositoryInfo, documentName, documentRole);
+        }
+    }
+
+    /**
+     * Clean and sanitize AI-generated HTML content
+     */
+    private cleanHTMLContent(html: string): string {
+        // Remove markdown code fences if present
+        html = html.replace(/```html\n?/g, '');
+        html = html.replace(/```\n?/g, '');
+        
+        // Remove any wrapping html/body tags
+        html = html.replace(/<\/?html[^>]*>/gi, '');
+        html = html.replace(/<\/?body[^>]*>/gi, '');
+        
+        // Ensure content starts with a heading
+        if (!html.trim().startsWith('<h1>')) {
+            html = '<h1>Document</h1>\n' + html;
+        }
+        
+        return html.trim();
+    }
+
+    /**
+     * Generate fallback content if AI generation fails
+     */
+    private generateFallbackContent(
+        templatePrompt: string,
+        repositoryInfo: { owner: string; repo: string; fullName: string },
+        documentName: string,
+        documentRole: string
+    ): string {
+        return `<h1>${documentName}</h1>
+
+<h2>Overview</h2>
+<p>This document was created for the <strong>${documentRole}</strong> role for the repository <code>${repositoryInfo.fullName}</code>.</p>
+
+<h2>Template Guidelines</h2>
+<p>${templatePrompt}</p>
+
+<h2>Repository Information</h2>
+<p><strong>Repository:</strong> ${repositoryInfo.fullName}</p>
+<p><strong>Owner:</strong> ${repositoryInfo.owner}</p>
+<p><strong>Repository:</strong> ${repositoryInfo.repo}</p>
+
+<h2>Next Steps</h2>
+<ul>
+  <li>Review and customize this document based on your project needs</li>
+  <li>Add specific details about your project</li>
+  <li>Include relevant code examples and explanations</li>
+  <li>Update sections to match your documentation requirements</li>
+</ul>
+
+<p><em>This is a template document. Please edit and customize it based on your specific project requirements.</em></p>`;
     }
 
     /**

@@ -8,6 +8,7 @@ import {
   GithubAuthProvider,
   signOut,
   onAuthStateChanged,
+  linkWithCredential,
   type User,
   type AuthError
 } from 'firebase/auth';
@@ -25,9 +26,11 @@ const auth = getAuth();
 const googleProvider = new GoogleAuthProvider();
 const githubProvider = new GithubAuthProvider();
 
-// Add scopes for GitHub
+// Add scopes for GitHub - Enhanced for repository access
 githubProvider.addScope('read:user');
 githubProvider.addScope('user:email');
+githubProvider.addScope('repo'); // Access to public and private repositories
+githubProvider.addScope('read:org'); // Read organization membership
 
 export interface UserProfile {
   uid: string;
@@ -37,6 +40,11 @@ export interface UserProfile {
   provider: string;
   createdAt: any;
   lastLoginAt: any;
+  // GitHub-specific fields
+  githubUsername?: string;
+  githubAccessToken?: string; // Encrypted
+  githubTokenExpiry?: any;
+  githubScopes?: string[];
 }
 
 class AuthService {
@@ -88,17 +96,98 @@ class AuthService {
     }
   }
 
-  // GitHub Sign In
+  // GitHub Sign In - Enhanced with token capture and account linking
   async signInWithGitHub() {
     try {
       const result = await signInWithPopup(auth, githubProvider);
-      await this.updateUserProfile(result.user, 'github');
-      return { success: true, user: result.user };
-    } catch (error) {
+      
+      // Extract GitHub access token from credential
+      const credential = GithubAuthProvider.credentialFromResult(result);
+      const githubAccessToken = credential?.accessToken;
+      
+      if (githubAccessToken) {
+        // Store GitHub-specific information
+        await this.updateUserProfileWithGitHub(result.user, 'github', {
+          accessToken: githubAccessToken,
+          scopes: ['read:user', 'user:email', 'repo', 'read:org'],
+          username: result.user.displayName || 'unknown'
+        });
+      } else {
+        // Fallback to regular profile update
+        await this.updateUserProfile(result.user, 'github');
+      }
+      
+      return { 
+        success: true, 
+        user: result.user,
+        hasGitHubAccess: !!githubAccessToken
+      };
+    } catch (error: any) {
       console.error('GitHub sign in error:', error);
+      
+      // Handle account linking when email already exists with different provider
+      if (error.code === 'auth/account-exists-with-different-credential') {
+        try {
+          // Get the pending GitHub credential
+          const pendingCredential = GithubAuthProvider.credentialFromError(error);
+          
+          if (pendingCredential && error.customData?.email) {
+            // The user needs to sign in with their existing method first
+            // and then link the GitHub account
+            return {
+              success: false,
+              error: 'An account already exists with this email using a different sign-in method.',
+              needsLinking: true,
+              pendingCredential,
+              email: error.customData.email,
+              existingProviders: error.customData.allProviders || []
+            };
+          }
+        } catch (linkError) {
+          console.error('Error handling account linking:', linkError);
+        }
+      }
+      
       return { 
         success: false, 
         error: this.getErrorMessage(error as AuthError) 
+      };
+    }
+  }
+
+  // Link GitHub account to existing user
+  async linkGitHubAccount(pendingCredential: any) {
+    try {
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        throw new Error('No user is currently signed in');
+      }
+
+      // Link the GitHub credential to the current user
+      const result = await linkWithCredential(currentUser, pendingCredential);
+      
+      // Extract GitHub access token from the linked credential
+      const githubAccessToken = pendingCredential?.accessToken;
+      
+      if (githubAccessToken) {
+        // Store GitHub-specific information
+        await this.updateUserProfileWithGitHub(result.user, 'github', {
+          accessToken: githubAccessToken,
+          scopes: ['read:user', 'user:email', 'repo', 'read:org'],
+          username: result.user.displayName || 'unknown'
+        });
+      }
+
+      return {
+        success: true,
+        user: result.user,
+        hasGitHubAccess: !!githubAccessToken
+      };
+    } catch (error) {
+      console.error('GitHub account linking error:', error);
+      return {
+        success: false,
+        error: this.getErrorMessage(error as AuthError)
       };
     }
   }
@@ -148,6 +237,93 @@ class AuthService {
     } else {
       // Create new user profile
       await this.createUserProfile(user, provider);
+    }
+  }
+
+  // Update user profile with GitHub-specific data
+  private async updateUserProfileWithGitHub(
+    user: User, 
+    provider: string,
+    githubData: {
+      accessToken: string;
+      scopes: string[];
+      username: string;
+    }
+  ) {
+    const userRef = doc(db, 'Users', user.uid);
+    const userDoc = await getDoc(userRef);
+
+    // Create a simple encryption for the token (base64 + timestamp)
+    const encryptedToken = this.encryptToken(githubData.accessToken);
+
+    if (userDoc.exists()) {
+      // Update existing user with GitHub data
+      await setDoc(userRef, {
+        lastLoginAt: serverTimestamp(),
+        githubUsername: githubData.username,
+        githubAccessToken: encryptedToken,
+        githubTokenExpiry: new Date(Date.now() + 8760 * 60 * 60 * 1000), // 1 year
+        githubScopes: githubData.scopes
+      }, { merge: true });
+    } else {
+      // Create new user profile with GitHub data
+      const userProfile: UserProfile = {
+        uid: user.uid,
+        email: user.email || '',
+        displayName: user.displayName || '',
+        photoURL: user.photoURL || '',
+        provider,
+        createdAt: serverTimestamp(),
+        lastLoginAt: serverTimestamp(),
+        githubUsername: githubData.username,
+        githubAccessToken: encryptedToken,
+        githubTokenExpiry: new Date(Date.now() + 8760 * 60 * 60 * 1000),
+        githubScopes: githubData.scopes
+      };
+
+      await setDoc(userRef, userProfile);
+    }
+  }
+
+  // Simple token encryption (you may want to use a more robust method in production)
+  private encryptToken(token: string): string {
+    const timestamp = Date.now().toString();
+    const combined = token + '|' + timestamp;
+    return btoa(combined); // Base64 encoding
+  }
+
+  // Decrypt token
+  async decryptToken(encryptedToken: string): Promise<string | null> {
+    try {
+      const decoded = atob(encryptedToken);
+      const [token, timestamp] = decoded.split('|');
+      
+      // Check if token is still valid (not older than 1 year)
+      const tokenAge = Date.now() - parseInt(timestamp);
+      const oneYear = 8760 * 60 * 60 * 1000;
+      
+      if (tokenAge > oneYear) {
+        return null; // Token expired
+      }
+      
+      return token;
+    } catch (error) {
+      console.error('Token decryption failed:', error);
+      return null;
+    }
+  }
+
+  // Get GitHub access token for authenticated user
+  async getGitHubAccessToken(uid: string): Promise<string | null> {
+    try {
+      const userProfile = await this.getUserProfile(uid);
+      if (userProfile?.githubAccessToken) {
+        return await this.decryptToken(userProfile.githubAccessToken);
+      }
+      return null;
+    } catch (error) {
+      console.error('Failed to get GitHub access token:', error);
+      return null;
     }
   }
 

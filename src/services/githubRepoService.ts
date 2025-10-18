@@ -1,5 +1,5 @@
 // GitHub Repository Service for accessing user repositories
-import { githubOAuthService } from './githubOAuthService';
+import GitHubService from './gitHubService';
 import type { User } from 'firebase/auth';
 
 export interface GitHubRepository {
@@ -35,63 +35,52 @@ export interface GitHubContent {
 }
 
 class GitHubRepoService {
+  private githubService: GitHubService;
+
+  constructor() {
+    this.githubService = new GitHubService();
+  }
+
   /**
-   * Get user's repositories
+   * Get user's repositories using authenticated GitHub service
    */
-  async getUserRepositories(user: User): Promise<GitHubRepository[]> {
-    const token = await githubOAuthService.getUserGitHubToken(user);
-    if (!token) {
+  async getUserRepositories(_user?: User): Promise<GitHubRepository[]> {
+    try {
+      // Use the GitHubService which handles authentication via Firebase tokens
+      const repos = await this.githubService.getUserRepositories();
+      // Map to include ssh_url for compatibility
+      return repos.map(repo => ({
+        ...repo,
+        ssh_url: repo.clone_url.replace('https://', 'git@').replace('/', ':')
+      }));
+    } catch (error) {
+      console.error('Error fetching repositories:', error);
       throw new Error('GitHub token not found. Please connect your GitHub account first.');
     }
-
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/github/user/repos`, {
-      headers: {
-        'Authorization': `Bearer ${token.access_token}`,
-        'Accept': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch repositories: ${response.statusText}`);
-    }
-
-    const repos = await response.json();
-    return repos;
   }
 
   /**
    * Get repository contents
    */
   async getRepositoryContents(
-    user: User, 
+    _user: User, 
     owner: string, 
     repo: string, 
     path: string = ''
   ): Promise<GitHubContent[]> {
-    const token = await githubOAuthService.getUserGitHubToken(user);
-    if (!token) {
-      throw new Error('GitHub token not found. Please connect your GitHub account first.');
-    }
-
-    const response = await fetch(`${import.meta.env.VITE_API_URL}/api/github/repos/${owner}/${repo}/contents/${path}`, {
-      headers: {
-        'Authorization': `Bearer ${token.access_token}`,
-        'Accept': 'application/json'
+    try {
+      const contents = await this.githubService.getRepositoryContents(owner, repo, path);
+      
+      // Handle single file response
+      if (!Array.isArray(contents)) {
+        return [contents];
       }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch repository contents: ${response.statusText}`);
+      
+      return contents;
+    } catch (error) {
+      console.error('Error fetching repository contents:', error);
+      throw new Error('Failed to fetch repository contents. Please ensure your GitHub account is connected.');
     }
-
-    const contents = await response.json();
-    
-    // Handle single file response
-    if (!Array.isArray(contents)) {
-      return [contents];
-    }
-    
-    return contents;
   }
 
   /**
@@ -144,25 +133,17 @@ class GitHubRepoService {
   /**
    * Get repository details
    */
-  async getRepository(user: User, owner: string, repo: string): Promise<GitHubRepository> {
-    const token = await githubOAuthService.getUserGitHubToken(user);
-    if (!token) {
-      throw new Error('GitHub token not found. Please connect your GitHub account first.');
+  async getRepository(_user: User, owner: string, repo: string): Promise<GitHubRepository> {
+    try {
+      const repoDetails = await this.githubService.getRepository(owner, repo);
+      return {
+        ...repoDetails,
+        ssh_url: repoDetails.clone_url.replace('https://', 'git@').replace('/', ':')
+      };
+    } catch (error) {
+      console.error('Error fetching repository:', error);
+      throw new Error('Failed to fetch repository. Please ensure your GitHub account is connected.');
     }
-
-    const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      headers: {
-        'Authorization': `Bearer ${token.access_token}`,
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'Dotivra-App'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to fetch repository: ${response.statusText}`);
-    }
-
-    return await response.json();
   }
 
   /**
