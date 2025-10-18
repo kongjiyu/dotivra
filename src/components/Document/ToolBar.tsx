@@ -46,6 +46,7 @@ import {
     Eraser,
     Link,
     GripVertical,
+    GripHorizontal,
     ArrowLeftRight,
     ArrowUpDown,
     Type
@@ -262,6 +263,82 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     // Ref to track if we're currently updating position (prevent infinite loops)
     const isUpdatingPosition = useRef(false);
 
+    // Helper function to calculate smart position when orientation changes
+    const getSmartPositionForOrientation = useCallback((currentPos: { x: number; y: number } | null): { x: number; y: number } | null => {
+        if (!currentPos || !containerRef.current) return null;
+
+        try {
+            const tiptapContainer = document.querySelector('.tiptap-container');
+
+            if (!tiptapContainer) return null;
+
+            const containerRect = tiptapContainer.getBoundingClientRect();
+
+            // Wait for toolbar to re-render with new dimensions
+            setTimeout(() => {
+                if (!containerRef.current) return;
+                const toolbarRect = containerRef.current.getBoundingClientRect();
+
+                if (toolbarRect.width <= 0 || toolbarRect.height <= 0) return;
+
+                // Check if toolbar would overflow with current position
+                const wouldOverflowRight = currentPos.x + toolbarRect.width > containerRect.right;
+                const wouldOverflowBottom = currentPos.y + toolbarRect.height > containerRect.bottom;
+                const wouldOverflowLeft = currentPos.x < containerRect.left;
+                const wouldOverflowTop = currentPos.y < containerRect.top;
+
+                const willOverflow = wouldOverflowRight || wouldOverflowBottom || wouldOverflowLeft || wouldOverflowTop;
+
+                // Only reposition if there's an overflow
+                if (!willOverflow) {
+                    // No overflow, keep current position
+                    return;
+                }
+
+                // Overflow detected - apply smart repositioning
+                const centerX = containerRect.left + containerRect.width / 2;
+                const centerY = containerRect.top + containerRect.height / 2;
+
+                const isOnLeft = currentPos.x < centerX;
+                const isOnTop = currentPos.y < centerY;
+
+                let newX: number;
+                let newY: number;
+                const padding = 16; // Padding from edges
+
+                // Determine new position based on which quadrant the toolbar was in
+                if (isOnLeft && isOnTop) {
+                    // Top-left quadrant → position at top-left
+                    newX = containerRect.left + padding;
+                    newY = containerRect.top + padding;
+                } else if (!isOnLeft && isOnTop) {
+                    // Top-right quadrant → position at top-right
+                    newX = containerRect.right - toolbarRect.width - padding;
+                    newY = containerRect.top + padding;
+                } else if (isOnLeft && !isOnTop) {
+                    // Bottom-left quadrant → position at bottom-left
+                    newX = containerRect.left + padding;
+                    newY = containerRect.bottom - toolbarRect.height - padding;
+                } else {
+                    // Bottom-right quadrant → position at bottom-right
+                    newX = containerRect.right - toolbarRect.width - padding;
+                    newY = containerRect.bottom - toolbarRect.height - padding;
+                }
+
+                // Ensure position is within bounds
+                newX = Math.max(containerRect.left, Math.min(newX, containerRect.right - toolbarRect.width));
+                newY = Math.max(containerRect.top, Math.min(newY, containerRect.bottom - toolbarRect.height));
+
+                setToolbarPosition({ x: newX, y: newY });
+            }, 50); // Small delay to let DOM update
+
+            return currentPos; // Return current position temporarily
+        } catch (error) {
+            console.error('Error calculating smart position:', error);
+            return null;
+        }
+    }, []);
+
     // Helper function to safely clamp position with error handling
     const safeClampPosition = useCallback((position: { x: number; y: number } | null): { x: number; y: number } | null => {
         if (!position || !containerRef.current || isUpdatingPosition.current) return position;
@@ -326,32 +403,21 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         };
     }, [toolbarPosition, safeClampPosition]);
 
-    // Check position once when orientation changes (prevent infinite loops)
+    // Check position when orientation changes and apply smart repositioning
     useEffect(() => {
-        if (isUpdatingPosition.current) return;
+        if (isUpdatingPosition.current || !toolbarPosition) return;
 
-        // Use timeout to ensure DOM has updated after orientation change
-        const timeoutId = setTimeout(() => {
-            if (!toolbarPosition || !containerRef.current) return;
+        isUpdatingPosition.current = true;
 
-            isUpdatingPosition.current = true;
-            const newPosition = safeClampPosition(toolbarPosition);
+        // Use smart positioning based on current quadrant
+        getSmartPositionForOrientation(toolbarPosition);
 
-            if (newPosition && newPosition !== toolbarPosition) {
-                setToolbarPosition(newPosition);
-            } else if (!newPosition) {
-                // Fallback: reset to default position if calculation failed
-                setToolbarPosition(null);
-            }
+        // Reset flag after processing
+        setTimeout(() => {
+            isUpdatingPosition.current = false;
+        }, 200);
 
-            // Reset flag after a delay
-            setTimeout(() => {
-                isUpdatingPosition.current = false;
-            }, 100);
-        }, 100);
-
-        return () => clearTimeout(timeoutId);
-    }, [isVertical]); // Only trigger on orientation change
+    }, [isVertical, getSmartPositionForOrientation]); // Only trigger on orientation change
 
     // Calculate dynamic maxIndentLevel based on window width
     // Wider screens can handle more indentation levels without content overflow
@@ -602,10 +668,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             // Final cleanup after resize stops
             debounceTimer = setTimeout(() => {
                 requestAnimationFrame(() => {
-                    const finalWidth = window.innerWidth;
-                    if (Math.abs(finalWidth - windowWidth) > 10) {
-                        handleResize();
-                    }
+                    handleResize(); // Always update after resize stops
                 });
                 debounceTimer = null;
             }, 150);
@@ -622,7 +685,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             if (debounceTimer) clearTimeout(debounceTimer);
             if (rafId) cancelAnimationFrame(rafId);
         };
-    }, [editor]);
+    }, [windowWidth, maxIndentLevel]); // Fixed: Added windowWidth and maxIndentLevel to dependencies
 
     // Helper functions to determine section visibility based on calculated window width breakpoints  
     // In vertical mode, show only essential options (up to font/color), wrap Lists/Indent/Align/Insert in More Options
@@ -804,6 +867,54 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         }
     };
 
+    // Helper function to determine dropdown alignment based on toolbar position
+    const getDropdownAlignment = useCallback((): { side: 'top' | 'bottom' | 'left' | 'right'; align: 'start' | 'center' | 'end' } => {
+        if (!containerRef.current) {
+            return isVertical ? { side: 'right', align: 'start' } : { side: 'bottom', align: 'end' };
+        }
+
+        try {
+            const toolbarRect = containerRef.current.getBoundingClientRect();
+            const tiptapContainer = document.querySelector('.tiptap-container');
+
+            if (!tiptapContainer) {
+                return isVertical ? { side: 'right', align: 'start' } : { side: 'bottom', align: 'end' };
+            }
+
+            const containerRect = tiptapContainer.getBoundingClientRect();
+
+            if (isVertical) {
+                // Vertical toolbar: check if at left or right edge
+                const distanceFromLeft = toolbarRect.left - containerRect.left;
+
+                // If toolbar is closer to left edge (within 100px), popup to right
+                // Otherwise, popup to left
+                if (distanceFromLeft < 100) {
+                    return { side: 'right', align: 'start' };
+                } else {
+                    return { side: 'left', align: 'start' };
+                }
+            } else {
+                // Horizontal toolbar: check if at top or bottom edge
+                const distanceFromTop = toolbarRect.top - containerRect.top;
+
+                // If toolbar is closer to top edge (within 100px), popup to bottom
+                // Otherwise, popup to top
+                if (distanceFromTop < 100) {
+                    return { side: 'bottom', align: 'end' };
+                } else {
+                    return { side: 'top', align: 'end' };
+                }
+            }
+        } catch (error) {
+            console.error('Error calculating dropdown alignment:', error);
+            return isVertical ? { side: 'right', align: 'start' } : { side: 'bottom', align: 'end' };
+        }
+    }, [isVertical]);
+
+    // Memoize dropdown alignment to avoid recalculating on every render
+    const dropdownAlignment = useMemo(() => getDropdownAlignment(), [getDropdownAlignment, toolbarPosition, isVertical, showMoreOptions]);
+
     return (
         <>
             <div
@@ -845,7 +956,11 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                         onMouseDown={handleDragStart}
                         title="Drag to reposition toolbar"
                     >
-                        <GripVertical className="w-4 h-4 text-gray-400" />
+                        {isVertical ? (
+                            <GripHorizontal className="w-4 h-4 text-gray-400" />
+                        ) : (
+                            <GripVertical className="w-4 h-4 text-gray-400" />
+                        )}
                     </div>
 
                     {/* Orientation Toggle Button - Separate row in vertical mode */}
@@ -1743,7 +1858,11 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                 </Button>
                             </DropdownMenuTrigger>
 
-                            <DropdownMenuContent align="end" className="w-50">
+                            <DropdownMenuContent
+                                side={dropdownAlignment.side}
+                                align={dropdownAlignment.align}
+                                className="w-50"
+                            >
                                 {/* Categorized sections - only show categories when sections are hidden */}
 
                                 {/* INSERT CATEGORY */}
