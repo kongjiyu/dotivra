@@ -161,8 +161,8 @@ const Tiptap = ({
 
     return (
         <EditorContext.Provider value={contextValue}>
-            <div className={`tiptap-container h-full min-h-0 ${className}`}>
-                {/* Toolbar - Now handles its own positioning internally */}
+            <div className={`tiptap-container h-full min-h-0 relative ${className}`}>
+                {/* Toolbar - Now handles its own positioning internally, constrained to this container */}
                 <ToolBar editor={editor} />
 
                 {/* Document Content Container */}

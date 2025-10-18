@@ -131,6 +131,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     const [isDragging, setIsDragging] = useState(false);
     const [isVertical, setIsVertical] = useState<boolean>(false);
     const dragStartPos = useRef<{ x: number; y: number; toolbarX: number; toolbarY: number } | null>(null);
+    const containerRef = useRef<HTMLDivElement | null>(null);
 
     // Load toolbar orientation preference from cookies on mount
     useEffect(() => {
@@ -186,8 +187,24 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         // Calculate position immediately for instant response
         const deltaX = e.clientX - dragStartPos.current.x;
         const deltaY = e.clientY - dragStartPos.current.y;
-        const newX = dragStartPos.current.toolbarX + deltaX;
-        const newY = dragStartPos.current.toolbarY + deltaY;
+        let newX = dragStartPos.current.toolbarX + deltaX;
+        let newY = dragStartPos.current.toolbarY + deltaY;
+
+        // Get toolbar dimensions for boundary checking
+        const toolbar = containerRef.current;
+        if (toolbar) {
+            const toolbarRect = toolbar.getBoundingClientRect();
+
+            // Find the tiptap-container boundary
+            const tiptapContainer = document.querySelector('.tiptap-container');
+            if (tiptapContainer) {
+                const containerRect = tiptapContainer.getBoundingClientRect();
+
+                // Clamp position within tiptap-container boundaries
+                newX = Math.max(containerRect.left, Math.min(newX, containerRect.right - toolbarRect.width));
+                newY = Math.max(containerRect.top, Math.min(newY, containerRect.bottom - toolbarRect.height));
+            }
+        }
 
         // Direct state update without requestAnimationFrame for zero lag
         setToolbarPosition({ x: newX, y: newY });
@@ -554,8 +571,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
     // Helper for active state
     const isActive = (name: string, attrs?: any) => editor.isActive(name, attrs);
-
-    const containerRef = useRef<HTMLDivElement | null>(null);
 
     // Close the dropdown when clicking outside without blocking scroll via overlays
     useEffect(() => {

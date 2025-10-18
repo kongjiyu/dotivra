@@ -324,7 +324,7 @@ export default function DocumentLayout({
 
                 <div
                     className={
-                        showDocumentMenu ? "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[192px]" : "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[100px]"
+                        showDocumentMenu ? "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[152px]" : "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[100px]"
                     }
                 >
                     {children}
