@@ -1,6 +1,6 @@
-// src/components/auth/RegisterForm.tsx - Registration with GitHub integration
+// src/components/auth/RegisterForm.tsx - Registration form
 import React, { useState } from 'react';
-import { Eye, EyeOff, Mail, Lock, User, Github } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../services/authService';
 
@@ -70,21 +70,6 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
     setLoading(false);
   };
 
-  const handleGitHubRegister = async () => {
-    setLoading(true);
-    setError('');
-
-    const result = await authService.signInWithGitHub();
-    
-    if (result.success) {
-      navigate('/dashboard');
-    } else {
-      setError(result.error || 'GitHub registration failed');
-    }
-    
-    setLoading(false);
-  };
-
   return (
     <div className="w-full max-w-md">
       {/* Header */}
@@ -116,17 +101,6 @@ const RegisterForm: React.FC<RegisterFormProps> = ({ onToggleMode }) => {
             <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
           </svg>
           Sign up with Google
-        </button>
-
-        {/* GitHub Register */}
-        <button
-          type="button"
-          onClick={handleGitHubRegister}
-          disabled={loading}
-          className="w-full flex items-center justify-center px-4 py-3 border border-gray-300 rounded-lg text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Github className="w-5 h-5 mr-3" />
-          Sign up with GitHub
         </button>
       </div>
 
