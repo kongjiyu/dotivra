@@ -43,6 +43,23 @@ export default function DocumentLayout({
     const navigate = useNavigate();
     const location = useLocation();
 
+    // Helper function to check if current page should show ChatBot
+    const shouldShowChatBot = () => {
+        const path = location.pathname;
+        return path.includes('/document/editor') ||
+            path.includes('/document/summary') ||
+            (path.includes('/document/') &&
+                !path.includes('/project') &&
+                !path.includes('/history'));
+    };
+
+    // Close chat sidebar when navigating away from editor/summary pages
+    useEffect(() => {
+        if (!shouldShowChatBot() && chatSidebarOpen) {
+            setChatSidebarOpen(false);
+        }
+    }, [location.pathname, chatSidebarOpen, setChatSidebarOpen]);
+
     // Helper function to determine if a tab is active based on current location
     const isTabActive = (tabName: string) => {
         const path = location.pathname;
@@ -265,7 +282,7 @@ export default function DocumentLayout({
                         </Button>
                         <SimpleShare
                             documentTitle={documentTitle}
-                            documentId="main-doc-123"
+                            documentId={documentId}
                         />
                     </div>
                 </div>
@@ -308,7 +325,8 @@ export default function DocumentLayout({
                 <div
                     className={
                         showDocumentMenu ? "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[192px]" : "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[100px]"
-                    }>
+                    }
+                >
                     {children}
                 </div>
             </div>
@@ -340,8 +358,8 @@ export default function DocumentLayout({
                 </div>
             </div>
 
-            {/* Fixed AI Chat Icon */}
-            {!chatSidebarOpen && (
+            {/* Fixed AI Chat Icon - Only show on editor and summary pages */}
+            {!chatSidebarOpen && shouldShowChatBot() && (
                 <Button
                     onClick={handleAIGenerate}
                     disabled={isAIGenerating}

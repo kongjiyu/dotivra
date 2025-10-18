@@ -47,7 +47,7 @@ export default function ChatSidebar({
     const [aiWriter, setAIWriter] = useState<EnhancedAIContentWriter | null>(null);
 
     // Get AI actions function from document context
-    const { showAIActions, documentContent } = useDocument();
+    const { showAIActions } = useDocument();
 
     // Get user context for repository operations
     const { user } = useAuth();
@@ -113,7 +113,7 @@ export default function ChatSidebar({
                 setIsGenerating(true);
 
                 try {
-                    const response = await aiService.chatResponse(initialMessage, documentContent);
+                    const response = await aiService.chatResponse(initialMessage, editor ? editor.getHTML() : '');
 
                     const assistantMsg: ChatMessage = {
                         id: crypto.randomUUID(),
@@ -142,7 +142,7 @@ export default function ChatSidebar({
             // Cleanup timeout on component unmount or effect re-run
             return () => clearTimeout(timeoutId);
         }
-    }, [open, initialMessage, documentContent]);
+    }, [open, initialMessage, editor]);
 
     // Suggestions UI removed per request; associated helpers removed.
 
@@ -285,13 +285,13 @@ export default function ChatSidebar({
                 }
 
                 // General repository-aware generation
-                const result = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, documentContent);
+                const result = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, editor ? editor.getHTML() : '');
                 return `<h2>Repository-Aware Response</h2>\n${result}`;
             }
 
             if (lowerPrompt.includes('summarize') || lowerPrompt.includes('summary')) {
                 // Generate summary of current document
-                const summary = await aiService.summarizeContent(documentContent || '');
+                const summary = await aiService.summarizeContent(editor ? editor.getHTML() : '');
                 return `<h2>Document Summary</h2>\n${summary}`;
             } else if (lowerPrompt.includes('improve') || lowerPrompt.includes('enhance')) {
                 // Get selected text or current paragraph
@@ -309,17 +309,17 @@ export default function ChatSidebar({
                     const expanded = await aiService.expandContent(selectedText, prompt);
                     return expanded;
                 } else {
-                    const expanded = await aiService.expandContent(documentContent || '', prompt);
+                    const expanded = await aiService.expandContent(editor ? editor.getHTML() : '', prompt);
                     return `<h2>Expanded Content</h2>\n${expanded}`;
                 }
             } else {
                 // Check if we have repository context for better general generation
                 if (repositoryInfo && user) {
-                    const generated = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, documentContent);
+                    const generated = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, editor ? editor.getHTML() : '');
                     return generated;
                 } else {
                     // Fallback to regular generation
-                    const generated = await aiService.generateFromPrompt(prompt, documentContent);
+                    const generated = await aiService.generateFromPrompt(prompt, editor ? editor.getHTML() : '');
                     return generated;
                 }
             }
@@ -369,7 +369,7 @@ export default function ChatSidebar({
 
                         if (actionFunction && typeof actionFunction === 'function') {
                             try {
-                                actionFunction("New content added via *add command", documentContent);
+                                actionFunction("New content added via *add command", editor ? editor.getHTML() : '');
                             } catch (error) {
                                 console.error('❌ Error calling showAIActions:', error);
                             }
@@ -401,7 +401,7 @@ export default function ChatSidebar({
 
                         if (actionFunction && typeof actionFunction === 'function') {
                             try {
-                                actionFunction("Content marked for removal via *remove command", documentContent);
+                                actionFunction("Content marked for removal via *remove command", editor ? editor.getHTML() : '');
                             } catch (error) {
                                 console.error('❌ Error calling showAIActions for *remove:', error);
                             }
@@ -440,7 +440,7 @@ export default function ChatSidebar({
 
                         if (actionFunction && typeof actionFunction === 'function') {
                             try {
-                                actionFunction("Content edited via *edit command", documentContent);
+                                actionFunction("Content edited via *edit command", editor ? editor.getHTML() : '');
                             } catch (error) {
                                 console.error('❌ Error calling showAIActions for *edit:', error);
                             }
@@ -504,7 +504,7 @@ export default function ChatSidebar({
 
                                 if (actionFunction && typeof actionFunction === 'function') {
                                     try {
-                                        actionFunction(`AI Generated Content: ${text}`, documentContent);
+                                        actionFunction(`AI Generated Content: ${text}`, editor ? editor.getHTML() : '');
                                     } catch (error) {
                                         console.error('❌ Error calling showAIActions:', error);
                                     }
@@ -525,7 +525,7 @@ export default function ChatSidebar({
                     } else {
 
                         // Regular chat response - don't add to document
-                        const aiResponse = await aiService.chatResponse(text, documentContent);
+                        const aiResponse = await aiService.chatResponse(text, editor ? editor.getHTML() : '');
 
                         const assistantMsg: ChatMessage = {
                             id: crypto.randomUUID(),
