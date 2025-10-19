@@ -18,6 +18,8 @@ import ErrorBoundary from "./components/ErrorBoundary";
 
 import Projects from "./pages/Projects"; // NEW: All projects page
 import AllTemplate from "./pages/AllTemplate";
+import GeminiDashboard from "./pages/gemini/geminiDashboard";
+import GeminiTestBalancer from "./pages/gemini/geminiTestBalancer";
 
 // Error page component
 const ErrorPage = () => (
@@ -128,6 +130,16 @@ const router = createBrowserRouter([
   {
     path: "/feedback",
     element: <ProtectedRoute><FeedbackForm /></ProtectedRoute>,
+    errorElement: <ErrorPage />
+  },
+  {
+    path: "/gemini",
+    element: <ProtectedRoute><GeminiDashboard /></ProtectedRoute>,
+    errorElement: <ErrorPage />
+  },
+  {
+    path: "/gemini/test-balancer",
+    element: <ProtectedRoute><GeminiTestBalancer /></ProtectedRoute>,
     errorElement: <ErrorPage />
   },
   // Catch-all route for 404s

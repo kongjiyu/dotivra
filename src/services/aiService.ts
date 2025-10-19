@@ -1,29 +1,30 @@
 // src/services/aiService.ts
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { repositoryContextService } from './repositoryContextService';
 import type { User } from 'firebase/auth';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const GENERATE_API = '/api/gemini/generate';
 
 class AIService {
-    private genAI: GoogleGenerativeAI;
-    private model: any;
-
-    constructor() {
-        if (!GEMINI_API_KEY) {
-            throw new Error('VITE_GEMINI_API_KEY environment variable is required');
-        }
-        this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        // Using Gemini 2.5 Pro for better quality document generation
-        this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
-    }
+    private defaultModel = 'gemini-2.5-pro';
 
     async generateContent(prompt: string, context?: string): Promise<string> {
         try {
             const fullPrompt = context ? `Context: ${context}\n\nRequest: ${prompt}` : prompt;
-            const result = await this.model.generateContent(fullPrompt);
-            const response = await result.response;
-            return response.text();
+            const resp = await fetch(GENERATE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: fullPrompt,
+                    model: this.defaultModel,
+                    generationConfig: { maxOutputTokens: 2048 },
+                }),
+            });
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({}));
+                throw new Error(err?.error || `Generate failed: ${resp.status}`);
+            }
+            const data = await resp.json();
+            return data.text as string;
         } catch (error) {
             console.error('❌ AI Generation Error:', error);
             throw new Error('Failed to generate AI content');
@@ -280,8 +281,17 @@ Your JSON response:`;
                 }
 
                 console.log(`🤖 Calling Gemini API (prompt length: ${prompt.length} chars)...`);
-                const resp = await this.model.generateContent(prompt);
-                const text = await resp.response.text();
+                const res = await fetch(GENERATE_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, model: this.defaultModel, generationConfig: { maxOutputTokens: 2048 } }),
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err?.error || `Generate failed: ${res.status}`);
+                }
+                const payload = await res.json();
+                const text = String(payload.text || '');
                 console.log(`📥 AI Response received (${text.length} chars)`);
                 console.log('📄 AI Response preview:', text.substring(0, 200));
                 
@@ -497,9 +507,17 @@ Now generate the complete ${documentName} document following these guidelines:`;
             console.log('🚀 Sending request to Gemini AI...');
             
             // Generate content using Gemini
-            const generatedContent = await this.model.generateContent(aiPrompt);
-            const response = await generatedContent.response;
-            let htmlContent = response.text();
+            const res = await fetch(GENERATE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: aiPrompt, model: this.defaultModel, generationConfig: { maxOutputTokens: 4096 } }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error || `Generate failed: ${res.status}`);
+            }
+            const payload = await res.json();
+            let htmlContent = String(payload.text || '');
 
             console.log('✅ AI generation complete');
             console.log('📄 Generated content length:', htmlContent.length);

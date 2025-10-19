@@ -11,6 +11,7 @@ import { WebSocketServer } from 'ws';
 import http from 'http';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
+import { createBalancerFromEnv } from './server/gemini/balancer.js';
 
 // Import regular Firebase
 import { initializeApp } from 'firebase/app';
@@ -26,7 +27,6 @@ import {
   doc, 
   updateDoc, 
   deleteDoc,
-  getDoc,
   Timestamp 
 } from 'firebase/firestore';
 
@@ -69,6 +69,15 @@ const firestore = getFirestore(firebaseApp);
 
 console.log('✅ Firebase initialized successfully');
 
+// Gemini balancer initialization (server-side only)
+let geminiBalancer;
+try {
+  geminiBalancer = createBalancerFromEnv();
+  console.log(`✅ Gemini balancer initialized with ${geminiBalancer.getConfig().keyCount} keys`);
+} catch (e) {
+  console.warn('⚠️ Gemini balancer not initialized:', e?.message || e);
+}
+
 // Utility functions - Match existing Firebase format
 function generateProjectId() {
   const now = new Date();
@@ -86,6 +95,98 @@ function generateUserId() {
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// ===================== Gemini Endpoints =====================
+// Dashboard: usage + limits (no secrets)
+app.get('/api/gemini/dashboard', (req, res) => {
+  try {
+    if (!geminiBalancer) return res.status(503).json({ error: 'Balancer not configured' });
+    res.json(geminiBalancer.getUsage());
+  } catch (error) {
+    console.error('Gemini dashboard error:', error);
+    res.status(500).json({ error: 'Failed to get dashboard' });
+  }
+});
+
+// Test balancer: run N small requests and return distribution
+app.post('/api/gemini/test-balancer', async (req, res) => {
+  try {
+    if (!geminiBalancer) return res.status(503).json({ error: 'Balancer not configured' });
+    const { count = 10, model = 'gemini-2.0-flash', dryRun = true } = req.body || {};
+    const n = Math.max(1, Math.min(Number(count) || 10, 200));
+    const perKey = new Map();
+    const results = [];
+    for (let i = 0; i < n; i++) {
+      try {
+        const r = await geminiBalancer.generate({
+          model,
+          contents: [
+            { role: 'user', parts: [{ text: 'ping' }] }
+          ],
+          generationConfig: { maxOutputTokens: 1 },
+          dryRun: !!dryRun,
+        });
+        const id = r.keyId;
+        perKey.set(id, (perKey.get(id) || 0) + 1);
+        results.push({ ok: true, keyIdShort: r.keyIdShort });
+      } catch (e) {
+        results.push({ ok: false, error: e?.message || String(e) });
+      }
+    }
+    const distribution = Array.from(perKey.entries()).map(([keyId, requests]) => ({ keyId, keyIdShort: String(keyId).slice(0,12), requests }));
+    res.json({ count: n, model, dryRun: !!dryRun, distribution, resultsSample: results.slice(0, 5), usage: geminiBalancer.getUsage() });
+  } catch (error) {
+    console.error('Gemini test-balancer error:', error);
+    res.status(500).json({ error: 'Failed to run test balancer' });
+  }
+});
+
+// Generate via balancer: central entry for all AI calls
+app.post('/api/gemini/generate', async (req, res) => {
+  try {
+    if (!geminiBalancer) return res.status(503).json({ error: 'Balancer not configured' });
+    const {
+      prompt,
+      contents,
+      model = 'gemini-2.0-flash',
+      tools,
+      systemInstruction,
+      generationConfig,
+      safetySettings,
+      toolConfig,
+    } = req.body || {};
+
+    let effectiveContents = contents;
+    if (!effectiveContents && typeof prompt === 'string') {
+      effectiveContents = [{ role: 'user', parts: [{ text: String(prompt) }] }];
+    }
+    if (!effectiveContents) {
+      return res.status(400).json({ error: 'Missing prompt or contents' });
+    }
+
+    const result = await geminiBalancer.generate({
+      model,
+      contents: effectiveContents,
+      tools,
+      systemInstruction,
+      generationConfig,
+      safetySettings,
+      toolConfig,
+    });
+
+    res.json({
+      ok: true,
+      text: result.text,
+      usage: result.usage,
+      key: { idShort: result.keyIdShort },
+      model,
+    });
+  } catch (error) {
+    console.error('Gemini generate error:', error);
+    const status = error?.status || 500;
+    res.status(status).json({ ok: false, error: error?.message || 'Failed to generate' });
+  }
 });
 
 // Get GitHub App info and install URL
