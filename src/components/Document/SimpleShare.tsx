@@ -2,13 +2,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from "@/components/ui/popover";
 import {
     Share2,
-    Copy,
     CheckCircle,
 } from "lucide-react";
 
@@ -22,7 +21,16 @@ export default function SimpleShare({ documentId = "doc123" }: SimpleShareProps)
 
     const generateShareLink = () => {
         const baseUrl = window.location.origin;
-        const link = `${baseUrl}/shared/${documentId}`;
+        // Use current pathname if it's a document page, otherwise use documentId
+        const currentPath = window.location.pathname;
+
+        // If already on a document page, use that URL
+        if (currentPath.includes('/document/')) {
+            return `${baseUrl}${currentPath}`;
+        }
+
+        // Otherwise, generate URL with documentId
+        const link = documentId ? `${baseUrl}/document/${documentId}` : `${baseUrl}/document/editor`;
         return link;
     };
 
@@ -36,51 +44,41 @@ export default function SimpleShare({ documentId = "doc123" }: SimpleShareProps)
         }
     };
 
-    const handleCopyLink = () => {
+    const handleInputClick = () => {
         const link = generateShareLink();
         copyToClipboard(link);
     };
 
     return (
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+        <Popover>
+            <PopoverTrigger asChild>
                 <Button variant="outline" size="sm">
                     <Share2 className="w-4 h-4 mr-2" />
                     Share
                 </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-72">
-                <div className="p-3 space-y-3">
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72">
+                <div className="space-y-3">
                     <h4 className="font-medium text-sm">Share link</h4>
 
-                    <div className="flex gap-2">
+                    <div className="space-y-2">
                         <Input
                             value={generateShareLink()}
                             readOnly
-                            className="text-sm"
+                            onClick={handleInputClick}
+                            className="text-sm cursor-pointer hover:bg-gray-50 select-all"
+                            placeholder="Click to copy share link"
                         />
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleCopyLink}
-                            className="px-3 whitespace-nowrap"
-                        >
-                            {copied ? (
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                            ) : (
-                                <>
-                                    <Copy className="w-4 h-4 mr-1" />
-                                    Copy
-                                </>
-                            )}
-                        </Button>
-                    </div>
 
-                    {copied && (
-                        <p className="text-xs text-green-600">Link copied to clipboard!</p>
-                    )}
+                        {copied && (
+                            <div className="flex items-center gap-2 text-sm text-green-600">
+                                <CheckCircle className="w-4 h-4" />
+                                Link copied to clipboard!
+                            </div>
+                        )}
+                    </div>
                 </div>
-            </DropdownMenuContent>
-        </DropdownMenu>
+            </PopoverContent>
+        </Popover>
     );
 }

@@ -1,349 +1,267 @@
-import { useState, useEffect } from 'react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import React, { useState, useEffect } from 'react';
 import { 
   Github, 
   ExternalLink, 
   CheckCircle, 
   AlertCircle, 
   Loader2,
-  RefreshCw,
   Unlink
 } from 'lucide-react';
-import { useAuth } from '@/context/AuthContext';
-import { githubOAuthService } from '@/services/githubOAuthService';
-import type { GitHubUser } from '@/services/githubOAuthService';
+import { useAuth } from '../../context/AuthContext';
+import { authService } from '../../services/authService';
+import GitHubService, { type GitHubUser } from '../../services/gitHubService';
 
 interface GitHubConnectionCardProps {
   onConnectionChange?: (connected: boolean) => void;
 }
 
-export default function GitHubConnectionCard({ onConnectionChange }: GitHubConnectionCardProps) {
-  const { user } = useAuth();
+const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectionChange }) => {
+  const { user: firebaseUser, userProfile } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [testing, setTesting] = useState(false);
   const [connected, setConnected] = useState(false);
   const [githubUser, setGitHubUser] = useState<GitHubUser | null>(null);
-  const [connectedAt, setConnectedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Check GitHub connection status on component mount
+  const githubService = new GitHubService();
+
   useEffect(() => {
     checkConnectionStatus();
-  }, [user]);
-
-  // Handle OAuth callback
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    const state = urlParams.get('state');
-    const githubCallback = urlParams.get('github_callback');
-
-    if (githubCallback === 'true' && code && state && user) {
-      handleOAuthCallback(code, state);
-      // Clean up URL parameters
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, [user]);
+  }, [firebaseUser, userProfile]);
 
   const checkConnectionStatus = async () => {
-    if (!user) return;
+    if (!firebaseUser) return;
 
-    setLoading(true);
-    setError(null);
-    
     try {
-      const info = await githubOAuthService.getUserGitHubInfo(user);
-      if (info) {
-        setConnected(info.connected);
-        setGitHubUser(info.user || null);
-        setConnectedAt(info.connected_at || null);
-        onConnectionChange?.(info.connected);
+      setLoading(true);
+      setError(null);
+
+      const hasAccess = await githubService.hasGitHubAccess();
+      setConnected(hasAccess);
+
+      if (hasAccess) {
+        const validation = await githubService.validateConnection();
+        if (validation.valid && validation.user) {
+          setGitHubUser(validation.user);
+        } else {
+          setError(validation.error || 'GitHub connection invalid');
+          setConnected(false);
+        }
       }
-    } catch (error) {
-      console.error('Error checking GitHub connection:', error);
-      setError('Failed to check GitHub connection status');
+
+      onConnectionChange?.(hasAccess);
+    } catch (err) {
+      console.error('Failed to check GitHub connection:', err);
+      setError(err instanceof Error ? err.message : 'Failed to check GitHub connection');
+      setConnected(false);
+      onConnectionChange?.(false);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleConnectGitHub = () => {
-    setConnecting(true);
-    setError(null);
-    
+  const handleConnect = async () => {
     try {
-      const authUrl = githubOAuthService.getAuthorizationUrl();
-      window.location.href = authUrl;
-    } catch (error) {
-      console.error('Error initiating GitHub OAuth:', error);
-      setError('Failed to initiate GitHub connection');
-      setConnecting(false);
-    }
-  };
+      setLoading(true);
+      setError(null);
 
-  const handleOAuthCallback = async (code: string, state: string) => {
-    if (!user) return;
-
-    setConnecting(true);
-    setError(null);
-
-    try {
-      // Exchange code for token
-      const token = await githubOAuthService.exchangeCodeForToken(code, state);
+      const result = await authService.signInWithGitHub();
       
-      // Get GitHub user info
-      const githubUserInfo = await githubOAuthService.getGitHubUser(token.access_token);
-      
-      // Store token and user info
-      await githubOAuthService.storeUserGitHubToken(user, token, githubUserInfo);
-      
-      // Update UI state
-      setConnected(true);
-      setGitHubUser(githubUserInfo);
-      setConnectedAt(new Date().toISOString());
-      onConnectionChange?.(true);
-      
-      console.log('GitHub account connected successfully!');
-    } catch (error) {
-      console.error('Error connecting GitHub account:', error);
-      setError(error instanceof Error ? error.message : 'Failed to connect GitHub account');
+      if (result.success) {
+        await checkConnectionStatus();
+      } else if (result.needsLinking && result.pendingCredential) {
+        // Handle account linking case
+        setError('Linking your GitHub account to your existing email account...');
+        
+        const linkResult = await authService.linkGitHubAccount(result.pendingCredential);
+        
+        if (linkResult.success) {
+          setError('✅ GitHub account successfully linked to your profile!');
+          await checkConnectionStatus();
+          // Clear success message after 3 seconds
+          setTimeout(() => setError(null), 3000);
+        } else {
+          setError(linkResult.error || 'Failed to link GitHub account');
+        }
+      } else {
+        setError(result.error || 'Failed to connect to GitHub');
+      }
+    } catch (err) {
+      console.error('GitHub connection failed:', err);
+      setError(err instanceof Error ? err.message : 'Failed to connect to GitHub');
     } finally {
-      setConnecting(false);
+      setLoading(false);
     }
   };
 
-  const handleDisconnectGitHub = async () => {
-    if (!user) return;
-
-    setLoading(true);
-    setError(null);
+  const handleDisconnect = async () => {
+    if (!firebaseUser || !confirm('Are you sure you want to disconnect GitHub?')) {
+      return;
+    }
 
     try {
-      await githubOAuthService.disconnectGitHub(user);
+      setLoading(true);
+      setError(null);
+
       setConnected(false);
       setGitHubUser(null);
-      setConnectedAt(null);
       onConnectionChange?.(false);
-      console.log('GitHub account disconnected successfully!');
-    } catch (error) {
-      console.error('Error disconnecting GitHub account:', error);
-      setError('Failed to disconnect GitHub account');
+      
+    } catch (err) {
+      console.error('Failed to disconnect GitHub:', err);
+      setError(err instanceof Error ? err.message : 'Failed to disconnect GitHub');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleTestConnection = async () => {
-    if (!user) return;
-
-    setTesting(true);
-    setError(null);
-
+  const testConnection = async () => {
     try {
-      const result = await githubOAuthService.testConnection(user);
-      if (result.success) {
-        console.log('GitHub connection test successful!');
-        setGitHubUser(result.user || null);
+      setLoading(true);
+      setError(null);
+
+      const validation = await githubService.validateConnection();
+      
+      if (validation.valid) {
+        setError(null);
+        alert('GitHub connection test successful!');
       } else {
-        setError(result.error || 'Connection test failed');
+        setError(validation.error || 'GitHub connection test failed');
       }
-    } catch (error) {
-      console.error('Error testing GitHub connection:', error);
-      setError('Failed to test GitHub connection');
+    } catch (err) {
+      console.error('Connection test failed:', err);
+      setError(err instanceof Error ? err.message : 'Connection test failed');
     } finally {
-      setTesting(false);
+      setLoading(false);
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  if (loading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Github className="h-5 w-5" />
-            GitHub Integration
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center py-8">
-            <div className="text-center">
-              <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">Checking connection status...</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
+  if (!firebaseUser) {
+    return null;
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Github className="h-5 w-5" />
-          GitHub Integration
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Connect your GitHub account to import repositories and files into your documents.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-4">
+    <div className="bg-white rounded-lg shadow-md border border-gray-200">
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-gray-900 rounded-lg flex items-center justify-center">
+              <Github className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">GitHub Integration</h3>
+              <p className="text-sm text-gray-600">
+                Connect your GitHub account to access repositories
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center space-x-2">
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin text-gray-500" />
+            ) : connected ? (
+              <CheckCircle className="w-5 h-5 text-green-500" />
+            ) : (
+              <AlertCircle className="w-5 h-5 text-red-500" />
+            )}
+            <span className={`text-sm font-medium ${
+              connected ? 'text-green-700' : 'text-red-700'
+            }`}>
+              {connected ? 'Connected' : 'Not Connected'}
+            </span>
+          </div>
+        </div>
+
         {error && (
-          <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
-            <span className="text-sm text-red-700">{error}</span>
+          <div className={`px-4 py-3 rounded-md mb-4 ${
+            error.includes('successfully') || error.includes('linked') 
+              ? 'bg-green-50 border border-green-200 text-green-700'
+              : 'bg-red-50 border border-red-200 text-red-700'
+          }`}>
+            {error}
           </div>
         )}
 
-        {connected && githubUser ? (
-          <div className="space-y-4">
-            {/* Connected Status */}
-            <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 rounded-full">
-                  <CheckCircle className="h-4 w-4 text-green-600" />
-                </div>
-                <div>
-                  <h3 className="font-medium text-green-900">Connected to GitHub</h3>
-                  <p className="text-sm text-green-700">
-                    Your GitHub account is successfully connected
-                  </p>
-                </div>
-              </div>
-              <Badge variant="secondary" className="bg-green-100 text-green-800">
-                Active
-              </Badge>
-            </div>
-
-            {/* GitHub User Info */}
-            <div className="flex items-center gap-4 p-4 border rounded-lg">
-              <img
-                src={githubUser.avatar_url}
-                alt={githubUser.login}
-                className="h-12 w-12 rounded-full"
+        {connected && githubUser && (
+          <div className="bg-gray-50 rounded-lg p-4 mb-4">
+            <div className="flex items-center space-x-3">
+              <img 
+                src={githubUser.avatar_url} 
+                alt={githubUser.name || githubUser.login}
+                className="w-12 h-12 rounded-full border-2 border-gray-200"
               />
               <div className="flex-1">
-                <h4 className="font-medium">{githubUser.name || githubUser.login}</h4>
-                <p className="text-sm text-muted-foreground">@{githubUser.login}</p>
-                <div className="flex items-center gap-4 mt-1">
-                  <span className="text-xs text-muted-foreground">
-                    {githubUser.public_repos} public repos
-                  </span>
-                  {(githubUser.private_repos || 0) > 0 && (
-                    <span className="text-xs text-muted-foreground">
-                      {githubUser.private_repos || 0} private repos
-                    </span>
-                  )}
+                <h4 className="font-medium text-gray-900">
+                  {githubUser.name || githubUser.login}
+                </h4>
+                <p className="text-sm text-gray-600">@{githubUser.login}</p>
+                <div className="flex items-center space-x-4 text-xs text-gray-500 mt-1">
+                  <span>{githubUser.public_repos} public repos</span>
+                  <span>{githubUser.followers} followers</span>
+                  <span>{githubUser.following} following</span>
                 </div>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.open(`https://github.com/${githubUser.login}`, '_blank')}
+              <a
+                href={`https://github.com/${githubUser.login}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-500 hover:text-gray-700 transition-colors"
               >
-                <ExternalLink className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {/* Connection Details */}
-            <div className="text-xs text-muted-foreground space-y-1">
-              {connectedAt && (
-                <p>Connected: {formatDate(connectedAt)}</p>
-              )}
-              <p>Access: Repository content, user profile</p>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleTestConnection}
-                disabled={testing}
-              >
-                {testing ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
-                ) : (
-                  <RefreshCw className="h-4 w-4 mr-1" />
-                )}
-                Test Connection
-              </Button>
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleDisconnectGitHub}
-                disabled={loading}
-              >
-                <Unlink className="h-4 w-4 mr-1" />
-                Disconnect
-              </Button>
+                <ExternalLink className="w-4 h-4" />
+              </a>
             </div>
           </div>
-        ) : (
-          <div className="space-y-4">
-            {/* Not Connected Status */}
-            <div className="flex items-center justify-between p-4 bg-gray-50 border rounded-lg">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 rounded-full">
-                  <Github className="h-4 w-4 text-gray-600" />
-                </div>
-                <div>
-                  <h3 className="font-medium text-gray-900">GitHub Not Connected</h3>
-                  <p className="text-sm text-gray-600">
-                    Connect your GitHub account to access your repositories
-                  </p>
-                </div>
-              </div>
-              <Badge variant="secondary">
-                Disconnected
-              </Badge>
-            </div>
+        )}
 
-            {/* Benefits */}
-            <div className="space-y-2">
-              <h4 className="text-sm font-medium">What you can do after connecting:</h4>
-              <ul className="text-sm text-muted-foreground space-y-1">
-                <li>• Import files from your repositories</li>
-                <li>• Browse repository contents</li>
-                <li>• Access both public and private repositories</li>
-                <li>• Secure, personal access to your GitHub data</li>
-              </ul>
-            </div>
-
-            {/* Connect Button */}
-            <Button
-              onClick={handleConnectGitHub}
-              disabled={connecting}
-              className="w-full bg-primary hover:bg-primary/90 [&>*]:text-white"
+        <div className="flex items-center space-x-3">
+          {connected ? (
+            <>
+              <button
+                onClick={testConnection}
+                disabled={loading}
+                className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {loading ? (
+                  <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                ) : (
+                  'Test Connection'
+                )}
+              </button>
+              <button
+                onClick={handleDisconnect}
+                disabled={loading}
+                className="px-4 py-2 border border-red-300 text-red-700 rounded-md hover:bg-red-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Unlink className="w-4 h-4" />
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={handleConnect}
+              disabled={loading}
+              className="w-full bg-gray-900 text-white px-4 py-2 rounded-md hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {connecting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                  Connecting...
-                </>
+              {loading ? (
+                <Loader2 className="w-4 h-4 animate-spin mx-auto" />
               ) : (
                 <>
-                  <Github className="h-4 w-4 mr-2 text-white" />
+                  <Github className="w-4 h-4 inline mr-2" />
                   Connect GitHub Account
                 </>
               )}
-            </Button>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+            </button>
+          )}
+        </div>
+
+        <div className="mt-4 text-xs text-gray-500">
+          {connected ? (
+            <p>✅ GitHub connected. You can now access your repositories for document creation.</p>
+          ) : (
+            <p>Connect your GitHub account to create documents from your repositories.</p>
+          )}
+        </div>
+      </div>
+    </div>
   );
-}
+};
+
+export default GitHubConnectionCard;

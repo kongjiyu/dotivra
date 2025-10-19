@@ -1,4 +1,3 @@
-// src/components/dashboard/Dashboard.tsx - With navigation
 import React, { useState } from 'react';
 import Header from '../components/header/Header';
 import { useNavigate } from 'react-router-dom';
@@ -6,11 +5,19 @@ import TemplateGrid from '../components/dashboard/TemplateGrid';
 import ProjectList from '../components/dashboard/ProjectList';
 import AddProjectModal from '../components/modal/addProject';
 import AddDocumentFromTemplate from '../components/modal/addDocumentFromTemplate';
+import AIGenerationProgressModal from '../components/modal/AIGenerationProgressModal';
 import { API_ENDPOINTS } from '../lib/apiConfig';
 import type { Template } from '../types';
 import { getUserDisplayInfo } from '../utils/user';
 import { useAuth } from '../context/AuthContext';
+import { aiService } from '../services/aiService';
 
+interface GenerationStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'in-progress' | 'completed' | 'error';
+  details?: string;
+}
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -19,18 +26,19 @@ const Dashboard: React.FC = () => {
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
-
-  // Debug: Log the modal state
-  console.log('🔍 Dashboard component rendered, isModalOpen:', isModalOpen);
+  
+  // AI Generation Progress Modal State
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationRepository, setGenerationRepository] = useState('');
+  const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>([]);
+  const [currentGenerationStep, setCurrentGenerationStep] = useState<string>('');
 
   const handleTemplateClick = (template: Template) => {
-    console.log('Template clicked:', template.TemplateName);
     setSelectedTemplate(template);
     setIsTemplateModalOpen(true);
   };
 
   const handleNewProject = () => {
-    console.log('🎯 Opening modal from Dashboard...');
     setIsModalOpen(true);
   };
 
@@ -44,26 +52,16 @@ const Dashboard: React.FC = () => {
     documentRole: string;
   }) => {
     try {
-      console.log('Creating document from template:', data);
-
       let finalProjectId = data.projectId;
 
       // If creating a new project, create it first
-      if (!finalProjectId && data.newProjectName && data.newProjectDescription) {
-        console.log('Creating new project...');
+      if (data.newProjectName && data.newProjectDescription) {
         
         // For testing, use a mock user ID if not authenticated
         const userId = user?.uid || 'mock-user-' + Date.now();
         if (!user?.uid) {
           console.warn('User not authenticated, using mock user ID:', userId);
         }
-
-        console.log('Sending project creation request:', {
-          name: data.newProjectName,
-          description: data.newProjectDescription,
-          userId: userId,
-          githubLink: data.selectedRepo
-        });
 
         const projectResponse = await fetch(API_ENDPOINTS.projects(), {
           method: 'POST',
@@ -82,13 +80,8 @@ const Dashboard: React.FC = () => {
 
         const projectResult = await projectResponse.json();
         finalProjectId = projectResult.project.Project_Id || projectResult.project.id;
-        console.log('✅ New project created successfully:', projectResult.project);
-        console.log('Using project ID for document:', finalProjectId);
       }
 
-      // Create the document in the project
-      console.log(`📄 Creating document "${data.documentName}" (${data.documentRole}) in project ${finalProjectId} using template ${data.template.TemplateName}`);
-      
       if (!finalProjectId) {
         throw new Error('Project ID is required to create document');
       }
@@ -110,17 +103,151 @@ const Dashboard: React.FC = () => {
         documentCategory = 'Developer';
       }
 
+      // Generate AI content if GitHub repository is available
+      let documentContent = data.template.TemplatePrompt || `<h1>${data.documentName}</h1><p>Role: ${data.documentRole}</p><p>This document was created using the ${data.template.TemplateName} template.</p>`;
+      
+      // Determine repository URL - either from modal selection or from existing project
+      let repositoryUrl = data.selectedRepo;
+      
+      // If using existing project and no repo selected in modal, fetch project's GitHub repo
+      if (!repositoryUrl && finalProjectId && data.projectId) {
+        try {
+          console.log('🔍 Fetching GitHub repo for existing project:', finalProjectId);
+          const projectResponse = await fetch(API_ENDPOINTS.project(finalProjectId));
+          if (projectResponse.ok) {
+            const projectData = await projectResponse.json();
+            const project = projectData.success ? projectData.project : projectData;
+            repositoryUrl = project.GitHubRepo || project.githubLink || null;
+          }
+        } catch (error) {
+          console.warn('⚠️ Could not fetch project GitHub repo:', error);
+        }
+      }
+      
+      if (repositoryUrl && user) {
+        try {
+          // Parse repository owner and name
+          const repoMatch = repositoryUrl.match(/(?:https?:\/\/github\.com\/)?([^\/]+)\/([^\/\s]+)/);
+          if (repoMatch) {
+            const [, owner, repo] = repoMatch;
+            
+            // Initialize progress modal
+            const repoFullName = `${owner}/${repo}`;
+            setGenerationRepository(repoFullName);
+            setIsGenerating(true);
+            
+            // Initialize generation steps
+            const steps: GenerationStep[] = [
+              { id: 'parse', label: 'Parsing repository information', status: 'completed', details: `Repository: ${repoFullName}` },
+              { id: 'structure', label: 'Fetching repository structure', status: 'in-progress', details: 'Analyzing files and directories...' },
+              { id: 'iteration', label: 'AI requesting files', status: 'pending' },
+              { id: 'generate', label: 'Generating AI documentation', status: 'pending' },
+              { id: 'done', label: 'Finalizing document', status: 'pending' }
+            ];
+            setGenerationSteps(steps);
+            setCurrentGenerationStep('structure');
+            
+            // Progress callback for iterative AI
+            const handleProgress = (step: string, detail?: string) => {
+              setGenerationSteps(prev => prev.map(s => {
+                // Mark completed steps
+                const completedSteps = ['parse'];
+                if (step === 'structure' || step === 'analysis' || step === 'iteration' || step === 'files' || step === 'done') {
+                  completedSteps.push('structure');
+                }
+                if (step === 'iteration' || step === 'files' || step === 'done') {
+                  completedSteps.push('analysis');
+                }
+                if (step === 'done') {
+                  completedSteps.push('iteration', 'generate');
+                }
+                
+                if (completedSteps.includes(s.id) && s.id !== step) {
+                  return { ...s, status: 'completed' as const };
+                }
+                
+                // Update current step
+                if (s.id === step) {
+                  return { 
+                    ...s, 
+                    status: step === 'done' ? 'completed' as const : 'in-progress' as const,
+                    details: detail || s.details 
+                  };
+                }
+                
+                // Map 'analysis' and 'files' to 'iteration' step
+                if ((step === 'analysis' || step === 'files') && s.id === 'iteration') {
+                  return {
+                    ...s,
+                    status: 'in-progress' as const,
+                    details: detail || s.details
+                  };
+                }
+                
+                // Map final content generation to 'generate' step
+                if (step === 'init' && s.id === 'structure') {
+                  return {
+                    ...s,
+                    status: 'in-progress' as const,
+                    details: detail || s.details
+                  };
+                }
+                
+                return s;
+              }));
+              setCurrentGenerationStep(step);
+            };
+            
+            try {
+              // Generate content using NEW iterative AI method
+              console.log('🚀 Starting iterative AI generation...');
+              documentContent = await aiService.generateDocumentFromTemplateAndRepoIterative(
+                user,
+                data.template.TemplatePrompt || '',
+                { owner, repo, fullName: repoFullName },
+                data.documentRole,
+                data.documentName,
+                handleProgress // Pass progress callback
+              );
+              console.log('✅ AI generation completed, content length:', documentContent.length);
+              console.log('📄 Generated content preview:', documentContent.substring(0, 300));
+              
+              // Finalize
+              handleProgress('done', 'Document ready!');
+              await new Promise(resolve => setTimeout(resolve, 500));
+              
+              console.log('✅ All steps completed, proceeding to create document');
+            } catch (aiError) {
+              console.error('❌ AI generation failed:', aiError);
+              
+              // Update steps to show error
+              setGenerationSteps(prev => prev.map(step => 
+                step.status === 'in-progress' 
+                  ? { ...step, status: 'error' as const, details: 'Failed - using fallback' }
+                  : step
+              ));
+              
+              // Wait a bit to show error
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+          } else {
+            console.warn('⚠️ Could not parse repository URL:', repositoryUrl);
+          }
+        } catch (error) {
+          console.error('❌ Repository processing failed:', error);
+          setIsGenerating(false);
+        }
+      }
+
       // Prepare document data for API (matching Firebase Cloud Function format)
       const documentData = {
         title: data.documentName.trim(),
-        content: data.template.TemplatePrompt || `# ${data.documentName}\n\nRole: ${data.documentRole}\n\nThis document was created using the ${data.template.TemplateName} template.`,
+        content: documentContent,
         projectId: finalProjectId,
         userId: userId,
         templateId: data.template.id || data.template.Template_Id || null,
         documentCategory: documentCategory
       };
-
-      console.log('Sending document creation request:', documentData);
 
       // Create the document
       const documentResponse = await fetch(API_ENDPOINTS.documents(), {
@@ -129,8 +256,6 @@ const Dashboard: React.FC = () => {
         body: JSON.stringify(documentData),
       });
 
-      console.log('Document creation response status:', documentResponse.status);
-
       if (!documentResponse.ok) {
         const errorText = await documentResponse.text();
         console.error('Document creation failed:', errorText);
@@ -138,20 +263,41 @@ const Dashboard: React.FC = () => {
       }
 
       const documentResult = await documentResponse.json();
-      console.log('✅ Document created successfully:', documentResult.document);
+      const createdDocument = documentResult.document || documentResult;
+      const documentId = createdDocument.id;
 
-      // Close modal and navigate to project
+      // If AI generation was used, wait longer to ensure Firestore write completes
+      if (repositoryUrl && user) {
+        await new Promise(resolve => setTimeout(resolve, 2500)); // Increased to 2.5 seconds
+      }
+
+      // Close modals and navigate to document
       setIsTemplateModalOpen(false);
       setSelectedTemplate(null);
+      setIsGenerating(false); // Close AI generation progress modal
       
       // Show success message
-      alert(`Document "${data.documentName}" created successfully!\n\nTemplate: ${data.template.TemplateName}\nRole: ${data.documentRole}\nCategory: ${documentCategory}`);
+      console.log(`📄 Document created with ID: ${documentId}, navigating now...`);
+      console.log(`📄 Original content length: ${documentContent.length}`);
       
-      if (finalProjectId) {
-        navigate(`/project/${finalProjectId}`);
+      // Navigate to the created document
+      if (documentId) {
+        navigate(`/document/${documentId}`);
+      } else {
+        // Fallback to project view if no document ID
+        alert(`Document "${data.documentName}" created successfully!\n\nTemplate: ${data.template.TemplateName}\nRole: ${data.documentRole}\nCategory: ${documentCategory}`);
+        if (finalProjectId) {
+          navigate(`/project/${finalProjectId}`);
+        }
       }
     } catch (error) {
       console.error('❌ Error creating document:', error);
+      
+      // Close the AI generation modal on error
+      setIsGenerating(false);
+      setIsTemplateModalOpen(false);
+      setSelectedTemplate(null);
+      
       alert(`Failed to create document: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -225,10 +371,21 @@ const Dashboard: React.FC = () => {
 
             const result = await response.json();
             console.log('✅ Dashboard: Project created successfully:', result.project);
+            console.log('📋 Project fields:', Object.keys(result.project));
+            
+            // Get the project ID (handle both Project_Id and id field names)
+            const projectId = result.project.Project_Id || result.project.id;
+            console.log('📍 Navigating to project ID:', projectId);
             
             // Close modal and navigate to the new project
             setIsModalOpen(false);
-            navigate(`/project/${result.project.id}`);
+            
+            if (projectId) {
+              navigate(`/project/${projectId}`);
+            } else {
+              console.error('❌ No project ID found in response:', result.project);
+              alert('Project created but navigation failed. Please refresh the page.');
+            }
           } catch (err) {
             console.error('❌ Dashboard: Error creating project:', err);
             alert(`Failed to create project: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -245,6 +402,18 @@ const Dashboard: React.FC = () => {
           setSelectedTemplate(null);
         }}
         onCreateDocument={handleCreateDocumentFromTemplate}
+      />
+
+      {/* AI Generation Progress Modal */}
+      <AIGenerationProgressModal
+        isOpen={isGenerating}
+        repositoryName={generationRepository}
+        steps={generationSteps}
+        currentStep={currentGenerationStep}
+        onCancel={() => {
+          setIsGenerating(false);
+          setGenerationSteps([]);
+        }}
       />
     </div>
   );

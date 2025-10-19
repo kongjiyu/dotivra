@@ -31,7 +31,7 @@ export const Heading = TiptapHeading.extend<HeadingOptions>({
     return {
       levels: [1, 2, 3, 4, 5, 6],
       HTMLAttributes: {},
-      maxIndent: 21, // Maximum 21 levels of indentation to prevent overflow
+      maxIndent: 10, // Basic limit to prevent content overflow - reasonable default
     }
   },
 
@@ -153,20 +153,8 @@ export const Heading = TiptapHeading.extend<HeadingOptions>({
   addKeyboardShortcuts() {
     return {
       ...this.parent?.(),
-      'Tab': () => {
-        // Only indent if we're in a heading (not in a list)
-        if (this.editor.isActive(this.name) && !this.editor.isActive('listItem')) {
-          return this.editor.commands.indentHeading()
-        }
-        return false
-      },
-      'Shift-Tab': () => {
-        // Only outdent if we're in a heading (not in a list)
-        if (this.editor.isActive(this.name) && !this.editor.isActive('listItem')) {
-          return this.editor.commands.outdentHeading()
-        }
-        return false
-      },
+      // Tab shortcuts removed to prevent double indentation
+      // ToolBar.tsx handles Tab/Shift-Tab with proper maxIndentLevel checking
     }
   },
 })

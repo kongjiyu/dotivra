@@ -71,17 +71,25 @@ const ProjectList: React.FC<ProjectListProps> = ({
       console.log('🔄 ProjectList: Loading projects from Firestore...');
       setLoading(true);
       setError(null);
-      
+
       if (!user) {
         console.warn('⚠️ User not authenticated, cannot load user projects');
-        setProjects([]);
+        // Provide client-side fallback for unauthenticated users
+        setProjects(getClientSideFallbackProjects());
         setLoading(false);
         return;
       }
-      
-      // Use centralized API configuration
-      const response = await fetch(API_ENDPOINTS.projects());
-      
+
+      // Use centralized API configuration with timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+      const response = await fetch(API_ENDPOINTS.projects(), {
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
         const text = await response.text();
         throw new Error(`Projects request failed (${response.status}): ${text}`);
@@ -90,7 +98,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
       const data = await response.json();
       console.log('📋 ProjectList received projects:', data);
 
-      if (data.success) {
+      if (data.success && Array.isArray(data.projects)) {
         // Keep the raw Project data for Firebase compatibility
         const allProjects = (data.projects || []).map((project: any): Project => {
           return {
@@ -113,14 +121,51 @@ const ProjectList: React.FC<ProjectListProps> = ({
         console.log('📋 ProjectList filtered user projects:', userProjects.length, 'out of', allProjects.length, 'total projects');
         setProjects(userProjects);
       } else {
-        throw new Error(data.error || 'Failed to load projects');
+        throw new Error('Invalid response format or no projects data');
       }
     } catch (err) {
       console.error('❌ ProjectList error loading projects:', err);
+
+      // Provide client-side fallback data instead of just showing error
+      const fallbackProjects = getClientSideFallbackProjects();
+      setProjects(fallbackProjects);
+
+      // Still set error for retry option, but don't block the UI
       setError(err instanceof Error ? err.message : 'Failed to load projects');
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * Generate client-side fallback projects for better UX
+   */
+  const getClientSideFallbackProjects = (): Project[] => {
+    if (!user) {
+      return [];
+    }
+
+    const now = new Date();
+    return [
+      {
+        id: 'fallback-1',
+        Project_Id: 'fallback-1',
+        ProjectName: 'Welcome Project',
+        Description: 'Get started with your documentation workspace',
+        GitHubRepo: '',
+        Created_Time: new Date(now.getTime() - 24 * 60 * 60 * 1000), // 1 day ago
+        User_Id: user.uid,
+      },
+      {
+        id: 'fallback-2',
+        Project_Id: 'fallback-2',
+        ProjectName: 'Demo Documentation',
+        Description: 'Explore features and collaboration tools',
+        GitHubRepo: '',
+        Created_Time: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), // 1 week ago
+        User_Id: user.uid,
+      }
+    ];
   };
 
   useEffect(() => {
@@ -163,31 +208,34 @@ const ProjectList: React.FC<ProjectListProps> = ({
     return renderSkeleton();
   }
 
-  if (error) {
-  return (
-    <section className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div className="px-6 pt-8 pb-6 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-800">Recent Projects</h2>
-              <p className="text-sm text-gray-500">
-                Access your recent projects and collaborate with your team
-              </p>
+  // Show error banner but don't block the UI if we have fallback data
+  const renderErrorBanner = () => {
+    if (!error) return null;
+
+    return (
+      <div className="px-6 py-3 bg-amber-50 border-b border-amber-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-amber-400 flex items-center justify-center">
+              <span className="text-white text-xs font-bold">!</span>
             </div>
+            <p className="text-sm text-amber-800">
+              {projects.length > 0
+                ? 'Showing sample data due to connection issue'
+                : 'Unable to load your projects'
+              }
+            </p>
           </div>
-        </div>
-        <div className="px-6 py-12 text-center">
-          <p className="text-red-600 font-medium">{error}</p>
           <button
             onClick={loadProjects}
-            className="mt-3 inline-flex items-center px-4 py-2 text-sm font-medium text-blue-600 border border-blue-200 rounded-full hover:bg-blue-50 transition-colors"
+            className="text-sm font-medium text-amber-700 hover:text-amber-900 underline"
           >
-            Try again
+            Retry
           </button>
         </div>
-      </section>
+      </div>
     );
-  }
+  };
 
   const getStatusForIndex = (index: number) => statusOptions[index % statusOptions.length];
 
@@ -230,8 +278,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
           </thead>
           <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
             {filteredProjects.map((project, index) => {
-            const status = getStatusForIndex(index);
-            const formattedDate = formatDateOnly(project.Created_Time);
+              const status = getStatusForIndex(index);
+              const formattedDate = formatDateOnly(project.Created_Time);
 
               return (
                 <tr
@@ -326,6 +374,9 @@ const ProjectList: React.FC<ProjectListProps> = ({
 
   return (
     <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      {/* Error banner */}
+      {renderErrorBanner()}
+
       <div className="px-6 pt-6 pb-5 border-b border-gray-100 space-y-4">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
@@ -355,11 +406,10 @@ const ProjectList: React.FC<ProjectListProps> = ({
               <button
                 type="button"
                 onClick={() => setViewMode('list')}
-                className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors ${
-                  viewMode === 'list'
+                className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors ${viewMode === 'list'
                     ? 'bg-blue-600 text-white shadow-inner'
                     : 'text-gray-600 hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <LayoutList className="h-4 w-4" />
                 List
@@ -367,11 +417,10 @@ const ProjectList: React.FC<ProjectListProps> = ({
               <button
                 type="button"
                 onClick={() => setViewMode('grid')}
-                className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors ${
-                  viewMode === 'grid'
+                className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors ${viewMode === 'grid'
                     ? 'bg-blue-600 text-white shadow-inner'
                     : 'text-gray-600 hover:bg-gray-50'
-                }`}
+                  }`}
               >
                 <LayoutGrid className="h-4 w-4" />
                 Cards
@@ -382,7 +431,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
       </div>
 
       {filteredProjects.length === 0 ? (
-  <div className="px-6 py-10 text-center">
+        <div className="px-6 py-10 text-center">
           <h3 className="text-lg font-medium text-gray-800 mb-2">No projects found</h3>
           <p className="text-sm text-gray-500 mb-6">
             Create a new project to start building documentation with your team.
