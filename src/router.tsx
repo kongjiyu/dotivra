@@ -11,7 +11,6 @@ import DocumentProject from "@/pages/Document/DocumentProject";
 import DocumentHistory from "@/pages/Document/DocumentHistory";
 import { DocumentProvider } from "./context/DocumentContext";
 import Profile from "./pages/Profile";
-import FeedbackForm from "./pages/FeedbackForm";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ErrorBoundary from "./components/ErrorBoundary";
 import AppLayout from "./components/AppLayout";
@@ -110,10 +109,6 @@ const router = createBrowserRouter([
       {
         path: "/templates",
         element: <ProtectedRoute><AllTemplate /></ProtectedRoute>,
-      },
-      {
-        path: "/feedback",
-        element: <ProtectedRoute><FeedbackForm /></ProtectedRoute>,
       },
       // Catch-all route for 404s
       {
