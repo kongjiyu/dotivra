@@ -13,6 +13,7 @@ interface TiptapProps {
     onEditorReady?: (editor: any) => void;
     className?: string;
     onOpenChat?: (message?: string) => void;
+    showToolbar?: boolean;
 }
 
 const Tiptap = ({
@@ -21,13 +22,14 @@ const Tiptap = ({
     onUpdate,
     onEditorReady,
     className = "",
-    onOpenChat
+    onOpenChat,
+    showToolbar = true,
 }: TiptapProps) => {
     const [isReady, setIsReady] = useState(false);
     const lastAppliedContentRef = useRef<string | null>(null);
 
     // Create editor configuration using the config file
-    const editorConfig = useMemo(() => 
+    const editorConfig = useMemo(() =>
         createTipTapConfig({
             content: initialContent,
             editable,
@@ -122,12 +124,12 @@ const Tiptap = ({
     // Apply initialContent when it changes, suppress history + update.
     useEffect(() => {
         if (!editor || !initialContent) return;
-        
+
         // Check if this content was already applied
         if (lastAppliedContentRef.current === initialContent) return;
 
         const currentHTML = editor.getHTML();
-        
+
         if (currentHTML !== initialContent) {
             // false => do not emit update event, avoids extra history noise
             editor.commands.setContent(initialContent, { emitUpdate: false });
@@ -137,7 +139,7 @@ const Tiptap = ({
                 editor.view.dispatch(tr);
             }
         }
-        
+
         // Mark this content as applied
         lastAppliedContentRef.current = initialContent;
     }, [editor, initialContent]);
@@ -166,8 +168,8 @@ const Tiptap = ({
     return (
         <EditorContext.Provider value={contextValue}>
             <div className={`tiptap-container h-full min-h-0 relative ${className}`}>
-                {/* Toolbar - Now handles its own positioning internally, constrained to this container */}
-                <ToolBar editor={editor} />
+                {/* Toolbar - Conditionally render based on showToolbar prop */}
+                {showToolbar && <ToolBar editor={editor} />}
 
                 {/* Document Content Container */}
                 <div className="mx-auto w-[1000px] max-w-[95vw] min-w-[320px] space-y-0 h-full min-h-0 pt-20">

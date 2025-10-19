@@ -35,7 +35,9 @@ export default function DocumentLayout({
         chatSidebarOpen,
         setChatSidebarOpen,
         repositoryInfo,
-        documentId
+        documentId,
+        showToolbar,
+        setShowToolbar,
     } = useDocument();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [isAIGenerating, setIsAIGenerating] = useState(false);
@@ -313,6 +315,7 @@ export default function DocumentLayout({
                                 Updated_Time: new Date(),
                                 IsDraft: true
                             }}
+                            onToolbarToggle={setShowToolbar}
                         />
                     </div>
                 )}

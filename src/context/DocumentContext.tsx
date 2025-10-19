@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { loadToolsPreferences } from '@/utils/documentToolsPreferences';
 
 interface DocumentContextType {
     documentTitle: string;
@@ -24,6 +25,8 @@ interface DocumentContextType {
     setShowAIActions: (fn: (content: string, beforeContent: string) => void) => void;
     chatSidebarOpen: boolean;
     setChatSidebarOpen: (open: boolean) => void;
+    showToolbar: boolean;
+    setShowToolbar: (show: boolean) => void;
 }
 
 const DocumentContext = createContext<DocumentContextType | undefined>(undefined);
@@ -44,6 +47,13 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
     const [onOpenChat, setOnOpenChat] = useState<((message?: string) => void) | undefined>(undefined);
     const [showAIActions, setShowAIActions] = useState<((content: string, beforeContent: string) => void) | undefined>(undefined);
     const [chatSidebarOpen, setChatSidebarOpen] = useState<boolean>(false);
+    const [showToolbar, setShowToolbar] = useState<boolean>(true);
+
+    // Load tool preferences from cookies on mount
+    useEffect(() => {
+        const prefs = loadToolsPreferences();
+        setShowToolbar(prefs.showToolbar);
+    }, []);
 
     const handleTitleChange = (title: string) => {
         setDocumentTitle(title);
@@ -83,6 +93,8 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
         setShowAIActions,
         chatSidebarOpen,
         setChatSidebarOpen,
+        showToolbar,
+        setShowToolbar,
     };
 
     return (

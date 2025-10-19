@@ -37,6 +37,17 @@ const DocumentContext = memo(({ editor, children, onOpenChat }: DocumentContextP
         const handleClick = (event: MouseEvent) => {
             const target = event.target as HTMLElement;
 
+            // Handle Ctrl+Click on links to open them
+            const linkElement = target.closest('a[href]') as HTMLAnchorElement;
+            if (linkElement && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                const href = linkElement.getAttribute('href');
+                if (href) {
+                    window.open(href, '_blank', 'noopener,noreferrer');
+                }
+                return;
+            }
+
             // More robust check: detect if click is on blank space (not on actual content nodes)
             // Check if target is container/wrapper, not actual content elements
             const isEditorContainer = target.classList.contains('tiptap') ||

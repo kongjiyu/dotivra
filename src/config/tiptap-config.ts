@@ -58,7 +58,7 @@ export const getTipTapExtensions = () => [
     Underline,
     // Simple link extension for basic link support
     Link.configure({
-        openOnClick: true,
+        openOnClick: false, // Disable auto-opening; require Ctrl+Click
         linkOnPaste: true,
         autolink: true,
         protocols: ['http', 'https', 'mailto', 'tel'],
