@@ -76,22 +76,16 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
     try {
       setLoading(true);
       
-      console.log('🔄 Loading GitHub repositories via OAuth with authentication...');
-      
       if (!user) {
         console.warn('User not authenticated, cannot load repositories');
         setRepositories([]);
         return;
       }
       
-      // Use the existing githubRepoService which handles authentication properly
       const repositories = await githubRepoService.getUserRepositories(user);
-      
-      console.log('📊 Total repositories loaded via OAuth:', repositories.length);
       setRepositories(repositories);
     } catch (error) {
-      console.warn('Failed to load GitHub repositories via OAuth:', error);
-      console.warn('This might mean the user has not connected their GitHub account yet.');
+      console.warn('Failed to load GitHub repositories:', error);
       setRepositories([]);
     } finally {
       setLoading(false);
@@ -103,44 +97,38 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
       setLoading(true);
       
       if (!user) {
-        console.warn('⚠️ User not authenticated, cannot load projects');
+        console.warn('User not authenticated, cannot load projects');
         setProjects([]);
         return;
       }
       
       const userId = user.uid;
-      console.log('🔄 Loading all projects from API:', API_ENDPOINTS.projects());
-      
       const response = await fetch(API_ENDPOINTS.projects());
-      console.log('📡 Projects API response status:', response.status);
       
       if (response.ok) {
         const data = await response.json();
-        console.log('📋 All projects data received:', data);
         
         if (!data || (!data.projects && !Array.isArray(data))) {
-          console.warn('⚠️ Unexpected API response format:', data);
+          console.warn('Unexpected API response format');
           setProjects([]);
           return;
         }
         
         const allProjects = data.projects || data || [];
         
-        // Filter projects for the current user on the client side
+        // Filter projects for the current user
         const userProjects = allProjects.filter((project: any) => {
           const projectUserId = project.User_Id || project.userId || project.user_id;
           return projectUserId === userId;
         });
         
-        console.log('📋 Filtered user projects:', userProjects.length, 'out of', allProjects.length, 'total projects');
-        console.log('📋 Setting user projects list:', userProjects);
         setProjects(userProjects);
       } else {
-        console.error('❌ Failed to load projects:', response.status, response.statusText);
+        console.error('Failed to load projects:', response.status);
         setProjects([]);
       }
     } catch (error) {
-      console.error('❌ Error loading projects:', error);
+      console.error('Error loading projects:', error);
       setProjects([]);
     } finally {
       setLoading(false);

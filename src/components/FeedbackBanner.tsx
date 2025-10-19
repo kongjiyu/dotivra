@@ -1,16 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { X } from 'lucide-react';
 
-const FeedbackBanner: React.FC = () => {
+interface FeedbackBannerProps {
+  onOpenFeedback: () => void;
+}
+
+const FeedbackBanner: React.FC<FeedbackBannerProps> = ({ onOpenFeedback }) => {
   const [isClosed, setIsClosed] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
   const location = useLocation();
-  const navigate = useNavigate();
 
   useEffect(() => {
-    // Don't show on login or feedback page
-    if (location.pathname === '/' || location.pathname === '/feedback') {
+    // Don't show on login page
+    if (location.pathname === '/') {
       setIsVisible(false);
       return;
     }
@@ -29,8 +32,8 @@ const FeedbackBanner: React.FC = () => {
     return () => clearTimeout(timer);
   }, [location.pathname]);
 
-  // Don't show on login or feedback page
-  if (location.pathname === '/' || location.pathname === '/feedback') {
+  // Don't show on login page
+  if (location.pathname === '/') {
     return null;
   }
 
@@ -45,7 +48,7 @@ const FeedbackBanner: React.FC = () => {
   };
 
   const handleOpenFeedback = () => {
-    navigate('/feedback');
+    onOpenFeedback();
   };
 
   return (
