@@ -2,7 +2,6 @@
 import DocumentLayout from "./DocumentLayout";
 import TipTap from "@/components/document/TipTap";
 import { useDocument } from "@/context/DocumentContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export default function DocumentSummary() {
     const {
