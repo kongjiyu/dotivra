@@ -744,8 +744,10 @@ app.post('/api/documents', async (req, res) => {
     
     const docData = {
       Title: title,
-      Content: content || '',
+      DocumentName: title, // Add DocumentName field for display
+      Content: content || '<p>Start writing your document...</p>',
       ProjectId: projectId,
+      Project_Id: projectId, // Add Project_Id for compatibility
       UserId: userId,
       TemplateId: templateId || null,
       DocumentCategory: documentCategory || 'General',
@@ -755,11 +757,16 @@ app.post('/api/documents', async (req, res) => {
     
     const docRef = await db.collection('Documents').add(docData);
     
-    res.status(201).json({
+    const responseData = {
       id: docRef.id,
       ...docData,
       CreatedAt: docData.CreatedAt.toDate().toISOString(),
       UpdatedAt: docData.UpdatedAt.toDate().toISOString()
+    };
+    
+    res.status(201).json({
+      success: true,
+      document: responseData
     });
   } catch (error) {
     logger.error('Error creating document:', error);

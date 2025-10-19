@@ -26,6 +26,10 @@ export const API_ENDPOINTS = {
   document: (id: string) => buildApiUrl(`api/documents/${id}`),
   projectDocuments: (projectId: string) => buildApiUrl(`api/documents/project/${projectId}`),
   
+  // Templates
+  templates: () => buildApiUrl('api/templates'),
+  template: (id: string) => buildApiUrl(`api/templates/${id}`),
+  
   // GitHub
   githubOauth: () => buildApiUrl('api/github/oauth/token'),
   githubRepos: () => buildApiUrl('api/github/user/repos'),

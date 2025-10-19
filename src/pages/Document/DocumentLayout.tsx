@@ -4,16 +4,16 @@ import { Input } from "@/components/ui/input";
 import {
     History,
     Cloud,
-    MessageCircle,
     FileText,
     FolderOpen,
     Dock,
-    Folder
+    Folder,
+    Sparkles
 } from "lucide-react";
-import { Link, useNavigate } from "react-router-dom";
-import DocumentMenu from "@/components/Document/DocumentMenu";
-import ChatSidebar from "@/components/Document/ChatSidebar";
-import SimpleShare from "@/components/Document/SimpleShare";
+import { Link, useNavigate, useLocation } from "react-router-dom";
+import DocumentMenu from "@/components/document/DocumentMenu";
+import ChatSidebar from "@/components/document/ChatSidebar";
+import SimpleShare from "@/components/document/SimpleShare";
 import { useDocument } from "@/context/DocumentContext";
 
 interface DocumentLayoutProps {
@@ -34,49 +34,107 @@ export default function DocumentLayout({
         setOnOpenChat,
         chatSidebarOpen,
         setChatSidebarOpen,
-        repositoryInfo
+        repositoryInfo,
+        documentId
     } = useDocument();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [isAIGenerating, setIsAIGenerating] = useState(false);
     const [initialChatMessage, setInitialChatMessage] = useState<string>('');
     const navigate = useNavigate();
+    const location = useLocation();
+
+    // Helper function to check if current page should show ChatBot
+    const shouldShowChatBot = () => {
+        const path = location.pathname;
+        return path.includes('/document/editor') ||
+            path.includes('/document/summary') ||
+            (path.includes('/document/') &&
+                !path.includes('/project') &&
+                !path.includes('/history'));
+    };
+
+    // Close chat sidebar when navigating away from editor/summary pages
+    useEffect(() => {
+        if (!shouldShowChatBot() && chatSidebarOpen) {
+            setChatSidebarOpen(false);
+        }
+    }, [location.pathname, chatSidebarOpen, setChatSidebarOpen]);
+
+    // Helper function to determine if a tab is active based on current location
+    const isTabActive = (tabName: string) => {
+        const path = location.pathname;
+        switch (tabName) {
+            case 'editor':
+                return path.includes('/document/editor') || (path.includes('/document/') && !path.includes('/summary') && !path.includes('/project') && !path.includes('/history'));
+            case 'summary':
+                return path.includes('/summary');
+            case 'project':
+                return path.includes('/project');
+            case 'history':
+                return path.includes('/history');
+            default:
+                return false;
+        }
+    };
+
+    // Helper function to get tab button classes
+    const getTabButtonClasses = (tabName: string) => {
+        const isActive = isTabActive(tabName);
+        return isActive
+            ? "bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-200"
+            : "text-gray-900 hover:bg-gray-50";
+    };
 
     // Remove the local chatOpen state and use context instead
 
     useEffect(() => {
         const chatFunction = (message?: string) => {
-            console.log('DocumentLayout onOpenChat called with:', message);
-            if (message) {
+
+            if (message && message.trim()) {
                 setInitialChatMessage(message);
+
+                // Clear the initial message after a delay to prevent re-sending
+                setTimeout(() => {
+                    setInitialChatMessage('');
+                }, 2000); // Increased timeout to ensure it's processed
             }
+
             setChatSidebarOpen(true);
-            console.log('Chat should now be open, chatSidebarOpen state:', true);
         };
 
-        console.log('Setting up onOpenChat function in DocumentLayout');
-        setOnOpenChat(chatFunction);
-    }, [setOnOpenChat, setChatSidebarOpen]);
+        setOnOpenChat(() => chatFunction); // Wrap in function to ensure correct reference
+    }, [setOnOpenChat, setChatSidebarOpen, chatSidebarOpen]);
 
     const handleTabChange = (tab: string) => {
         const basePath = '/document';
+
         switch (tab) {
             case 'editor':
-                navigate(`${basePath}/editor`);
+                if (documentId) {
+                    navigate(`${basePath}/${documentId}`);
+                } else {
+                    navigate(`${basePath}/editor`);
+                }
                 break;
             case 'summary':
                 navigate(`${basePath}/summary`);
                 break;
             case 'project':
-                navigate(`${basePath}/project`);
+                if (documentId) {
+                    navigate(`${basePath}/project/${documentId}`);
+                } else {
+                    navigate(`${basePath}/project`);
+                }
                 break;
             case 'history':
                 navigate(`${basePath}/history`);
                 break;
-            case 'share':
-                navigate(`${basePath}/share`);
-                break;
             default:
-                navigate(`${basePath}/editor`);
+                if (documentId) {
+                    navigate(`${basePath}/${documentId}`);
+                } else {
+                    navigate(`${basePath}/editor`);
+                }
         }
     };
 
@@ -90,8 +148,52 @@ export default function DocumentLayout({
         setTimeout(() => setIsAIGenerating(false), 600);
     };
 
-    const handleSaveAsTemplate = () => {
-        console.log("Saving document as template...");
+    const handleSaveAsTemplate = async () => {
+        try {
+            const { saveDocumentAsTemplate, showNotification } = await import('@/services/documentService');
+
+            const documentToSave = {
+                id: documentId,
+                DocumentName: documentTitle,
+                Content: documentContent,
+                DocumentType: 'Document',
+                DocumentCategory: 'general',
+                Project_Id: 'current-project',
+                User_Id: 'current-user',
+                Created_Time: new Date(),
+                Updated_Time: new Date(),
+                IsDraft: true
+            };
+
+            const template = await saveDocumentAsTemplate(documentToSave);
+            showNotification(`Template "${template.TemplateName}" created successfully!`, 'success');
+        } catch (error) {
+            console.error('Error creating template:', error);
+        }
+    };
+
+    const handleCopyDocument = async () => {
+        try {
+            const { copyDocument, showNotification } = await import('@/services/documentService');
+
+            const documentToCopy = {
+                id: documentId,
+                DocumentName: documentTitle,
+                Content: documentContent,
+                DocumentType: 'Document',
+                DocumentCategory: 'general',
+                Project_Id: 'current-project',
+                User_Id: 'current-user',
+                Created_Time: new Date(),
+                Updated_Time: new Date(),
+                IsDraft: true
+            };
+
+            const copiedDoc = await copyDocument(documentToCopy);
+            showNotification(`Document copy "${copiedDoc.DocumentName}" created successfully!`, 'success');
+        } catch (error) {
+            console.error('Error copying document:', error);
+        }
     };
 
     return (
@@ -143,7 +245,7 @@ export default function DocumentLayout({
                         <Button
                             variant="outline"
                             size="sm"
-                            className="text-gray-900"
+                            className={getTabButtonClasses("editor")}
                             onClick={() => handleTabChange("editor")}
                         >
                             <FileText className="w-4 h-4 mr-2" />
@@ -152,7 +254,7 @@ export default function DocumentLayout({
                         <Button
                             variant="outline"
                             size="sm"
-                            className="text-gray-900"
+                            className={getTabButtonClasses("summary")}
                             onClick={() => handleTabChange("summary")}
                         >
                             <Dock className="w-4 h-4 mr-2" />
@@ -161,7 +263,7 @@ export default function DocumentLayout({
                         <Button
                             variant="outline"
                             size="sm"
-                            className="text-gray-900"
+                            className={getTabButtonClasses("project")}
                             onClick={() => handleTabChange("project")}
                         >
                             <Folder className="w-4 h-4 mr-2" />
@@ -172,7 +274,7 @@ export default function DocumentLayout({
                         <Button
                             variant="outline"
                             size="sm"
-                            className="text-gray-900"
+                            className={getTabButtonClasses("history")}
                             onClick={() => handleTabChange("history")}
                         >
                             <History className="w-4 h-4 mr-2" />
@@ -180,7 +282,7 @@ export default function DocumentLayout({
                         </Button>
                         <SimpleShare
                             documentTitle={documentTitle}
-                            documentId="main-doc-123"
+                            documentId={documentId}
                         />
                     </div>
                 </div>
@@ -194,10 +296,23 @@ export default function DocumentLayout({
                         <DocumentMenu
                             onUpdate={setDocumentContent}
                             onSaveAsTemplate={handleSaveAsTemplate}
+                            onCopyDocument={handleCopyDocument}
                             documentTitle={documentTitle}
                             editor={currentEditor}
                             documentContent={documentContent}
                             context="main"
+                            currentDocument={{
+                                id: documentId,
+                                DocumentName: documentTitle,
+                                Content: documentContent,
+                                DocumentType: 'Document',
+                                DocumentCategory: 'general',
+                                Project_Id: 'current-project',
+                                User_Id: 'current-user',
+                                Created_Time: new Date(),
+                                Updated_Time: new Date(),
+                                IsDraft: true
+                            }}
                         />
                     </div>
                 )}
@@ -209,8 +324,9 @@ export default function DocumentLayout({
 
                 <div
                     className={
-                        showDocumentMenu ? "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[192px]" : "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[100px]"
-                    }>
+                        showDocumentMenu ? "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[152px]" : "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[100px]"
+                    }
+                >
                     {children}
                 </div>
             </div>
@@ -234,7 +350,7 @@ export default function DocumentLayout({
                             "Debug authentication flow",
                         ] : [
                             "Strengthen success metrics",
-                            "Review executive summary", 
+                            "Review executive summary",
                             "Add competitor analysis",
                             "Outline next steps",
                         ]}
@@ -242,18 +358,18 @@ export default function DocumentLayout({
                 </div>
             </div>
 
-            {/* Fixed AI Chat Icon */}
-            {!chatSidebarOpen && (
+            {/* Fixed AI Chat Icon - Only show on editor and summary pages */}
+            {!chatSidebarOpen && shouldShowChatBot() && (
                 <Button
                     onClick={handleAIGenerate}
                     disabled={isAIGenerating}
-                    className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full shadow-lg transition-all duration-200 bg-purple-500 hover:bg-purple-600 text-white"
+                    className="fixed bottom-6 right-6 z-30 h-14 w-14 rounded-full shadow-lg transition-all duration-200 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white flex items-center justify-center"
                     title="AI Assistant"
                 >
                     {isAIGenerating ? (
                         <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white"></div>
                     ) : (
-                        <MessageCircle className="w-6 h-6" />
+                        <Sparkles className="w-6 h-6 text-white" />
                     )}
                 </Button>
             )}
