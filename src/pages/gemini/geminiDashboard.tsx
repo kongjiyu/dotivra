@@ -213,12 +213,12 @@ export default function GeminiDashboard() {
                             const tpmUsed = k.TPM ?? k.tpmUsed ?? 0;
                             const totalRequests = k.totalRequest ?? k.totalRequests ?? 0;
                             const totalTokens = k.totalTokens ?? 0;
-                            
+
                             // Status display with proper formatting
                             const status = k.status || 'unknown';
                             let statusDisplay = status;
                             let statusClass = 'text-gray-600';
-                            
+
                             if (status === 'available') {
                                 statusDisplay = 'Available';
                                 statusClass = 'text-green-600 font-medium';
@@ -229,7 +229,7 @@ export default function GeminiDashboard() {
                                 statusDisplay = 'Available';
                                 statusClass = 'text-green-600 font-medium';
                             }
-                            
+
                             return (
                                 <tr key={k.id}>
                                     <td className="p-2 border font-mono">{k.idShort}</td>
