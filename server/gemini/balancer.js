@@ -1,7 +1,4 @@
-// server/gemini/balancer.js - ESM compatible runtime balancer (no TS import on server)
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+﻿// server/gemini/balancer.js - ESM compatible runtime balancer with Firebase support
 import crypto from 'crypto';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -11,16 +8,7 @@ const DEFAULT_LIMITS = {
   TPM: Number(process.env.GEMINI_LIMIT_TPM || 20000),
 };
 
-// Resolve project root relative to this file (ESM-safe). Assumes file is at server/gemini/balancer.js
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
-
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-
-function ensureDir(dir) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
 
 function estimateTokensFromContents(contents) {
   try {
@@ -34,11 +22,12 @@ function estimateTokensFromContents(contents) {
 }
 
 export class GeminiBalancer {
-  constructor({ apiKeys, persistFile, limits = DEFAULT_LIMITS }) {
+  constructor({ apiKeys, firestore, limits = DEFAULT_LIMITS }) {
     if (!apiKeys || !apiKeys.length) throw new Error('No GEMINI API keys configured');
+    if (!firestore) throw new Error('Firestore instance required');
+    
     this.limits = limits;
-    this.persistFile = persistFile;
-    ensureDir(path.dirname(persistFile));
+    this.firestore = firestore;
     this.state = {
       keys: apiKeys.map((key) => ({
         key,
@@ -56,7 +45,7 @@ export class GeminiBalancer {
       rrIndex: 0,
       lastPersistAt: 0,
     };
-    this._load();
+    this._loadPromise = this._load();
     this._debouncedSave = this._debounce(() => this._save(), 500);
   }
 
@@ -72,42 +61,98 @@ export class GeminiBalancer {
     return Date.now();
   }
 
-  _load() {
+  async _load() {
     try {
-      if (fs.existsSync(this.persistFile)) {
-        const raw = fs.readFileSync(this.persistFile);
-        const json = JSON.parse(raw.toString());
-        const byId = new Map((json.keys || []).map((k) => [k.id, k]));
-        this.state.keys = this.state.keys.map((k) => ({ ...k, ...(byId.get(k.id) || {}), key: k.key }));
-        this.state.rrIndex = json.rrIndex || 0;
+      console.log('📦 Loading Gemini usage data from Firebase...');
+      
+      const { doc, getDoc } = await import('firebase/firestore');
+      
+      for (const keyState of this.state.keys) {
+        const keyDoc = doc(this.firestore, 'gemini-metrics', keyState.id);
+        const keySnapshot = await getDoc(keyDoc);
+        
+        if (keySnapshot.exists()) {
+          const data = keySnapshot.data();
+          Object.assign(keyState, {
+            cooldownUntil: data.cooldownTime?.toMillis() || 0,
+            minuteWindowStart: data.lastUsed?.toMillis() || 0,
+            dayWindowStart: data.lastUsed?.toMillis() || 0,
+            rpmUsed: data.RPM || 0,
+            rpdUsed: data.RPD || 0,
+            tpmUsed: data.TPM || 0,
+            lastUsedAt: data.lastUsed?.toMillis() || 0,
+            totalRequests: data.totalRequest || 0,
+            totalTokens: data.totalTokens || 0,
+          });
+          console.log(`  ✅ Loaded key ${keyState.id.substring(0, 12)}: ${keyState.totalRequests} requests`);
+        } else {
+          await this._initializeKeyInFirebase(keyState);
+          console.log(`  🆕 Initialized new key ${keyState.id.substring(0, 12)} in Firebase`);
+        }
       }
-    } catch {
-      // ignore
+      
+      console.log('✅ Gemini usage data loaded from Firebase');
+    } catch (error) {
+      console.error('❌ Error loading Gemini data from Firebase:', error);
     }
   }
 
-  _save() {
+  async _initializeKeyInFirebase(keyState) {
     try {
-      const safe = {
-        rrIndex: this.state.rrIndex,
-        lastPersistAt: this.state.lastPersistAt,
-        keys: this.state.keys.map((k) => ({
-          id: k.id,
-          cooldownUntil: k.cooldownUntil,
-          minuteWindowStart: k.minuteWindowStart,
-          dayWindowStart: k.dayWindowStart,
-          rpmUsed: k.rpmUsed,
-          rpdUsed: k.rpdUsed,
-          tpmUsed: k.tpmUsed,
-          lastUsedAt: k.lastUsedAt,
-          totalRequests: k.totalRequests,
-          totalTokens: k.totalTokens,
-        })),
-      };
-      fs.writeFileSync(this.persistFile, Buffer.from(JSON.stringify(safe, null, 2)));
+      const { doc, setDoc } = await import('firebase/firestore');
+      const keyDoc = doc(this.firestore, 'gemini-metrics', keyState.id);
+      await setDoc(keyDoc, {
+        RPD: 0,
+        RPM: 0,
+        TPM: 0,
+        cooldownTime: new Date(0),
+        lastUsed: new Date(),
+        totalRequest: 0,
+        totalTokens: 0,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+    } catch (error) {
+      console.error(`❌ Error initializing key ${keyState.id.substring(0, 12)} in Firebase:`, error);
+    }
+  }
+
+  async _save() {
+    try {
+      console.log('💾 Starting save to Firebase...');
+      const now = new Date();
       this.state.lastPersistAt = this._now();
-    } catch (e) {
-      console.error('GeminiBalancer persist error:', e.message);
+      
+      const { doc, setDoc } = await import('firebase/firestore');
+      
+      const savePromises = this.state.keys.map(async (k) => {
+        try {
+          const keyDoc = doc(this.firestore, 'gemini-metrics', k.id);
+          const dataToSave = {
+            RPD: k.rpdUsed,
+            RPM: k.rpmUsed,
+            TPM: k.tpmUsed,
+            cooldownTime: new Date(k.cooldownUntil),
+            lastUsed: new Date(k.lastUsedAt || Date.now()),
+            totalRequest: k.totalRequests,
+            totalTokens: k.totalTokens,
+            updatedAt: now,
+          };
+          
+          console.log(`  💾 Saving key ${k.id.substring(0, 12)}:`, JSON.stringify(dataToSave, null, 2));
+          
+          await setDoc(keyDoc, dataToSave, { merge: true });
+          
+          console.log(`  ✅ Successfully saved key ${k.id.substring(0, 12)}`);
+        } catch (error) {
+          console.error(`❌ Error saving key ${k.id.substring(0, 12)} to Firebase:`, error);
+        }
+      });
+      
+      await Promise.all(savePromises);
+      console.log('✅ All keys saved to Firebase successfully');
+    } catch (error) {
+      console.error('❌ GeminiBalancer persist error:', error);
     }
   }
 
@@ -156,6 +201,7 @@ export class GeminiBalancer {
   }
 
   _markUsage(k, usedTokens) {
+    console.log(`📊 Marking usage for key ${k.id.substring(0, 12)}: ${usedTokens} tokens`);
     this._resetWindowsIfNeeded(k);
     k.rpmUsed += 1;
     k.rpdUsed += 1;
@@ -163,6 +209,7 @@ export class GeminiBalancer {
     k.totalRequests += 1;
     k.totalTokens += usedTokens;
     k.lastUsedAt = this._now();
+    console.log(`  📊 New totals: RPM=${k.rpmUsed}, RPD=${k.rpdUsed}, TPM=${k.tpmUsed}, Total=${k.totalRequests} req, ${k.totalTokens} tokens`);
     this._debouncedSave();
   }
 
@@ -188,11 +235,68 @@ export class GeminiBalancer {
     };
   }
 
+  // Read usage directly from Firebase (for dashboard)
+  async getUsageFromFirebase() {
+    try {
+      console.log('📖 Reading from Firebase collection: gemini-metrics');
+      const { collection, getDocs } = await import('firebase/firestore');
+      const collectionRef = collection(this.firestore, 'gemini-metrics');
+      const snapshot = await getDocs(collectionRef);
+      
+      console.log(`📖 Found ${snapshot.size} documents in Firebase`);
+      
+      const keys = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        console.log(`  📄 Document ${doc.id.slice(0, 12)}:`, JSON.stringify(data, null, 2));
+        
+        // Calculate status based on current usage vs limits
+        const rpmUsed = data.RPM || 0;
+        const rpdUsed = data.RPD || 0;
+        const tpmUsed = data.TPM || 0;
+        
+        let status = 'available';
+        if (rpmUsed >= this.limits.RPM) {
+          status = 'rpm-limit-reached';
+        } else if (rpdUsed >= this.limits.RPD) {
+          status = 'rpd-limit-reached';
+        } else if (tpmUsed >= this.limits.TPM) {
+          status = 'tpm-limit-reached';
+        }
+        
+        keys.push({
+          id: doc.id,
+          idShort: doc.id.slice(0, 12),
+          RPD: rpdUsed,
+          RPM: rpmUsed,
+          TPM: tpmUsed,
+          status: status,
+          totalRequest: data.totalRequest || 0,
+          totalTokens: data.totalTokens || 0,
+          updatedAt: data.updatedAt || null,
+        });
+      });
+
+      console.log(`✅ Retrieved ${keys.length} keys from Firebase`);
+      
+      return {
+        keys,
+        limits: this.limits,
+        lastSyncedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error('❌ Error reading from Firebase:', error);
+      throw error;
+    }
+  }
+
   getConfig() {
     return { limits: this.limits, keyCount: this.state.keys.length };
   }
 
   async generate({ model, contents, tools, systemInstruction, generationConfig, safetySettings, toolConfig, dryRun }) {
+    await this._loadPromise;
+    
     const estimatedTokens = estimateTokensFromContents(contents);
     const maxAttempts = this.state.keys.length;
     let lastError;
@@ -206,7 +310,6 @@ export class GeminiBalancer {
       const { key: keyState } = picked;
       try {
         if (dryRun) {
-          // Simulate usage without calling external API
           this._markUsage(keyState, estimatedTokens);
           return {
             text: null,
@@ -260,7 +363,7 @@ export class GeminiBalancer {
   }
 }
 
-export function createBalancerFromEnv() {
+export function createBalancerFromEnv(firestore) {
   const raw = (process.env.GEMINI_API_KEYS || '').trim();
   let keys = [];
   if (raw) {
@@ -276,15 +379,12 @@ export function createBalancerFromEnv() {
       keys = cleaned.split(',').map((s) => s.trim()).filter(Boolean);
     }
   }
-  // Allow GEMINI_USAGE_FILE to be a relative path (resolved from project root) or absolute path.
-  const envPath = (process.env.GEMINI_DATA_FILE || '').trim();
-  const persistFile = envPath
-    ? (path.isAbsolute(envPath) ? envPath : path.join(PROJECT_ROOT, envPath))
-    : path.join(PROJECT_ROOT, 'dbconfig', 'gemini_usage.json');
+  
   const limits = {
     RPM: Number(process.env.GEMINI_LIMIT_RPM || DEFAULT_LIMITS.RPM),
     RPD: Number(process.env.GEMINI_LIMIT_RPD || DEFAULT_LIMITS.RPD),
     TPM: Number(process.env.GEMINI_LIMIT_TPM || DEFAULT_LIMITS.TPM),
   };
-  return new GeminiBalancer({ apiKeys: keys, persistFile, limits });
+  
+  return new GeminiBalancer({ apiKeys: keys, firestore, limits });
 }

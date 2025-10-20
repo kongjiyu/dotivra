@@ -55,7 +55,13 @@ const Tiptap = ({
 
     // Add link hover detection to the editor
     useEffect(() => {
-        if (!editor) return;
+        // Wait for both editor and isReady to ensure content is loaded
+        if (!editor || !isReady) {
+            console.log('⏳ Link preview waiting for editor ready:', { editor: !!editor, isReady });
+            return;
+        }
+
+        console.log('✅ Link preview event listeners being attached');
 
         const clearHideTimeout = () => {
             if (hideTimeoutRef.current) {
@@ -74,6 +80,7 @@ const Tiptap = ({
             const href = linkElement.getAttribute('href') || '';
             if (!href || !/^https?:\/\//.test(href)) return;
 
+            console.log('🔗 Link hover detected:', href);
             clearHideTimeout();
             showPreview(href, linkElement);
         };
@@ -94,21 +101,40 @@ const Tiptap = ({
             }, 800);
         };
 
+        const handleClick = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            const linkElement = target.closest('a[href]') as HTMLAnchorElement | null;
+
+            // If clicking on a link, hide the preview immediately to allow the link to open
+            if (linkElement) {
+                console.log('🖱️ Link clicked, hiding preview');
+                clearHideTimeout();
+                hidePreview();
+                // Don't prevent default - let the link open naturally
+            }
+        };
+
         const editorElement = editor.options.element as HTMLElement | null;
         if (editorElement) {
+            console.log('📎 Attaching link preview listeners to:', editorElement);
             editorElement.addEventListener('mouseover', handleMouseOver);
             editorElement.addEventListener('mouseout', handleMouseOut);
+            editorElement.addEventListener('click', handleClick);
+        } else {
+            console.warn('⚠️ No editor element found for link preview');
         }
 
         return () => {
+            console.log('🧹 Cleaning up link preview listeners');
             clearHideTimeout();
             if (editorElement) {
                 editorElement.removeEventListener('mouseover', handleMouseOver);
                 editorElement.removeEventListener('mouseout', handleMouseOut);
+                editorElement.removeEventListener('click', handleClick);
             }
             resetPreview();
         };
-    }, [editor, showPreview, hidePreview, resetPreview]);
+    }, [editor, isReady, showPreview, hidePreview, resetPreview]);
 
     // Cleanup on unmount
     const handleDestroy = useCallback(() => {

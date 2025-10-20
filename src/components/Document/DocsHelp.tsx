@@ -78,7 +78,7 @@ export default function DocsHelp({ isOpen, onClose }: DocsHelpProps) {
                                 </h3>
                                 <div className="space-y-2 text-sm text-gray-700">
                                     <p>
-                                        <strong>Import Markdown:</strong> Click File → Import to import Markdown (.md) files into your document.
+                                        <strong>Import Files:</strong> Click File → Import to import Markdown (.md), Microsoft Word (.docx, .doc), or Google Docs files into your document. You can choose to overwrite the entire content or append to the existing document.
                                     </p>
                                     <p>
                                         <strong>Export:</strong> Click File → Export to save your document as Markdown (.md) or PDF (.pdf).
@@ -116,14 +116,15 @@ export default function DocsHelp({ isOpen, onClose }: DocsHelpProps) {
                                     Links
                                 </h3>
                                 <div className="space-y-2 text-sm text-gray-700">
+
                                     <p>
-                                        <strong>Add Link:</strong> Select text and press <kbd className="px-2 py-1 bg-gray-100 rounded border">Ctrl+K</kbd> or click the link button. Enter the URL and click OK.
+                                        <strong>Auto-Link Conversion:</strong> When you paste a URL into the document editor, it will automatically be converted to a clickable link.
                                     </p>
                                     <p>
                                         <strong>Edit Link:</strong> Click on a link and use the link toolbar to edit or remove it.
                                     </p>
                                     <p>
-                                        <strong>Link Preview:</strong> Hover over a link to see a preview of the destination page.
+                                        <strong>Link Preview:</strong> Hover over a link to see a preview of the destination page. Click the link to open it in a new tab.
                                     </p>
                                 </div>
                             </section>

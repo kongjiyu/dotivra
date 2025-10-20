@@ -70,7 +70,7 @@ export default function ShortcutKeys({ isOpen, onClose }: ShortcutKeysProps) {
             ],
         },
         {
-            title: "Special Content",
+            title: "Code & Formatting",
             shortcuts: [
                 { keys: ["Ctrl", "Alt", "C"], description: "Insert code block" },
                 { keys: ["Ctrl", "Shift", "\\"], description: "Clear formatting" },

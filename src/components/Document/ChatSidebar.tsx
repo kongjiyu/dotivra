@@ -10,6 +10,7 @@ import { EnhancedAIContentWriter } from "@/utils/enhancedAIContentWriter";
 import type { ContentPosition } from "@/utils/enhancedAIContentWriter";
 import { aiService } from "@/services/aiService";
 import { useAuth } from "@/context/AuthContext";
+import { marked } from "marked";
 
 export type ChatMessage = {
     id: string;
@@ -52,9 +53,26 @@ export default function ChatSidebar({
     // Get user context for repository operations
     const { user } = useAuth();
 
+    // Configure marked for better markdown rendering
+    useEffect(() => {
+        marked.setOptions({
+            breaks: true, // Convert \n to <br>
+            gfm: true, // GitHub flavored markdown
+        });
+    }, []);
 
     // Combine external messages (if any) with internal state
     const messages = useMemo(() => externalMessages ?? internalMessages, [externalMessages, internalMessages]);
+
+    // Function to render markdown content as HTML
+    const renderMarkdown = (content: string): string => {
+        try {
+            return marked.parse(content) as string;
+        } catch (error) {
+            console.error('Markdown parsing error:', error);
+            return content; // Fallback to plain text
+        }
+    };
 
     // Add initial hello message when chat opens
     useEffect(() => {
@@ -585,9 +603,16 @@ export default function ChatSidebar({
                                                             : m.content.includes("✨")
                                                                 ? "bg-gradient-to-r from-purple-50 to-blue-50 text-purple-800 border-2 border-purple-200 shadow-sm"
                                                                 : "bg-gray-100 text-gray-900 border border-gray-200"
-                                                    } rounded-lg px-3 py-2 text-[0.95rem] leading-relaxed whitespace-pre-wrap break-words transition-all duration-200 hover:scale-[1.02]`}
+                                                    } rounded-lg px-3 py-2 text-[0.95rem] leading-relaxed ${m.role === "user" ? "whitespace-pre-wrap" : ""} break-words transition-all duration-200 hover:scale-[1.02]`}
                                             >
-                                                {m.content}
+                                                {m.role === "user" ? (
+                                                    m.content
+                                                ) : (
+                                                    <div
+                                                        className="prose prose-sm max-w-none prose-headings:mt-2 prose-headings:mb-1 prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0.5 prose-code:text-xs prose-pre:text-xs prose-strong:font-semibold"
+                                                        dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
+                                                    />
+                                                )}
                                             </div>
                                         </div>
                                     </div>

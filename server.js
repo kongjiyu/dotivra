@@ -13,6 +13,9 @@ import crypto from 'crypto';
 import fetch from 'node-fetch';
 import { createBalancerFromEnv } from './server/gemini/balancer.js';
 
+// Session storage for dashboard authentication
+const dashboardSessions = new Map(); // sessionId -> { createdAt, expiresAt }
+
 // Import regular Firebase
 import { initializeApp } from 'firebase/app';
 import { 
@@ -69,11 +72,11 @@ const firestore = getFirestore(firebaseApp);
 
 console.log('✅ Firebase initialized successfully');
 
-// Gemini balancer initialization (server-side only)
+// Gemini balancer initialization (server-side only) with Firebase
 let geminiBalancer;
 try {
-  geminiBalancer = createBalancerFromEnv();
-  console.log(`✅ Gemini balancer initialized with ${geminiBalancer.getConfig().keyCount} keys`);
+  geminiBalancer = createBalancerFromEnv(firestore);
+  console.log(`✅ Gemini balancer initialized with ${geminiBalancer.getConfig().keyCount} keys (Firebase storage)`);
 } catch (e) {
   console.warn('⚠️ Gemini balancer not initialized:', e?.message || e);
 }
@@ -98,14 +101,151 @@ app.get('/api/health', (req, res) => {
 });
 
 // ===================== Gemini Endpoints =====================
-// Dashboard: usage + limits (no secrets)
-app.get('/api/gemini/dashboard', (req, res) => {
+
+// Helper: Clean expired sessions
+function cleanExpiredSessions() {
+  const now = Date.now();
+  for (const [sessionId, session] of dashboardSessions.entries()) {
+    if (now > session.expiresAt) {
+      dashboardSessions.delete(sessionId);
+    }
+  }
+}
+
+// Helper: Verify session
+function verifySession(sessionId) {
+  if (!sessionId) return false;
+  const session = dashboardSessions.get(sessionId);
+  if (!session) return false;
+  if (Date.now() > session.expiresAt) {
+    dashboardSessions.delete(sessionId);
+    return false;
+  }
+  return true;
+}
+
+// Authenticate with passkey
+app.post('/api/gemini/auth', (req, res) => {
   try {
-    if (!geminiBalancer) return res.status(503).json({ error: 'Balancer not configured' });
-    res.json(geminiBalancer.getUsage());
+    const { passkey } = req.body;
+    const expectedPasskey = process.env.GEMINI_DASHBOARD_PASS;
+
+    if (!expectedPasskey) {
+      return res.status(500).json({ error: 'Dashboard passkey not configured' });
+    }
+
+    if (passkey !== expectedPasskey) {
+      return res.status(401).json({ error: 'Invalid passkey' });
+    }
+
+    // Create session with 10 minute expiration
+    const sessionId = crypto.randomBytes(32).toString('hex');
+    const now = Date.now();
+    const expiresAt = now + 10 * 60 * 1000; // 10 minutes
+
+    dashboardSessions.set(sessionId, {
+      createdAt: now,
+      expiresAt: expiresAt,
+    });
+
+    // Clean expired sessions
+    cleanExpiredSessions();
+
+    console.log('✅ Dashboard session created:', sessionId.slice(0, 12), '...');
+    
+    res.json({
+      sessionId,
+      expiresAt: new Date(expiresAt).toISOString(),
+    });
   } catch (error) {
-    console.error('Gemini dashboard error:', error);
+    console.error('❌ Dashboard auth error:', error);
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+});
+
+// Verify session endpoint
+app.post('/api/gemini/verify-session', (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    const isValid = verifySession(sessionId);
+    
+    if (isValid) {
+      const session = dashboardSessions.get(sessionId);
+      res.json({
+        valid: true,
+        expiresAt: new Date(session.expiresAt).toISOString(),
+      });
+    } else {
+      res.json({ valid: false });
+    }
+  } catch (error) {
+    console.error('❌ Session verification error:', error);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// Logout endpoint
+app.post('/api/gemini/logout', (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    if (sessionId) {
+      dashboardSessions.delete(sessionId);
+      console.log('🔓 Dashboard session ended:', sessionId.slice(0, 12), '...');
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('❌ Logout error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// Dashboard: usage + limits (requires authentication)
+app.get('/api/gemini/dashboard', async (req, res) => {
+  try {
+    // Check session
+    const sessionId = req.headers['x-session-id'];
+    if (!verifySession(sessionId)) {
+      return res.status(401).json({ error: 'Unauthorized. Please authenticate.' });
+    }
+
+    if (!geminiBalancer) {
+      return res.status(503).json({ error: 'Balancer not configured' });
+    }
+
+    // Read directly from Firebase
+    console.log('📊 Dashboard requested, reading from Firebase...');
+    const usage = await geminiBalancer.getUsageFromFirebase();
+    console.log('📊 Dashboard data retrieved:', JSON.stringify(usage, null, 2));
+    res.json(usage);
+  } catch (error) {
+    console.error('❌ Gemini dashboard error:', error);
     res.status(500).json({ error: 'Failed to get dashboard' });
+  }
+});
+
+// Debug endpoint to check Firebase collection (no auth required for debugging)
+app.get('/api/gemini/debug-firebase', async (req, res) => {
+  try {
+    if (!geminiBalancer) {
+      return res.status(503).json({ error: 'Balancer not configured' });
+    }
+
+    console.log('🔍 Debug: Checking Firebase collection...');
+    const usage = await geminiBalancer.getUsageFromFirebase();
+    
+    res.json({
+      message: 'Firebase collection data',
+      collectionName: 'gemini-metrics',
+      firebaseProject: process.env.FIREBASE_PROJECT_ID || 'unknown',
+      data: usage,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Debug endpoint error:', error);
+    res.status(500).json({ 
+      error: 'Failed to read Firebase',
+      details: error.message 
+    });
   }
 });
 
@@ -145,7 +285,16 @@ app.post('/api/gemini/test-balancer', async (req, res) => {
 // Generate via balancer: central entry for all AI calls
 app.post('/api/gemini/generate', async (req, res) => {
   try {
-    if (!geminiBalancer) return res.status(503).json({ error: 'Balancer not configured' });
+    console.log('🔵 Gemini API Request received');
+    console.log('  Request body keys:', Object.keys(req.body || {}));
+    console.log('  Prompt:', req.body?.prompt?.substring(0, 100) + '...');
+    console.log('  Model:', req.body?.model || 'default');
+    
+    if (!geminiBalancer) {
+      console.error('❌ Balancer not configured!');
+      return res.status(503).json({ error: 'Balancer not configured' });
+    }
+    
     const {
       prompt,
       contents,
@@ -160,11 +309,14 @@ app.post('/api/gemini/generate', async (req, res) => {
     let effectiveContents = contents;
     if (!effectiveContents && typeof prompt === 'string') {
       effectiveContents = [{ role: 'user', parts: [{ text: String(prompt) }] }];
+      console.log('  Converting prompt to contents format');
     }
     if (!effectiveContents) {
+      console.error('❌ Missing prompt or contents');
       return res.status(400).json({ error: 'Missing prompt or contents' });
     }
 
+    console.log('  Calling geminiBalancer.generate with model:', model);
     const result = await geminiBalancer.generate({
       model,
       contents: effectiveContents,
@@ -175,6 +327,7 @@ app.post('/api/gemini/generate', async (req, res) => {
       toolConfig,
     });
 
+    console.log('✅ Gemini generation successful, response length:', result.text?.length || 0);
     res.json({
       ok: true,
       text: result.text,
@@ -183,7 +336,12 @@ app.post('/api/gemini/generate', async (req, res) => {
       model,
     });
   } catch (error) {
-    console.error('Gemini generate error:', error);
+    console.error('❌ Gemini generate error:', error);
+    console.error('   Error details:', {
+      message: error?.message,
+      status: error?.status,
+      stack: error?.stack?.substring(0, 500)
+    });
     const status = error?.status || 500;
     res.status(status).json({ ok: false, error: error?.message || 'Failed to generate' });
   }

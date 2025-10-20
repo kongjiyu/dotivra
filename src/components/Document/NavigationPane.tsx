@@ -154,7 +154,7 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
     if (!isOpen) return null;
 
     return (
-        <div className="fixed left-6 top-[180px] bottom-6 w-72 bg-white border border-gray-200 rounded-xl shadow-2xl z-30 flex flex-col">
+        <div className="fixed left-6 top-[180px] bottom-6 w-72 bg-white border border-gray-200 rounded-xl shadow-2xl flex flex-col" style={{ zIndex: 5 }}>
             {/* Header with gradient background */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-t-xl">
                 <h3 className="font-semibold text-gray-900 flex items-center gap-2">

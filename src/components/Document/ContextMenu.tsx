@@ -18,7 +18,8 @@ import {
     FileText,
     Eraser,
     Bot,
-    Link
+    Link,
+    Code
 } from 'lucide-react'
 
 interface ContextMenuProps {
@@ -39,6 +40,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     onOpenChat
 }) => {
     const menuRef = useRef<HTMLDivElement>(null)
+    
+    // Always declare hooks at the top level
+    const [menuHeight, setMenuHeight] = React.useState(500)
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -56,24 +60,16 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             document.removeEventListener('mousedown', handleClickOutside)
         }
     }, [isVisible, onClose])
-
-    // Close menu on escape key
+    
+    // Get menu ref to calculate actual height
     useEffect(() => {
-        const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                onClose()
-            }
+        if (menuRef.current && isVisible) {
+            const rect = menuRef.current.getBoundingClientRect()
+            setMenuHeight(rect.height)
         }
+    }, [isVisible, isTableContext])
 
-        if (isVisible) {
-            document.addEventListener('keydown', handleEscape)
-        }
-
-        return () => {
-            document.removeEventListener('keydown', handleEscape)
-        }
-    }, [isVisible, onClose])
-
+    // Early return after all hooks
     if (!isVisible || !editor) {
         return null
     }
@@ -86,10 +82,10 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     const isTextSelected = !editor.state.selection.empty
     const canPaste = true // We'll assume paste is always available
 
-    // Ensure menu stays within viewport
+    // Ensure menu stays within viewport and centers vertically
     const adjustedPosition = {
-        x: Math.min(position.x, window.innerWidth - 250), // 250px is approximate menu width + padding
-        y: Math.min(position.y, window.innerHeight - 500), // 500px is approximate expanded menu height
+        x: Math.min(position.x, window.innerWidth - 370), // 350px menu + 20px padding
+        y: Math.max(20, Math.min(position.y - (menuHeight / 2), window.innerHeight - menuHeight - 20)), // Center vertically at cursor
     }
 
     return (
@@ -511,6 +507,19 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                                     Underline
                                 </div>
                                 <span className="text-xs text-gray-400">Ctrl+U</span>
+                            </Button>
+
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-between px-3 py-2 text-sm"
+                                onClick={() => executeCommand(() => editor.chain().focus().toggleCode().run())}
+                            >
+                                <div className="flex items-center">
+                                    <Code className="w-4 h-4 mr-2" />
+                                    Inline Code
+                                </div>
+                                <span className="text-xs text-gray-400">Ctrl+E</span>
                             </Button>
 
                             <Button

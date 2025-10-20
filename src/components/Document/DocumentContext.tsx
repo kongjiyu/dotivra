@@ -23,30 +23,52 @@ const DocumentContext = memo(({ editor, children, onOpenChat }: DocumentContextP
         const handleContextMenu = (event: MouseEvent) => {
             event.preventDefault();
 
+            const selection = window.getSelection();
+            let x = event.clientX;
+            let y = event.clientY;
+
+            // If there's a selection, position menu relative to the caret
+            if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+                const range = selection.getRangeAt(0);
+                const rect = range.getBoundingClientRect();
+                
+                // Position to the right and vertically centered with the selection
+                x = rect.right + 10; // 10px offset to the right
+                y = rect.top + (rect.height / 2); // Center vertically
+                
+                // Ensure menu stays within viewport
+                const menuWidth = 350; // Approximate menu width
+                const menuHeight = 500; // Approximate menu height
+                
+                // Adjust if would overflow right edge
+                if (x + menuWidth > window.innerWidth) {
+                    x = rect.left - menuWidth - 10; // Show on left instead
+                }
+                
+                // Adjust if would overflow bottom
+                if (y + (menuHeight / 2) > window.innerHeight) {
+                    y = window.innerHeight - (menuHeight / 2) - 20;
+                }
+                
+                // Adjust if would overflow top
+                if (y - (menuHeight / 2) < 0) {
+                    y = (menuHeight / 2) + 20;
+                }
+            }
+
             // Check if right-click is on a table
             const target = event.target as HTMLElement;
             const isInTable = target.closest('table, td, th, tr');
 
             setContextMenu({
                 isVisible: true,
-                position: { x: event.clientX, y: event.clientY },
+                position: { x, y },
                 isTableContext: !!isInTable
             });
         };
 
         const handleClick = (event: MouseEvent) => {
             const target = event.target as HTMLElement;
-
-            // Handle Ctrl+Click on links to open them
-            const linkElement = target.closest('a[href]') as HTMLAnchorElement;
-            if (linkElement && (event.ctrlKey || event.metaKey)) {
-                event.preventDefault();
-                const href = linkElement.getAttribute('href');
-                if (href) {
-                    window.open(href, '_blank', 'noopener,noreferrer');
-                }
-                return;
-            }
 
             // More robust check: detect if click is on blank space (not on actual content nodes)
             // Check if target is container/wrapper, not actual content elements

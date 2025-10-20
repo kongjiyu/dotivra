@@ -928,7 +928,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     left: `${toolbarPosition.x}px`,
                     top: `${toolbarPosition.y}px`,
                     cursor: isDragging ? 'grabbing' : 'default',
-                    zIndex: 50,
+                    zIndex: 100,
                     ...(isVertical && { maxHeight: '600px', overflowY: 'auto' }),
                     transition: isDragging ? 'none' : undefined
                 } : isVertical ? {
@@ -936,7 +936,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     position: 'fixed' as const,
                     left: '16px', // Left edge with 16px padding, or left of centered 1000px container
                     top: '168px', // Top of drag area (152px content start + 8px padding)
-                    zIndex: 50,
+                    zIndex: 100,
                     maxHeight: '600px',
                     overflowY: 'auto' as const
                 } : {
@@ -945,7 +945,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     left: '50%',
                     top: '168px', // Top of drag area (152px content start + 8px padding)
                     transform: 'translateX(-50%)',
-                    zIndex: 50
+                    zIndex: 100
                 }}
             >
                 {/* Drag Handle and Orientation Toggle */}
@@ -1019,6 +1019,15 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                         title="Strikethrough"
                     >
                         <Strikethrough className="w-4 h-4" />
+                    </Button>
+
+                    <Button variant="outline" size="sm"
+                        onClick={() => editor.chain().focus().toggleCode().run()}
+                        className={`h-8 w-8 p-0 ${isActive('code') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                            }`}
+                        title="Inline Code"
+                    >
+                        <Code className="w-4 h-4" />
                     </Button>
 
                     <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import html2pdf from '@digivorefr/html2pdf.js';
 import { marked } from 'marked';
+import mammoth from 'mammoth';
 import { Input } from "@/components/ui/input";
 import {
 	Popover,
@@ -23,8 +24,6 @@ import {
 	ChevronDown,
 	Wrench,
 	HelpCircle,
-	Languages,
-	SpellCheck,
 	PanelLeft,
 	FileBarChart,
 	Keyboard,
@@ -38,6 +37,7 @@ import DocsHelp from "./DocsHelp";
 import ShortcutKeys from "./ShortcutKeys";
 import WordCount from "./WordCount";
 import ZoomControl from "./ZoomControl";
+import ImportConfirmationModal from "./ImportConfirmationModal";
 
 // Import preferences utility
 import {
@@ -91,6 +91,10 @@ export default function DocumentMenu({
 	const [showDocsHelp, setShowDocsHelp] = useState(false);
 	const [showShortcutKeys, setShowShortcutKeys] = useState(false);
 	const [showToolbar, setShowToolbar] = useState(initialPrefs.showToolbar);
+
+	// Import confirmation modal state
+	const [showImportConfirm, setShowImportConfirm] = useState(false);
+	const [pendingImport, setPendingImport] = useState<{ content: string; fileName: string } | null>(null);
 
 	// Save preferences when they change
 	useEffect(() => {
@@ -571,49 +575,82 @@ export default function DocumentMenu({
 		}
 	};
 
-	const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+	const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
 		const file = event.target.files?.[0];
 		if (!file) return;
 
-		// Only accept Markdown files
-		if (!file.name.endsWith('.md')) {
-			alert('Please select a Markdown (.md) file');
+		const fileName = file.name;
+		const fileExtension = fileName.split('.').pop()?.toLowerCase();
+
+		// Accept Markdown and Word documents
+		if (!['md', 'docx', 'doc'].includes(fileExtension || '')) {
+			alert('Please select a Markdown (.md) or Word (.docx, .doc) file');
 			return;
 		}
 
-		const reader = new FileReader();
-		reader.onload = async (e) => {
-			const markdownContent = e.target?.result as string;
+		try {
+			let htmlContent: string;
 
-			try {
-				// Convert Markdown to HTML using marked
-				const htmlContent = await marked(markdownContent);
+			if (fileExtension === 'md') {
+				// Handle Markdown files
+				const markdownContent = await file.text();
+				htmlContent = await marked(markdownContent);
+			} else if (fileExtension === 'docx' || fileExtension === 'doc') {
+				// Handle Word documents
+				const arrayBuffer = await file.arrayBuffer();
+				const result = await mammoth.convertToHtml({ arrayBuffer });
+				htmlContent = result.value;
 
-				if (htmlContent) {
-					let documentName: string | null = null;
-
-					// Only prompt for name if context is 'project' 
-					if (context === 'project') {
-						const defaultName = file.name.replace('.md', '');
-						documentName = prompt(`Enter a name for the imported document:`, defaultName);
-
-						if (!documentName) {
-							return; // User cancelled, don't import
-						}
-					}
-
-					if (onUpdate) {
-						onUpdate(htmlContent);
-					}
+				if (result.messages.length > 0) {
+					console.warn('Word conversion warnings:', result.messages);
 				}
-			} catch (error) {
-				console.error('Error parsing markdown:', error);
-				alert('Error parsing markdown file. Please check the file format.');
+			} else {
+				alert('Unsupported file format');
+				return;
 			}
-		};
-		reader.readAsText(file);
+
+			// Check if there's existing content
+			const hasContent = editor && editor.getText().trim().length > 0;
+
+			if (hasContent) {
+				// Show confirmation modal
+				setPendingImport({ content: htmlContent, fileName });
+				setShowImportConfirm(true);
+			} else {
+				// No existing content, just import directly
+				if (onUpdate) {
+					onUpdate(htmlContent);
+				}
+			}
+		} catch (error) {
+			console.error('Error importing file:', error);
+			alert('Error importing file. Please check the file format and try again.');
+		}
+
 		setShowImportOptions(false);
 		event.target.value = '';
+	};
+
+	const handleImportConfirm = (action: 'overwrite' | 'append') => {
+		if (!pendingImport) return;
+
+		if (action === 'overwrite') {
+			// Replace all content
+			if (onUpdate) {
+				onUpdate(pendingImport.content);
+			}
+		} else if (action === 'append') {
+			// Append to existing content
+			if (editor && onUpdate) {
+				const currentContent = editor.getHTML();
+				const combinedContent = currentContent + '<p></p>' + pendingImport.content;
+				onUpdate(combinedContent);
+			}
+		}
+
+		// Cleanup
+		setPendingImport(null);
+		setShowImportConfirm(false);
 	};
 
 	const handleExport = (format: 'md' | 'pdf') => {
@@ -824,18 +861,16 @@ export default function DocumentMenu({
 							<PopoverContent className="w-52 p-1">
 								<div className="space-y-1">
 									{/* Import Section */}
-									<div className="px-2 py-1">
-										<span className="text-xs font-semibold text-gray-500 uppercase">Import</span>
-									</div>
+
 									<label className="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer">
 										<input
 											type="file"
-											accept=".md"
+											accept=".md,.docx,.doc"
 											onChange={handleImport}
 											className="hidden"
 										/>
 										<Upload className="w-4 h-4 mr-2" />
-										<span className="text-sm">Markdown (.md)</span>
+										<span className="text-sm font-semibold">Import (.md, .docx)</span>
 									</label>
 
 									<div className="border-t border-gray-200 my-1"></div>
@@ -944,30 +979,6 @@ export default function DocumentMenu({
 										{showWordCount && (
 											<span className="ml-auto text-blue-600">✓</span>
 										)}
-									</Button>
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => {
-											alert("Translator feature coming soon!");
-											setShowToolsMenu(false);
-										}}
-										className="w-full justify-start h-8 px-2 text-gray-700"
-									>
-										<Languages className="w-4 h-4 mr-2" />
-										<span className="text-sm">Translator</span>
-									</Button>
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => {
-											alert("Spelling & Grammar Check coming soon!");
-											setShowToolsMenu(false);
-										}}
-										className="w-full justify-start h-8 px-2 text-gray-700"
-									>
-										<SpellCheck className="w-4 h-4 mr-2" />
-										<span className="text-sm">Spelling & Grammar</span>
 									</Button>
 									<Button
 										variant="ghost"
@@ -1191,6 +1202,17 @@ export default function DocumentMenu({
 			<ShortcutKeys
 				isOpen={showShortcutKeys}
 				onClose={() => setShowShortcutKeys(false)}
+			/>
+
+			{/* Import Confirmation Modal */}
+			<ImportConfirmationModal
+				isOpen={showImportConfirm}
+				onClose={() => {
+					setShowImportConfirm(false);
+					setPendingImport(null);
+				}}
+				fileName={pendingImport?.fileName || ''}
+				onConfirm={handleImportConfirm}
 			/>
 		</div>
 	);

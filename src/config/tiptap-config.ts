@@ -7,6 +7,9 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
+import BulletList from "@tiptap/extension-bullet-list";
+import OrderedList from "@tiptap/extension-ordered-list";
+import ListItem from "@tiptap/extension-list-item";
 import TableRow from "@tiptap/extension-table-row";
 import TableHeaderWithBackgroundColor from "@/lib/extensions/TableHeaderWithBackgroundColor";
 import TableCellWithBackgroundColor from "@/lib/extensions/TableCellWithBackgroundColor";
@@ -28,6 +31,9 @@ export const getTipTapExtensions = () => [
         heading: false, // we'll add Heading explicitly below
         paragraph: false, // we'll use our custom paragraph extension
         codeBlock: false, // we'll use our custom code block extension
+        bulletList: false, // we'll add BulletList explicitly below
+        orderedList: false, // we'll add OrderedList explicitly below
+        listItem: false, // we'll add ListItem explicitly below
     }),
     // Custom paragraph extension with basic indent limit to prevent overflow
     Paragraph.configure({
@@ -40,6 +46,10 @@ export const getTipTapExtensions = () => [
     }),
     // Custom code block extension with highlight.js support
     CodeBlockWithHighlight,
+    // List extensions with improved backspace behavior
+    BulletList,
+    OrderedList,
+    ListItem,
     // Text formatting extensions
     Highlight.configure({
         multicolor: true,
@@ -58,7 +68,7 @@ export const getTipTapExtensions = () => [
     Underline,
     // Simple link extension for basic link support
     Link.configure({
-        openOnClick: false, // Disable auto-opening; require Ctrl+Click
+        openOnClick: true, // Enable opening links normally
         linkOnPaste: true,
         autolink: true,
         protocols: ['http', 'https', 'mailto', 'tel'],

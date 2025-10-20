@@ -5,11 +5,18 @@ import type { User } from 'firebase/auth';
 const GENERATE_API = '/api/gemini/generate';
 
 class AIService {
-    private defaultModel = 'gemini-2.5-pro';
+    private defaultModel = 'gemini-2.0-flash';
 
     async generateContent(prompt: string, context?: string): Promise<string> {
         try {
             const fullPrompt = context ? `Context: ${context}\n\nRequest: ${prompt}` : prompt;
+            console.log('🚀 Calling Gemini API:', GENERATE_API);
+            console.log('📝 Request body:', {
+                prompt: fullPrompt.substring(0, 200) + (fullPrompt.length > 200 ? '...' : ''),
+                model: this.defaultModel,
+                generationConfig: { maxOutputTokens: 2048 }
+            });
+            
             const resp = await fetch(GENERATE_API, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -19,15 +26,33 @@ class AIService {
                     generationConfig: { maxOutputTokens: 2048 },
                 }),
             });
+            
+            console.log('📡 Gemini API Response Status:', resp.status);
+            console.log('📡 Gemini API Response Headers:', Object.fromEntries(resp.headers.entries()));
+            
+            // Try to get response body for better error details
+            const responseText = await resp.text();
+            console.log('📄 Raw response:', responseText.substring(0, 500));
+            
             if (!resp.ok) {
-                const err = await resp.json().catch(() => ({}));
-                throw new Error(err?.error || `Generate failed: ${resp.status}`);
+                let errorData;
+                try {
+                    errorData = JSON.parse(responseText);
+                } catch {
+                    errorData = { error: responseText || resp.statusText };
+                }
+                console.error('❌ Gemini API Error Response:', errorData);
+                throw new Error(errorData?.error || `Generate failed: ${resp.status} - ${resp.statusText}`);
             }
-            const data = await resp.json();
+            
+            const data = JSON.parse(responseText);
+            console.log('✅ Gemini API Success, response keys:', Object.keys(data));
+            console.log('✅ Text length:', data.text?.length || 0);
+            
             return data.text as string;
         } catch (error) {
             console.error('❌ AI Generation Error:', error);
-            throw new Error('Failed to generate AI content');
+            throw error instanceof Error ? error : new Error('Failed to generate AI content');
         }
     }
 
