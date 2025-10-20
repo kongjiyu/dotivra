@@ -31,25 +31,25 @@ const DocumentContext = memo(({ editor, children, onOpenChat }: DocumentContextP
             if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
                 const range = selection.getRangeAt(0);
                 const rect = range.getBoundingClientRect();
-                
+
                 // Position to the right and vertically centered with the selection
                 x = rect.right + 10; // 10px offset to the right
                 y = rect.top + (rect.height / 2); // Center vertically
-                
+
                 // Ensure menu stays within viewport
                 const menuWidth = 350; // Approximate menu width
                 const menuHeight = 500; // Approximate menu height
-                
+
                 // Adjust if would overflow right edge
                 if (x + menuWidth > window.innerWidth) {
                     x = rect.left - menuWidth - 10; // Show on left instead
                 }
-                
+
                 // Adjust if would overflow bottom
                 if (y + (menuHeight / 2) > window.innerHeight) {
                     y = window.innerHeight - (menuHeight / 2) - 20;
                 }
-                
+
                 // Adjust if would overflow top
                 if (y - (menuHeight / 2) < 0) {
                     y = (menuHeight / 2) + 20;

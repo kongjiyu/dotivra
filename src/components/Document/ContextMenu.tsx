@@ -40,7 +40,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     onOpenChat
 }) => {
     const menuRef = useRef<HTMLDivElement>(null)
-    
+
     // Always declare hooks at the top level
     const [menuHeight, setMenuHeight] = React.useState(500)
 
@@ -60,7 +60,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             document.removeEventListener('mousedown', handleClickOutside)
         }
     }, [isVisible, onClose])
-    
+
     // Get menu ref to calculate actual height
     useEffect(() => {
         if (menuRef.current && isVisible) {
