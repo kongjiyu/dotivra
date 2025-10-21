@@ -1,6 +1,7 @@
 import type { Editor } from "@tiptap/react";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useDocument } from "@/context/DocumentContext";
 import { Button } from "@/components/ui/button";
 import {
     Select,
@@ -49,7 +50,8 @@ import {
     GripHorizontal,
     ArrowLeftRight,
     ArrowUpDown,
-    Type
+    Type,
+    Minus
 } from "lucide-react";
 
 const FONT_FAMILIES = [
@@ -117,6 +119,9 @@ const TableGridSelector = ({ onSelect }: { onSelect: (rows: number, cols: number
 
 
 const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly?: boolean }) => {
+
+    // Get Navigation Pane and ChatSidebar visibility from context to recalculate boundaries
+    const { showNavigationPane, chatSidebarOpen } = useDocument();
 
     const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [currentFontSize, setCurrentFontSize] = useState<string>('16px');
@@ -340,27 +345,40 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     }, []);
 
     // Helper function to safely clamp position with error handling
+    // Account for both NavigationPane and ChatSidebar boundaries
     const safeClampPosition = useCallback((position: { x: number; y: number } | null): { x: number; y: number } | null => {
         if (!position || !containerRef.current || isUpdatingPosition.current) return position;
 
         try {
             const toolbar = containerRef.current;
             const toolbarRect = toolbar.getBoundingClientRect();
-            const tiptapContainer = document.querySelector('.tiptap-container');
-
-            if (!tiptapContainer) return position;
-
-            const containerRect = tiptapContainer.getBoundingClientRect();
 
             // Validate rect dimensions to prevent invalid calculations
-            if (toolbarRect.width <= 0 || toolbarRect.height <= 0 ||
-                containerRect.width <= 0 || containerRect.height <= 0) {
+            if (toolbarRect.width <= 0 || toolbarRect.height <= 0) {
                 return null; // Fallback to default position
             }
 
-            // Clamp position within boundaries
-            const clampedX = Math.max(containerRect.left, Math.min(position.x, containerRect.right - toolbarRect.width));
-            const clampedY = Math.max(containerRect.top, Math.min(position.y, containerRect.bottom - toolbarRect.height));
+            // Calculate boundaries accounting for NavigationPane and ChatSidebar
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            // Left boundary (NavigationPane)
+            const navPaneWidth = showNavigationPane ? Math.max(viewportWidth * 0.15, 200) : 0;
+            const leftBoundary = navPaneWidth;
+
+            // Right boundary (ChatSidebar)
+            const chatSidebarWidth = chatSidebarOpen ? 320 : 0;
+            const rightBoundary = viewportWidth - chatSidebarWidth - toolbarRect.width;
+
+            // Top boundary (header area)
+            const topBoundary = 152;
+
+            // Bottom boundary
+            const bottomBoundary = viewportHeight - toolbarRect.height;
+
+            // Clamp position within calculated boundaries
+            const clampedX = Math.max(leftBoundary, Math.min(position.x, rightBoundary));
+            const clampedY = Math.max(topBoundary, Math.min(position.y, bottomBoundary));
 
             // Check if position actually changed (prevent unnecessary updates)
             const hasChanged = Math.abs(clampedX - position.x) > 1 || Math.abs(clampedY - position.y) > 1;
@@ -370,7 +388,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             console.error('Error clamping toolbar position:', error);
             return null; // Fallback to default position on error
         }
-    }, []);
+    }, [showNavigationPane, chatSidebarOpen]);
 
     // Handle window resize to re-clamp toolbar position within new boundaries
     useEffect(() => {
@@ -418,6 +436,63 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         }, 200);
 
     }, [isVertical, getSmartPositionForOrientation]); // Only trigger on orientation change
+
+    // Force recalculation of default position when NavigationPane or ChatSidebar toggles
+    useEffect(() => {
+        if (!toolbarPosition) {
+            // Trigger re-render to recalculate inline style
+            setCurrentFontSize(prev => prev);
+        }
+    }, [showNavigationPane, chatSidebarOpen, toolbarPosition]);
+
+    // Recalculate toolbar position when NavigationPane or ChatSidebar toggles - instant adjustment
+    useEffect(() => {
+        if (!containerRef.current) return;
+
+        // Use requestAnimationFrame for immediate but smooth adjustment
+        const recalculateFrame = requestAnimationFrame(() => {
+            const toolbar = containerRef.current;
+            if (!toolbar) return;
+
+            const toolbarRect = toolbar.getBoundingClientRect();
+
+            // If toolbar has a saved position, clamp it to new boundaries
+            if (toolbarPosition) {
+                // Calculate boundaries accounting for NavigationPane and ChatSidebar
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                // Left boundary (NavigationPane)
+                const navPaneWidth = showNavigationPane ? Math.max(viewportWidth * 0.15, 200) : 0;
+                const leftBoundary = navPaneWidth;
+
+                // Right boundary (ChatSidebar)
+                const chatSidebarWidth = chatSidebarOpen ? 320 : 0;
+                const rightBoundary = viewportWidth - chatSidebarWidth - toolbarRect.width;
+
+                // Top boundary (header area)
+                const topBoundary = 152;
+
+                // Bottom boundary
+                const bottomBoundary = viewportHeight - toolbarRect.height;
+
+                let newX = toolbarPosition.x;
+                let newY = toolbarPosition.y;
+
+                // Clamp position to new boundaries
+                newX = Math.max(leftBoundary, Math.min(newX, rightBoundary));
+                newY = Math.max(topBoundary, Math.min(newY, bottomBoundary));
+
+                // Only update if position changed
+                if (newX !== toolbarPosition.x || newY !== toolbarPosition.y) {
+                    setToolbarPosition({ x: newX, y: newY });
+                }
+            }
+            // If toolbar is at default position, it will automatically recalculate via inline style
+        });
+
+        return () => cancelAnimationFrame(recalculateFrame);
+    }, [showNavigationPane, chatSidebarOpen, toolbarPosition]);
 
     // Calculate dynamic maxIndentLevel based on window width
     // Wider screens can handle more indentation levels without content overflow
@@ -553,7 +628,9 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                 bgColor = cellAttrs.backgroundColor || '';
             }
             setCurrentBackgroundColor(bgColor);
-        };        // Initialize toolbar state immediately when editor becomes available
+        };
+
+        // Initialize toolbar state immediately when editor becomes available
         updateToolbarState();
 
         // Listen for selection changes and content updates
@@ -690,11 +767,12 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     // Helper functions to determine section visibility based on calculated window width breakpoints  
     // In vertical mode, show only essential options (up to font/color), wrap Lists/Indent/Align/Insert in More Options
     // Memoize these functions to prevent unnecessary recalculations
-    const shouldShowInsertOptions = useMemo(() => isVertical ? false : windowWidth >= 1390, [isVertical, windowWidth]);
-    const shouldShowIndent = useMemo(() => isVertical ? false : windowWidth >= 1150, [isVertical, windowWidth]);
-    const shouldShowClearFormatting = useMemo(() => isVertical ? false : windowWidth >= 1150, [isVertical, windowWidth]);
-    const shouldShowLists = useMemo(() => isVertical ? false : windowWidth >= 990, [isVertical, windowWidth]);
-    const shouldShowTextAlign = useMemo(() => isVertical ? false : windowWidth >= 880, [isVertical, windowWidth]);
+    // Adjusted breakpoints for better responsive behavior
+    const shouldShowInsertOptions = useMemo(() => isVertical ? false : windowWidth >= 1400, [isVertical, windowWidth]);
+    const shouldShowIndent = useMemo(() => isVertical ? false : windowWidth >= 1200, [isVertical, windowWidth]);
+    const shouldShowClearFormatting = useMemo(() => isVertical ? false : windowWidth >= 1200, [isVertical, windowWidth]);
+    const shouldShowLists = useMemo(() => isVertical ? false : windowWidth >= 1000, [isVertical, windowWidth]);
+    const shouldShowTextAlign = useMemo(() => isVertical ? false : windowWidth >= 900, [isVertical, windowWidth]);
     const shouldShowMoreOptions = useMemo(() =>
         isVertical ? true : (!shouldShowInsertOptions || !shouldShowTextAlign || !shouldShowClearFormatting || !shouldShowIndent || !shouldShowLists),
         [isVertical, shouldShowInsertOptions, shouldShowTextAlign, shouldShowClearFormatting, shouldShowIndent, shouldShowLists]
@@ -928,38 +1006,63 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     left: `${toolbarPosition.x}px`,
                     top: `${toolbarPosition.y}px`,
                     cursor: isDragging ? 'grabbing' : 'default',
-                    zIndex: 50,
+                    zIndex: 100,
                     ...(isVertical && { maxHeight: '600px', overflowY: 'auto' }),
                     transition: isDragging ? 'none' : undefined
-                } : isVertical ? {
-                    // Vertical mode: Top-left of drag area (tiptap-container)
-                    position: 'fixed' as const,
-                    left: '16px', // Left edge with 16px padding, or left of centered 1000px container
-                    top: '168px', // Top of drag area (152px content start + 8px padding)
-                    zIndex: 50,
-                    maxHeight: '600px',
-                    overflowY: 'auto' as const
-                } : {
-                    // Horizontal mode: Top-center of drag area (tiptap-container)
-                    position: 'fixed' as const,
-                    left: '50%',
-                    top: '168px', // Top of drag area (152px content start + 8px padding)
-                    transform: 'translateX(-50%)',
-                    zIndex: 50
-                }}
+                } : (() => {
+                    // Calculate initial position within tiptap-container based on NavigationPane state
+                    const tiptapContainer = document.querySelector('.tiptap-container');
+                    const containerRect = tiptapContainer?.getBoundingClientRect();
+
+                    if (isVertical) {
+                        // Vertical mode: Top-left of drag area (tiptap-container)
+                        // Ensure we're positioned within the actual container boundaries
+                        const leftPos = containerRect ? containerRect.left + 16 : 16;
+                        return {
+                            position: 'fixed' as const,
+                            left: `${leftPos}px`,
+                            top: '168px', // Top of drag area (152px content start + 16px padding)
+                            zIndex: 100,
+                            maxHeight: '600px',
+                            overflowY: 'auto' as const
+                        };
+                    } else {
+                        // Horizontal mode: Top-center of drag area (tiptap-container)
+                        // Calculate center based on actual container position (accounts for NavigationPane)
+                        if (containerRect) {
+                            const centerX = containerRect.left + containerRect.width / 2;
+                            return {
+                                position: 'fixed' as const,
+                                left: `${centerX}px`,
+                                top: '168px',
+                                transform: 'translateX(-50%)',
+                                zIndex: 100
+                            };
+                        } else {
+                            // Fallback when container not ready - center of viewport
+                            return {
+                                position: 'fixed' as const,
+                                left: '50%',
+                                top: '168px',
+                                transform: 'translateX(-50%)',
+                                zIndex: 100
+                            };
+                        }
+                    }
+                })()}
             >
                 {/* Drag Handle and Orientation Toggle */}
                 <div className={`flex ${isVertical ? 'flex-col gap-1 items-center' : 'items-center gap-1'} flex-shrink-0`}>
-                    {/* Drag Handle */}
+                    {/* Drag Handle - Enlarged for better grab area */}
                     <div
-                        className={`flex items-center justify-center h-8 ${isVertical ? 'w-8' : 'w-8'} cursor-grab active:cursor-grabbing hover:bg-gray-100 rounded transition-colors flex-shrink-0`}
+                        className={`flex items-center justify-center ${isVertical ? 'h-10 w-10' : 'h-10 w-10'} cursor-grab active:cursor-grabbing hover:bg-gray-100 rounded transition-colors flex-shrink-0`}
                         onMouseDown={handleDragStart}
                         title="Drag to reposition toolbar"
                     >
                         {isVertical ? (
-                            <GripHorizontal className="w-4 h-4 text-gray-400" />
+                            <GripHorizontal className="w-5 h-5 text-gray-500" />
                         ) : (
-                            <GripVertical className="w-4 h-4 text-gray-400" />
+                            <GripVertical className="w-5 h-5 text-gray-500" />
                         )}
                     </div>
 
@@ -1019,6 +1122,15 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                         title="Strikethrough"
                     >
                         <Strikethrough className="w-4 h-4" />
+                    </Button>
+
+                    <Button variant="outline" size="sm"
+                        onClick={() => editor.chain().focus().toggleCode().run()}
+                        className={`h-8 w-8 p-0 ${isActive('code') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                            }`}
+                        title="Inline Code"
+                    >
+                        <Code className="w-4 h-4" />
                     </Button>
 
                     <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>
@@ -1835,6 +1947,17 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                 <Link className="w-4 h-4" />
                                 {!isVertical && <span className="hidden lg:inline">Link</span>}
                             </Button>
+
+                            <Button variant="outline" size="sm"
+                                onClick={() => {
+                                    editor?.chain().focus().setHorizontalRule().run();
+                                }}
+                                className={isVertical ? "h-8 w-8 p-0" : "flex items-center gap-1.5 px-2 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"}
+                                title="Insert Divider"
+                            >
+                                <Minus className="w-4 h-4" />
+                                {!isVertical && <span className="hidden lg:inline">Divider</span>}
+                            </Button>
                         </div>
                     )}
 
@@ -1931,6 +2054,12 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                         }}>
                                             <Link className="w-4 h-4 mr-2" />
                                             <span>Link</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => {
+                                            editor?.chain().focus().setHorizontalRule().run();
+                                        }}>
+                                            <Minus className="w-4 h-4 mr-2" />
+                                            <span>Divider</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
                                     </>

@@ -37,7 +37,8 @@ export default function DocumentEditor() {
         setDocumentId,
         setProjectId,
         setRepositoryInfo,
-        onOpenChat
+        onOpenChat,
+        showToolbar,
     } = useDocument();
     const documentContentRef = useRef<HTMLDivElement>(null);
     const latestContentRef = useRef<string>("");
@@ -82,7 +83,7 @@ export default function DocumentEditor() {
                     setDocumentId(documentId);
                     setDocumentTitle(documentData.DocumentName || "Untitled Document");
                     const content = documentData.Content || "";
-                    
+
                     setDocumentContent(content); // Use exact content from DB, empty if empty
 
                     // Load project information if document has a project ID
@@ -484,6 +485,7 @@ export default function DocumentEditor() {
                     onUpdate={handleDocumentUpdateOptimized}
                     onEditorReady={handleEditorReady}
                     onOpenChat={onOpenChat}
+                    showToolbar={showToolbar}
                     className=""
                 />
 

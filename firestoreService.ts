@@ -58,6 +58,7 @@ export interface Document {
     Template_Id?: string; // Foreign key - references Template's Firestore document ID
     User_Id: string; // Foreign key - references User's Firestore document ID
     Content?: string; // HTML content
+    Summary?: string; // Document summary/description
     Created_Time?: any; // Firestore Timestamp
     Updated_Time?: any; // Firestore Timestamp
     EditedBy?: string; // User ID who last edited

@@ -10,6 +10,7 @@ import { EnhancedAIContentWriter } from "@/utils/enhancedAIContentWriter";
 import type { ContentPosition } from "@/utils/enhancedAIContentWriter";
 import { aiService } from "@/services/aiService";
 import { useAuth } from "@/context/AuthContext";
+import { marked } from "marked";
 
 export type ChatMessage = {
     id: string;
@@ -52,14 +53,51 @@ export default function ChatSidebar({
     // Get user context for repository operations
     const { user } = useAuth();
 
+    // Configure marked for better markdown rendering
+    useEffect(() => {
+        marked.setOptions({
+            breaks: true, // Convert \n to <br>
+            gfm: true, // GitHub flavored markdown
+        });
+    }, []);
 
     // Combine external messages (if any) with internal state
     const messages = useMemo(() => externalMessages ?? internalMessages, [externalMessages, internalMessages]);
 
+    // Function to render markdown content as HTML with custom code block handling
+    const renderMarkdown = (content: string): string => {
+        try {
+            // First, parse markdown to HTML
+            let html = marked.parse(content) as string;
+
+            // Post-process to add topic headers to code blocks
+            // Match code blocks with optional language/topic: <pre><code class="language-topic">...
+            html = html.replace(
+                /<pre><code(?:\s+class="language-([^"]*)")?>([\s\S]*?)<\/code><\/pre>/g,
+                (match, language, code) => {
+                    // If there's a language/topic specified
+                    if (language && language.trim()) {
+                        return `<div class="code-block-with-topic">
+                            <div class="code-topic-header">${language}</div>
+                            <pre class="code-block-pre"><code>${code}</code></pre>
+                        </div>`;
+                    }
+                    // No topic, return standard code block
+                    return match;
+                }
+            );
+
+            return html;
+        } catch (error) {
+            console.error('Markdown parsing error:', error);
+            return content; // Fallback to plain text
+        }
+    };
+
     // Add initial hello message when chat opens
     useEffect(() => {
         if (open && !externalMessages && internalMessages.length === 0) {
-            let content = 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content.\n\n**Special AI Operations:**\n• Type `*add` to add new content\n• Type `*remove` to mark content for removal\n• Type `*edit` to replace existing content\n\nThese operations will show highlighted changes in your document with accept/reject options.';
+            let content = 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content.\n\n**Special AI Operations:**\n• Type `add <content>` to add new content\n• Type `remove <content>` to mark content for removal\n• Type `edit <content>` to replace existing content\n\nThese operations will show highlighted changes in your document with accept/reject options.\n```test\n This is a code block \n```';
 
             if (repositoryInfo) {
                 content += `\n\n**🚀 Repository Integration Active!**\n📂 Connected to: \`${repositoryInfo.owner}/${repositoryInfo.repo}\`\n\n**Repository Commands:**\n• "Analyze code in [filename]" - Explain specific files\n• "Improve the React components" - Code improvements\n• "Debug the authentication flow" - Find issues\n• "Explain how routing works" - Understand patterns\n• "Document the API endpoints" - Generate docs\n\nI have access to your repository structure, README, and key files to provide contextual assistance!`;
@@ -585,9 +623,30 @@ export default function ChatSidebar({
                                                             : m.content.includes("✨")
                                                                 ? "bg-gradient-to-r from-purple-50 to-blue-50 text-purple-800 border-2 border-purple-200 shadow-sm"
                                                                 : "bg-gray-100 text-gray-900 border border-gray-200"
-                                                    } rounded-lg px-3 py-2 text-[0.95rem] leading-relaxed whitespace-pre-wrap break-words transition-all duration-200 hover:scale-[1.02]`}
+                                                    } rounded-lg px-3 py-2 text-[0.95rem] leading-relaxed ${m.role === "user" ? "whitespace-pre-wrap" : ""} break-words transition-all duration-200 hover:scale-[1.02]`}
                                             >
-                                                {m.content}
+                                                {m.role === "user" ? (
+                                                    m.content
+                                                ) : (
+                                                    <div
+                                                        className="prose prose-sm max-w-none chat-markdown-content
+                                                        prose-headings:mt-2 prose-headings:mb-1 prose-headings:font-bold
+                                                        prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
+                                                        prose-p:my-1 prose-p:leading-relaxed
+                                                        prose-ul:my-1 prose-ul:pl-4 prose-ol:my-1 prose-ol:pl-4 
+                                                        prose-li:my-0.5
+                                                        prose-pre:bg-[#1e1e1e] prose-pre:text-gray-100 prose-pre:p-3 prose-pre:rounded-md 
+                                                        prose-pre:text-xs prose-pre:overflow-x-auto prose-pre:my-2 prose-pre:shadow-md
+                                                        prose-strong:font-semibold prose-strong:text-gray-900
+                                                        prose-a:text-blue-600 prose-a:underline hover:prose-a:text-blue-700
+                                                        prose-blockquote:border-l-4 prose-blockquote:border-gray-300 prose-blockquote:pl-4 prose-blockquote:italic
+                                                        prose-hr:border-gray-300 prose-hr:my-3
+                                                        prose-table:border-collapse prose-table:w-full
+                                                        prose-th:border prose-th:border-gray-300 prose-th:bg-gray-50 prose-th:p-2
+                                                        prose-td:border prose-td:border-gray-300 prose-td:p-2"
+                                                        dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
+                                                    />
+                                                )}
                                             </div>
                                         </div>
                                     </div>

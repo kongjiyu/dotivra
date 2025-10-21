@@ -1,78 +1,66 @@
-﻿import { useEffect, useMemo } from "react";
+﻿import { useEffect, useState } from "react";
 import DocumentLayout from "./DocumentLayout";
 import TipTap from "@/components/document/TipTap";
 import { useDocument } from "@/context/DocumentContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { fetchDocument } from "@/services/apiService";
 
 export default function DocumentSummary() {
     const {
-        documentContent,
-        documentTitle,
         summaryContent,
         setSummaryContent,
-        setCurrentEditor
+        setCurrentEditor,
+        documentId
     } = useDocument();
+    const [, setIsLoadingSummary] = useState(false);
 
-    // Generate document statistics
-    const documentStats = useMemo(() => {
-        if (!documentContent) return null;
-
-        const plainText = documentContent.replace(/<[^>]*>/g, '');
-        const words = plainText.trim().split(/\s+/).filter(word => word.length > 0);
-        const sentences = plainText.split(/[.!?]+/).filter(s => s.trim().length > 0);
-        const paragraphs = documentContent.split(/<\/p>|<\/h[1-6]>|<\/li>/).filter(p =>
-            p.trim().replace(/<[^>]*>/g, '').length > 0
-        );
-
-        return {
-            wordCount: words.length,
-            sentenceCount: sentences.length,
-            paragraphCount: paragraphs.length,
-            charactersWithSpaces: plainText.length,
-            charactersWithoutSpaces: plainText.replace(/\s/g, '').length,
-            averageWordsPerSentence: sentences.length > 0 ? Math.round(words.length / sentences.length) : 0,
-            readingTime: Math.ceil(words.length / 200) // Average reading speed: 200 words per minute
-        };
-    }, [documentContent]);
-
-    // Generate enhanced summary content
+    // Fetch summary from Firebase
     useEffect(() => {
-        if (!summaryContent && documentContent && documentStats) {
-            const enhancedSummary = generateEnhancedSummary();
-            setSummaryContent(enhancedSummary);
-        }
-    }, [documentContent, documentStats, summaryContent, setSummaryContent]);
+        const loadSummary = async () => {
+            if (!documentId || summaryContent) {
+                return; // Skip if no document ID or summary already loaded
+            }
 
-    const generateEnhancedSummary = () => {
-        if (!documentStats || !documentContent) return '';
+            setIsLoadingSummary(true);
+            try {
+                const documentData = await fetchDocument(documentId);
+                if (documentData && documentData.Summary) {
+                    setSummaryContent(documentData.Summary);
+                }
+                // If Summary is empty/undefined, remain empty (per user requirement)
+            } catch (error) {
+                console.error('Error loading summary from Firebase:', error);
+                // Remain empty on error (per user requirement: "if unable to fetch remain empty")
+            } finally {
+                setIsLoadingSummary(false);
+            }
+        };
 
-        const plainText = documentContent.replace(/<[^>]*>/g, '');
-        const preview = plainText.substring(0, 300) + (plainText.length > 300 ? "..." : "");
+        loadSummary();
+    }, [documentId, summaryContent, setSummaryContent]);
 
-        return `<h1>Document Summary: ${documentTitle}</h1>
-
-<h2>📊 Document Statistics</h2>
-<ul>
-<li><strong>Word Count:</strong> ${documentStats.wordCount} words</li>
-<li><strong>Reading Time:</strong> ~${documentStats.readingTime} minutes</li>
-<li><strong>Sentences:</strong> ${documentStats.sentenceCount}</li>
-<li><strong>Paragraphs:</strong> ${documentStats.paragraphCount}</li>
-<li><strong>Characters:</strong> ${documentStats.charactersWithSpaces} (with spaces)</li>
-<li><strong>Average Words/Sentence:</strong> ${documentStats.averageWordsPerSentence}</li>
-</ul>
-
-<h2>📝 Content Overview</h2>
-<p>This document contains ${documentStats.wordCount} words organized across ${documentStats.paragraphCount} paragraphs. The estimated reading time is approximately ${documentStats.readingTime} minute${documentStats.readingTime !== 1 ? 's' : ''}.</p>
-
-<h3>Content Preview</h3>
-<blockquote>${preview}</blockquote>
-
-<h3>Last Updated</h3>
-<p>${new Date().toLocaleString()}</p>`;
-    };
-
-    const handleSummaryUpdate = (content: string) => {
+    const handleSummaryUpdate = async (content: string) => {
         setSummaryContent(content);
+
+        // Auto-save summary to Firebase
+        if (documentId) {
+            try {
+                const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'}/api/documents/${documentId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        Summary: content,
+                    }),
+                });
+
+                if (!response.ok) {
+                    console.error('Failed to save summary:', response.status, await response.text());
+                }
+            } catch (error) {
+                console.error('Error saving summary to Firebase:', error);
+            }
+        }
     };
 
     const handleSummaryEditorReady = (editor: any) => {

@@ -13,6 +13,7 @@ interface TiptapProps {
     onEditorReady?: (editor: any) => void;
     className?: string;
     onOpenChat?: (message?: string) => void;
+    showToolbar?: boolean;
 }
 
 const Tiptap = ({
@@ -21,13 +22,14 @@ const Tiptap = ({
     onUpdate,
     onEditorReady,
     className = "",
-    onOpenChat
+    onOpenChat,
+    showToolbar = true,
 }: TiptapProps) => {
     const [isReady, setIsReady] = useState(false);
     const lastAppliedContentRef = useRef<string | null>(null);
 
     // Create editor configuration using the config file
-    const editorConfig = useMemo(() => 
+    const editorConfig = useMemo(() =>
         createTipTapConfig({
             content: initialContent,
             editable,
@@ -53,7 +55,13 @@ const Tiptap = ({
 
     // Add link hover detection to the editor
     useEffect(() => {
-        if (!editor) return;
+        // Wait for both editor and isReady to ensure content is loaded
+        if (!editor || !isReady) {
+            console.log('⏳ Link preview waiting for editor ready:', { editor: !!editor, isReady });
+            return;
+        }
+
+        console.log('✅ Link preview event listeners being attached');
 
         const clearHideTimeout = () => {
             if (hideTimeoutRef.current) {
@@ -72,6 +80,7 @@ const Tiptap = ({
             const href = linkElement.getAttribute('href') || '';
             if (!href || !/^https?:\/\//.test(href)) return;
 
+            console.log('🔗 Link hover detected:', href);
             clearHideTimeout();
             showPreview(href, linkElement);
         };
@@ -92,21 +101,40 @@ const Tiptap = ({
             }, 800);
         };
 
+        const handleClick = (event: MouseEvent) => {
+            const target = event.target as HTMLElement;
+            const linkElement = target.closest('a[href]') as HTMLAnchorElement | null;
+
+            // If clicking on a link, hide the preview immediately to allow the link to open
+            if (linkElement) {
+                console.log('🖱️ Link clicked, hiding preview');
+                clearHideTimeout();
+                hidePreview();
+                // Don't prevent default - let the link open naturally
+            }
+        };
+
         const editorElement = editor.options.element as HTMLElement | null;
         if (editorElement) {
+            console.log('📎 Attaching link preview listeners to:', editorElement);
             editorElement.addEventListener('mouseover', handleMouseOver);
             editorElement.addEventListener('mouseout', handleMouseOut);
+            editorElement.addEventListener('click', handleClick);
+        } else {
+            console.warn('⚠️ No editor element found for link preview');
         }
 
         return () => {
+            console.log('🧹 Cleaning up link preview listeners');
             clearHideTimeout();
             if (editorElement) {
                 editorElement.removeEventListener('mouseover', handleMouseOver);
                 editorElement.removeEventListener('mouseout', handleMouseOut);
+                editorElement.removeEventListener('click', handleClick);
             }
             resetPreview();
         };
-    }, [editor, showPreview, hidePreview, resetPreview]);
+    }, [editor, isReady, showPreview, hidePreview, resetPreview]);
 
     // Cleanup on unmount
     const handleDestroy = useCallback(() => {
@@ -122,12 +150,12 @@ const Tiptap = ({
     // Apply initialContent when it changes, suppress history + update.
     useEffect(() => {
         if (!editor || !initialContent) return;
-        
+
         // Check if this content was already applied
         if (lastAppliedContentRef.current === initialContent) return;
 
         const currentHTML = editor.getHTML();
-        
+
         if (currentHTML !== initialContent) {
             // false => do not emit update event, avoids extra history noise
             editor.commands.setContent(initialContent, { emitUpdate: false });
@@ -137,7 +165,7 @@ const Tiptap = ({
                 editor.view.dispatch(tr);
             }
         }
-        
+
         // Mark this content as applied
         lastAppliedContentRef.current = initialContent;
     }, [editor, initialContent]);
@@ -166,8 +194,8 @@ const Tiptap = ({
     return (
         <EditorContext.Provider value={contextValue}>
             <div className={`tiptap-container h-full min-h-0 relative ${className}`}>
-                {/* Toolbar - Now handles its own positioning internally, constrained to this container */}
-                <ToolBar editor={editor} />
+                {/* Toolbar - Conditionally render based on showToolbar prop */}
+                {showToolbar && <ToolBar editor={editor} />}
 
                 {/* Document Content Container */}
                 <div className="mx-auto w-[1000px] max-w-[95vw] min-w-[320px] space-y-0 h-full min-h-0 pt-20">
