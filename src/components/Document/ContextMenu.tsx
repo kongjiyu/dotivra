@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/react'
 import { Button } from '@/components/ui/button'
 import {
@@ -82,19 +83,45 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     const isTextSelected = !editor.state.selection.empty
     const canPaste = true // We'll assume paste is always available
 
-    // Ensure menu stays within viewport and centers vertically
-    const adjustedPosition = {
-        x: Math.min(position.x, window.innerWidth - 370), // 350px menu + 20px padding
-        y: Math.max(20, Math.min(position.y - (menuHeight / 2), window.innerHeight - menuHeight - 20)), // Center vertically at cursor
+    // Smart positioning: keep close to cursor but prevent overflow at bottom-right
+    const menuWidth = 350;
+    const menuPadding = 20;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let adjustedX = position.x;
+    let adjustedY = position.y - (menuHeight / 2); // Center vertically at cursor
+
+    // Check right overflow
+    if (adjustedX + menuWidth + menuPadding > viewportWidth) {
+        // Position to the left of cursor instead
+        adjustedX = Math.max(menuPadding, position.x - menuWidth - 10);
     }
 
-    return (
+    // Check bottom overflow
+    if (adjustedY + menuHeight + menuPadding > viewportHeight) {
+        // Position above instead, as close to bottom as possible
+        adjustedY = Math.max(menuPadding, viewportHeight - menuHeight - menuPadding);
+    }
+
+    // Check top overflow
+    if (adjustedY < menuPadding) {
+        adjustedY = menuPadding;
+    }
+
+    const adjustedPosition = {
+        x: adjustedX,
+        y: adjustedY,
+    }
+
+    const menuContent = (
         <div
             ref={menuRef}
-            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 w-[350px]"
+            className="fixed bg-white border border-gray-200 rounded-lg shadow-xl py-2 w-[350px] max-h-[80vh] overflow-y-auto"
             style={{
-                left: adjustedPosition.x,
-                top: adjustedPosition.y,
+                left: `${adjustedPosition.x}px`,
+                top: `${adjustedPosition.y}px`,
+                zIndex: 99999,
             }}
         >
             {isTableContext ? (
@@ -525,6 +552,18 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                             <Button
                                 variant="ghost"
                                 size="sm"
+                                className="w-full justify-start px-3 py-2 text-sm"
+                                onClick={() => executeCommand(() => editor.chain().focus().setHorizontalRule().run())}
+                            >
+                                <div className="flex items-center">
+                                    <Minus className="w-4 h-4 mr-2" />
+                                    Insert Divider
+                                </div>
+                            </Button>
+
+                            <Button
+                                variant="ghost"
+                                size="sm"
                                 className="w-full justify-between px-3 py-2 text-sm"
                                 onClick={() => executeCommand(() => {
                                     // Check if the selected text already has a link
@@ -640,6 +679,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             )}
         </div>
     )
+
+    // Render using Portal to escape DocumentMenu's stacking context
+    return createPortal(menuContent, document.body)
 }
 
 export default ContextMenu

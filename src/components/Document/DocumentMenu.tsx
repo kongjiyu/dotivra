@@ -25,6 +25,7 @@ import {
 	Wrench,
 	HelpCircle,
 	PanelLeft,
+	Menu,
 	FileBarChart,
 	Keyboard,
 	BookOpen,
@@ -32,7 +33,7 @@ import {
 } from "lucide-react";
 
 // Import new components
-import NavigationPane from "./NavigationPane";
+// import NavigationPane from "./NavigationPane"; // Now integrated in DocumentLayout 3-column grid
 import DocsHelp from "./DocsHelp";
 import ShortcutKeys from "./ShortcutKeys";
 import WordCount from "./WordCount";
@@ -60,6 +61,7 @@ interface DocumentMenuProps {
 	context?: 'main' | 'project'; // To distinguish between main menu and project tab imports
 	currentDocument?: any; // Current document data for template/copy operations
 	onToolbarToggle?: (show: boolean) => void; // Callback when toolbar visibility changes
+	onNavigationPaneToggle?: (show: boolean) => void; // Callback when navigation pane visibility changes
 }
 
 export default function DocumentMenu({
@@ -72,6 +74,7 @@ export default function DocumentMenu({
 	context = 'main',
 	currentDocument,
 	onToolbarToggle,
+	onNavigationPaneToggle,
 }: DocumentMenuProps) {
 	// Document menu state
 	const [showSearch, setShowSearch] = useState(false);
@@ -111,7 +114,11 @@ export default function DocumentMenu({
 
 	useEffect(() => {
 		updateToolPreference('showNavigationPane', showNavigationPane);
-	}, [showNavigationPane]);
+		// Notify parent component about navigation pane visibility change
+		if (onNavigationPaneToggle) {
+			onNavigationPaneToggle(showNavigationPane);
+		}
+	}, [showNavigationPane, onNavigationPaneToggle]);
 
 	// Add keyboard shortcut handlers for Ctrl+F, Ctrl+H, Ctrl+P
 	useEffect(() => {
@@ -240,6 +247,35 @@ export default function DocumentMenu({
 				el.classList.add("avoid-break");
 			});
 
+			// Process code blocks to add language headers
+			doc.querySelectorAll(".code-block-wrapper, pre[class*='language-']").forEach((wrapper) => {
+				// Check if it's a code-block-wrapper or a standalone pre
+				const pre = wrapper.tagName === 'PRE' ? wrapper : wrapper.querySelector("pre");
+				if (!pre) return;
+
+				// Get language from data attribute or class
+				let language = wrapper.getAttribute("data-language");
+				if (!language) {
+					const classMatch = pre.className.match(/language-(\w+)/);
+					language = classMatch ? classMatch[1] : "plaintext";
+				}
+
+				// Create wrapper if it doesn't exist
+				let container = wrapper.tagName === 'PRE' ? null : wrapper;
+				if (!container) {
+					container = doc.createElement("div");
+					container.className = "code-block-wrapper";
+					pre.parentNode?.insertBefore(container, pre);
+					container.appendChild(pre);
+				}
+
+				// Add header with language label
+				const header = doc.createElement("div");
+				header.className = "code-block-header";
+				header.textContent = language;
+				container.insertBefore(header, pre);
+			});
+
 			// Serialize back to HTML string
 			const updatedContent = doc.body.innerHTML;
 
@@ -266,8 +302,9 @@ export default function DocumentMenu({
         <title>Document</title>
         <style>
           @media print {
+            * { box-sizing: border-box; }
             .page-break { page-break-before: always; break-before: page; }
-            .avoid-break { page-break-inside: avoid; break-inside: avoid; }
+            .avoid-break { page-break-inside: avoid !important; break-inside: avoid !important; }
 			.pm-search-hit, .pm-search-current {
 				background: transparent !important;
 				outline: none !important;
@@ -283,19 +320,95 @@ export default function DocumentMenu({
               background-color: white;
             }
 
-            h1, h2, h3, table, pre, blockquote { page-break-inside: avoid; break-inside: avoid; }
+            h1, h2, h3, table, pre, blockquote, .code-block-wrapper { 
+              page-break-inside: avoid !important; 
+              break-inside: avoid !important; 
+              page-break-after: avoid;
+              break-after: avoid;
+            }
             tr, img, figure { page-break-inside: avoid; break-inside: avoid; max-width: 100%; }
 
-            table { border-collapse: collapse; width: 100%; }
+            table { border-collapse: collapse; width: 100%; page-break-inside: auto; }
             th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
             th { background: #f5f5f5; font-weight: 600; }
 
             h1 { font-size: 28px; font-weight: 700; margin: 24px 0 12px; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
             h2 { font-size: 24px; font-weight: 700; margin: 20px 0 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
             h3 { font-size: 20px; font-weight: 700; margin: 18px 0 9px; }
-            p  { margin: 8px 0; text-align: justify; }
-            ul, ol { margin: 8px 0; padding-left: 24px; }
-            li { margin: 4px 0; }
+            p  { margin: 8px 0; text-align: justify; orphans: 3; widows: 3; }
+            ul, ol { margin: 8px 0; padding-left: 24px; page-break-inside: auto; }
+            li { margin: 4px 0; page-break-inside: avoid; }
+            
+            /* Links should be inline */
+            a {
+              display: inline !important;
+              color: #2563eb;
+              text-decoration: underline;
+            }
+            
+            code {
+              font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+              font-size: 13px;
+              background-color: #f3f4f6;
+              color: #1f2937;
+              padding: 2px 6px;
+              border-radius: 4px;
+              border: 1px solid #e5e7eb;
+              box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+              white-space: pre-wrap;
+              word-break: break-word;
+            }
+            
+            .code-block-wrapper {
+              margin: 16px 0;
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
+            
+            .code-block-header {
+              background-color: #000000 !important;
+              color: #9cdcfe !important;
+              font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+              font-size: 12px;
+              font-weight: 600;
+              padding: 8px 12px;
+              border-radius: 6px 6px 0 0;
+              text-transform: capitalize;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
+            
+            pre {
+              background-color: #000000 !important;
+              color: #d4d4d4 !important;
+              padding: 16px;
+              border-radius: 0 0 6px 6px;
+              overflow-x: auto;
+              margin: 0;
+              font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+              font-size: 13px;
+              line-height: 1.6;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
+            
+            pre code {
+              background: transparent;
+              border: none;
+              padding: 0;
+              color: inherit;
+              box-shadow: none;
+            }
+            
+            hr {
+              border: none;
+              border-top: 2px solid #e5e7eb;
+              margin: 24px 0;
+              page-break-after: avoid;
+              break-after: avoid;
+            }
           }
         </style>
       </head>
@@ -333,10 +446,60 @@ export default function DocumentMenu({
 		}
 
 		try {
+			// Parse and process content
+			const parser = new DOMParser();
+			const doc = parser.parseFromString(contentToExport, "text/html");
+
+			// Process code blocks to add language headers
+			doc.querySelectorAll(".code-block-wrapper, pre[class*='language-']").forEach((wrapper) => {
+				// Check if it's a code-block-wrapper or a standalone pre
+				const pre = wrapper.tagName === 'PRE' ? wrapper : wrapper.querySelector("pre");
+				if (!pre) return;
+
+				// Get language from data attribute or class
+				let language = wrapper.getAttribute("data-language");
+				if (!language) {
+					const classMatch = pre.className.match(/language-(\w+)/);
+					language = classMatch ? classMatch[1] : "plaintext";
+				}
+
+				// Create wrapper if it doesn't exist
+				let container = wrapper.tagName === 'PRE' ? null : wrapper;
+				if (!container) {
+					container = doc.createElement("div");
+					container.className = "code-block-wrapper";
+					pre.parentNode?.insertBefore(container, pre);
+					container.appendChild(pre);
+				}
+
+				// Add header with language label
+				const header = doc.createElement("div");
+				header.className = "code-block-header";
+				header.textContent = language;
+				container.insertBefore(header, pre);
+			});
+
+			// Smart page break logic - Break by ELEMENTS not content height
+			// 1. Add page breaks before each H1 heading (skip first H1)
+			const h1Headings = doc.querySelectorAll("h1");
+			h1Headings.forEach((heading, index) => {
+				// Skip the first h1 heading
+				if (index > 0) {
+					// Add a page break div before the heading
+					const pageBreak = doc.createElement("div");
+					pageBreak.className = "page-break";
+					pageBreak.setAttribute('data-page-break', 'h1');
+					heading.parentNode?.insertBefore(pageBreak, heading);
+				}
+			});
+
+			// 2. Ensure all H1 elements start on a new page (no content height calculation)
+			// Each H1 gets its own page regardless of content length
+
 			// Create element with content and styling
 			const element = document.createElement('div');
 			const style = document.createElement("style");
-			element.innerHTML = contentToExport;
+			element.innerHTML = doc.body.innerHTML;
 			element.style.cssText = `
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 14px;
@@ -348,24 +511,152 @@ export default function DocumentMenu({
         background-color: white;
       `;
 			style.textContent = `
-      .page-break { page-break-before: always; break-before: page; }
-      .avoid-break { page-break-inside: avoid; break-inside: avoid; }
-      h1, h2, h3, table, pre, blockquote { page-break-inside: avoid; break-inside: avoid; }
+      * { box-sizing: border-box; }
+      
+      /* Page break rules - Break by ELEMENTS not content height */
+      .page-break { 
+        page-break-before: always !important; 
+        break-before: page !important; 
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
+        visibility: hidden !important;
+      }
+      
+      /* H1 - Each H1 starts on a new page (element-based, not height-based) */
+      h1 {
+        font-size: 28px; 
+        font-weight: 700; 
+        margin: 24px 0 12px; 
+        border-bottom: 2px solid #ccc; 
+        padding-bottom: 8px;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+      
+      /* H2-H6 and other block elements should avoid breaks */
+      h2, h3, h4, h5, h6 { 
+        page-break-inside: avoid !important; 
+        break-inside: avoid !important; 
+        page-break-before: avoid !important;
+        break-before: avoid !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+      
+      table, pre, blockquote, .code-block-wrapper { 
+        page-break-inside: avoid !important; 
+        break-inside: avoid !important; 
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+      
+      /* Paragraphs and list items - allow natural breaks */
+      p { 
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+        orphans: 2;
+        widows: 2;
+      }
+      
+      li { 
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      
+      /* Links should be inline */
+      a {
+        display: inline !important;
+        color: #2563eb;
+        text-decoration: underline;
+      }
+      
       tr, img, figure { page-break-inside: avoid; break-inside: avoid; max-width: 100%; }
-      table { border-collapse: collapse; width: 100%; }
+      table { border-collapse: collapse; width: 100%; page-break-inside: auto; }
       th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
       th { background: #f5f5f5; font-weight: 600; }
-      h1 { font-size: 28px; font-weight: 700; margin: 24px 0 12px; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
       h2 { font-size: 24px; font-weight: 700; margin: 20px 0 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
       h3 { font-size: 20px; font-weight: 700; margin: 18px 0 9px; }
       p  { margin: 8px 0; text-align: justify; }
-      ul, ol { margin: 8px 0; padding-left: 24px; }
+      ul, ol { margin: 8px 0; padding-left: 24px; page-break-inside: auto; }
       li { margin: 4px 0; }
-	  .pm-search-hit, .pm-search-current { background-color: transparent !important; outline: none !important; }
+      
+      code {
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 13px;
+        background-color: #f3f4f6;
+        color: #1f2937;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      
+      .code-block-wrapper {
+        margin: 16px 0;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      
+      .code-block-header {
+        background-color: #000000 !important;
+        color: #9cdcfe !important;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 8px 12px;
+        border-radius: 6px 6px 0 0;
+        text-transform: capitalize;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      
+      pre {
+        background-color: #000000 !important;
+        color: #d4d4d4 !important;
+        padding: 16px;
+        border-radius: 0 0 6px 6px;
+        overflow-x: auto;
+        margin: 0;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      
+      pre code {
+        background: transparent;
+        border: none;
+        padding: 0;
+        color: inherit;
+        box-shadow: none;
+      }
+      
+      hr {
+        border: none;
+        border-top: 2px solid #e5e7eb;
+        margin: 24px 0;
+        page-break-after: avoid;
+        break-after: avoid;
+      }
+      
+      @page { size: A4; margin: 20mm; }
+      .pm-search-hit, .pm-search-current { background-color: transparent !important; outline: none !important; }
     `;
 			element.prepend(style);
 
-			element.querySelectorAll("h1,h2,h3,table,ul,ol,pre,blockquote").forEach((el) => {
+			// Add avoid-break class to elements EXCEPT H1 (H1 needs to allow page breaks)
+			element.querySelectorAll("h2,h3,h4,h5,h6,table,ul,ol,pre,blockquote,.code-block-wrapper").forEach((el) => {
 				el.classList.add("avoid-break");
 			});
 
@@ -387,8 +678,9 @@ export default function DocumentMenu({
 				},
 				pagebreak: {
 					mode: ["css", "legacy"],
-					before: ".page-break",
-					avoid: "h1, h2, h3, table, pre, blockquote, .avoid-break, tr, img, figure",
+					before: ".page-break",  // Break before page-break elements (before H1)
+					after: [],  // Don't break after any elements
+					avoid: "h1, h2, h3, h4, h5, h6, table, pre, blockquote, .code-block-wrapper, .avoid-break, tr, img, figure",
 				}
 			};
 
@@ -989,7 +1281,7 @@ export default function DocumentMenu({
 										}}
 										className="w-full justify-start h-8 px-2 text-gray-700"
 									>
-										<PanelLeft className="w-4 h-4 mr-2" />
+										<Menu className="w-4 h-4 mr-2" />
 										<span className="text-sm">Navigation Pane</span>
 										{showNavigationPane && (
 											<span className="ml-auto text-blue-600">✓</span>
@@ -1178,12 +1470,12 @@ export default function DocumentMenu({
 				</div>
 			)}
 
-			{/* Navigation Pane */}
-			<NavigationPane
+			{/* Navigation Pane - Now integrated in DocumentLayout 3-column grid */}
+			{/* <NavigationPane
 				editor={editor || null}
 				isOpen={showNavigationPane}
 				onClose={() => setShowNavigationPane(false)}
-			/>
+			/> */}
 
 			{/* Word Count */}
 			<WordCount

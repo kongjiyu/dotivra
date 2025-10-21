@@ -44,7 +44,7 @@ export function loadToolsPreferences(): ToolsPreferences {
     const defaultPrefs: ToolsPreferences = {
         showToolbar: true,
         showWordCount: false,
-        showNavigationPane: false,
+        showNavigationPane: true,
         toolbarPosition: null,
         wordCountPosition: null,
     };

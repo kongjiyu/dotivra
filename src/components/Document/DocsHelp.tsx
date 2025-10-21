@@ -113,7 +113,7 @@ export default function DocsHelp({ isOpen, onClose }: DocsHelpProps) {
                             <section>
                                 <h3 className="text-lg font-semibold mb-3 flex items-center">
                                     <lucideReact.Link className="w-5 h-5 mr-2 text-blue-600" />
-                                    Links
+                                    Links & Dividers
                                 </h3>
                                 <div className="space-y-2 text-sm text-gray-700">
 
@@ -125,6 +125,9 @@ export default function DocsHelp({ isOpen, onClose }: DocsHelpProps) {
                                     </p>
                                     <p>
                                         <strong>Link Preview:</strong> Hover over a link to see a preview of the destination page. Click the link to open it in a new tab.
+                                    </p>
+                                    <p>
+                                        <strong>Horizontal Dividers:</strong> Insert a horizontal rule (divider line) by clicking the Divider button in the toolbar or right-click context menu to visually separate sections of content.
                                     </p>
                                 </div>
                             </section>

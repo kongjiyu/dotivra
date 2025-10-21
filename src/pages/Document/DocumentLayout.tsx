@@ -7,14 +7,17 @@ import {
     FileText,
     FolderOpen,
     Dock,
-    Folder,
-    Sparkles
+    Sparkles,
+    AlignJustify
 } from "lucide-react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import DocumentMenu from "@/components/document/DocumentMenu";
+import NavigationPane from "@/components/document/NavigationPane";
 import ChatSidebar from "@/components/document/ChatSidebar";
 import SimpleShare from "@/components/document/SimpleShare";
+import ProjectDocumentsDropdown from "@/components/document/ProjectDocumentsDropdown";
 import { useDocument } from "@/context/DocumentContext";
+import { updateToolPreference } from "@/utils/documentToolsPreferences";
 
 interface DocumentLayoutProps {
     children: ReactNode;
@@ -36,8 +39,11 @@ export default function DocumentLayout({
         setChatSidebarOpen,
         repositoryInfo,
         documentId,
+        projectId,
         showToolbar,
         setShowToolbar,
+        showNavigationPane,
+        setShowNavigationPane,
     } = useDocument();
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [isAIGenerating, setIsAIGenerating] = useState(false);
@@ -67,11 +73,9 @@ export default function DocumentLayout({
         const path = location.pathname;
         switch (tabName) {
             case 'editor':
-                return path.includes('/document/editor') || (path.includes('/document/') && !path.includes('/summary') && !path.includes('/project') && !path.includes('/history'));
+                return path.includes('/document/editor') || (path.includes('/document/') && !path.includes('/summary') && !path.includes('/history'));
             case 'summary':
                 return path.includes('/summary');
-            case 'project':
-                return path.includes('/project');
             case 'history':
                 return path.includes('/history');
             default:
@@ -120,13 +124,6 @@ export default function DocumentLayout({
                 break;
             case 'summary':
                 navigate(`${basePath}/summary`);
-                break;
-            case 'project':
-                if (documentId) {
-                    navigate(`${basePath}/project/${documentId}`);
-                } else {
-                    navigate(`${basePath}/project`);
-                }
                 break;
             case 'history':
                 navigate(`${basePath}/history`);
@@ -262,15 +259,13 @@ export default function DocumentLayout({
                             <Dock className="w-4 h-4 mr-2" />
                             Summary
                         </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className={getTabButtonClasses("project")}
-                            onClick={() => handleTabChange("project")}
-                        >
-                            <Folder className="w-4 h-4 mr-2" />
-                            Projects
-                        </Button>
+
+                        {/* Project Documents Dropdown - Replaces Project Tab */}
+                        <ProjectDocumentsDropdown
+                            projectId={projectId}
+                            currentDocumentId={documentId}
+                        />
+
                         <div className="w-px h-5 bg-gray-300 mx-1 border-b"></div>
 
                         <Button
@@ -316,6 +311,7 @@ export default function DocumentLayout({
                                 IsDraft: true
                             }}
                             onToolbarToggle={setShowToolbar}
+                            onNavigationPaneToggle={setShowNavigationPane}
                         />
                     </div>
                 )}
@@ -323,45 +319,102 @@ export default function DocumentLayout({
                 {/* Spacer for fixed menu */}
                 <div className="h-[56px]"></div>
 
-                {/* Page Content */}
-
+                {/* 3-Column Layout Container - NavigationPane | DocumentEditor | ChatSidebar */}
                 <div
                     className={
-                        showDocumentMenu ? "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[152px]" : "fixed left-0 right-0 bottom-0 overflow-auto p-4 custom-scrollbar top-[100px]"
+                        showDocumentMenu
+                            ? "fixed left-0 right-0 bottom-0 top-[152px] flex"
+                            : "fixed left-0 right-0 bottom-0 top-[100px] flex"
                     }
                 >
-                    {children}
+                    {/* Navigation Pane Column - 15% width - Conditionally Rendered */}
+                    {/* Only show NavigationPane on editor/summary pages, not on history tab */}
+                    {showNavigationPane && !isTabActive('history') && (
+                        <div className="w-[15%] min-w-[200px] border-r border-gray-200 bg-gray-50/50 relative">
+                            <NavigationPane
+                                editor={currentEditor}
+                                isOpen={true}
+                                onClose={() => { }}
+                            />
+                            {/* Collapse button - Top right of NavigationPane */}
+                            <button
+                                onClick={() => {
+                                    const newValue = !showNavigationPane;
+                                    setShowNavigationPane(newValue);
+                                    updateToolPreference('showNavigationPane', newValue);
+                                }}
+                                className={`absolute z-40 bg-white border border-gray-300 rounded-lg shadow-md hover:bg-gray-50 transition-all duration-200 flex items-center justify-center ${showDocumentMenu ? 'top-2' : 'top-2'} right-2`}
+                                style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    minWidth: '32px',
+                                }}
+                                title="Hide navigation pane"
+                            >
+                                <AlignJustify className="w-4 h-4 text-indigo-600" />
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Expand button - Top left when collapsed (chatbar style) */}
+                    {/* Only show expand button on editor/summary pages, not on history tab */}
+                    {!showNavigationPane && !isTabActive('history') && (
+                        <button
+                            onClick={() => {
+                                const newValue = !showNavigationPane;
+                                setShowNavigationPane(newValue);
+                                updateToolPreference('showNavigationPane', newValue);
+                            }}
+                            className={`fixed z-40 bg-white border border-gray-300 rounded-lg shadow-md hover:bg-gray-50 transition-all duration-200 flex items-center justify-center left-2 ${showDocumentMenu ? 'top-[160px]' : 'top-[108px]'}`}
+                            style={{
+                                width: '32px',
+                                height: '32px',
+                                minWidth: '32px',
+                            }}
+                            title="Show navigation pane"
+                        >
+                            <AlignJustify className="w-4 h-4 text-indigo-600" />
+                        </button>
+                    )}
+
+                    {/* Document Editor Column - Adjusts width based on NavigationPane and ChatSidebar */}
+                    <div className="flex-1 overflow-auto custom-scrollbar bg-white p-4">
+                        {children}
+                    </div>
+
+                    {/* ChatSidebar Column - Same level as Document Editor - Conditionally Rendered */}
+                    {/* Only show ChatSidebar on editor/summary pages when open */}
+                    {chatSidebarOpen && shouldShowChatBot() && (
+                        <div className="w-[20rem] border-l border-gray-200 bg-white flex-shrink-0 relative">
+                            <div className="h-full p-4">
+                                <ChatSidebar
+                                    open={chatSidebarOpen}
+                                    onClose={() => {
+                                        setChatSidebarOpen(false);
+                                        setInitialChatMessage('');
+                                    }}
+                                    editor={currentEditor}
+                                    initialMessage={initialChatMessage}
+                                    repositoryInfo={repositoryInfo}
+                                    suggestions={repositoryInfo ? [
+                                        "Analyze repository structure",
+                                        "Explain codebase patterns",
+                                        "Improve React components",
+                                        "Debug authentication flow",
+                                    ] : [
+                                        "Strengthen success metrics",
+                                        "Review executive summary",
+                                        "Add competitor analysis",
+                                        "Outline next steps",
+                                    ]}
+                                />
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* Fixed Chat Sidebar overlay */}
-            <div className={`fixed top-[136px] right-0 h-[calc(100vh-136px)] w-[28rem] border-l border-gray-200 bg-white shadow-xl transition-transform duration-200 z-20 ${chatSidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}>
-                <div className="h-full p-4">
-                    <ChatSidebar
-                        open={chatSidebarOpen}
-                        onClose={() => {
-                            setChatSidebarOpen(false);
-                            setInitialChatMessage('');
-                        }}
-                        editor={currentEditor}
-                        initialMessage={initialChatMessage}
-                        repositoryInfo={repositoryInfo}
-                        suggestions={repositoryInfo ? [
-                            "Analyze repository structure",
-                            "Explain codebase patterns",
-                            "Improve React components",
-                            "Debug authentication flow",
-                        ] : [
-                            "Strengthen success metrics",
-                            "Review executive summary",
-                            "Add competitor analysis",
-                            "Outline next steps",
-                        ]}
-                    />
-                </div>
-            </div>
-
-            {/* Fixed AI Chat Icon - Only show on editor and summary pages */}
+            {/* Fixed AI Chat Icon - Only show when chat sidebar is closed */}
             {!chatSidebarOpen && shouldShowChatBot() && (
                 <Button
                     onClick={handleAIGenerate}

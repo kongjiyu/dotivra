@@ -83,11 +83,12 @@ export const BackspaceBehaviorFix = Extension.create({
                             
                             let tr = state.tr
                             
-                            // If this is the only item in the list, replace the entire list
+                            // If this is the only item in the list (single-line list)
                             if (listNode && listNode.childCount === 1) {
+                                // Replace the entire list with paragraph and stay at current line
                                 tr = tr.replaceWith(listPos, listPos + listNode.nodeSize, newParagraph)
                                 
-                                // Set cursor at the beginning of the new paragraph
+                                // Keep cursor at the beginning of the new paragraph (same line position)
                                 const newCursorPos = listPos + 1
                                 try {
                                     tr = tr.setSelection(TextSelection.create(tr.doc, newCursorPos))
@@ -96,9 +97,11 @@ export const BackspaceBehaviorFix = Extension.create({
                                     tr = tr.setSelection(TextSelection.near($newPos))
                                 }
                             } else {
-                                // Multiple items - just lift this one out
+                                // Multi-line list: Remove current list item formatting only, stay at current line
+                                // Replace the current list item with a standalone paragraph at the same position
                                 tr = tr.replaceWith(listItemPos, listItemPos + listItemNode!.nodeSize, newParagraph)
                                 
+                                // Keep cursor at the beginning of the converted paragraph (same line)
                                 const newCursorPos = listItemPos + 1
                                 try {
                                     tr = tr.setSelection(TextSelection.create(tr.doc, newCursorPos))

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { X, FileText, Type, GripVertical } from "lucide-react";
 import type { Editor } from "@tiptap/react";
+import { useDocument } from "@/context/DocumentContext";
 
 interface WordCountProps {
     editor: Editor | null;
@@ -10,6 +11,9 @@ interface WordCountProps {
 }
 
 export default function WordCount({ editor, isOpen, onClose }: WordCountProps) {
+    // Get Navigation Pane and ChatSidebar visibility from context to recalculate boundaries
+    const { showNavigationPane, chatSidebarOpen } = useDocument();
+
     const [stats, setStats] = useState({
         characters: 0,
         charactersWithSpaces: 0,
@@ -22,19 +26,45 @@ export default function WordCount({ editor, isOpen, onClose }: WordCountProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const dragStartPos = useRef<{ x: number; y: number; panelX: number; panelY: number } | null>(null);
 
-    // Initialize position to bottom-left on first open (matching ToolBar default position)
+    // Initialize position to bottom-left on first open within visible area
+    // Account for both NavigationPane and ChatSidebar to calculate proper boundaries
     useEffect(() => {
         if (isOpen && position === null) {
-            // Set default position to bottom-left with same spacing as ToolBar
-            // Fixed position at left: 16px, bottom: 16px from viewport
+            // Calculate the actual visible content area
             const padding = 16;
+            const panelWidth = 288; // w-72 panel width
             const panelHeight = 250; // Approximate panel height
+
+            // Get viewport dimensions
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            // Calculate left boundary (account for NavigationPane if open)
+            // NavigationPane is 15% width with min 200px
+            const navPaneWidth = showNavigationPane ? Math.max(viewportWidth * 0.15, 200) : 0;
+            const leftBoundary = navPaneWidth + padding;
+
+            // Calculate right boundary (account for ChatSidebar if open)
+            // ChatSidebar is 20rem = 320px
+            const chatSidebarWidth = chatSidebarOpen ? 320 : 0;
+            const rightBoundary = viewportWidth - chatSidebarWidth - panelWidth - padding;
+
+            // Calculate top boundary (account for header: 20px + menu: 56px + padding)
+            const topBoundary = 152 + padding; // Fixed header area
+
+            // Calculate bottom boundary
+            const bottomBoundary = viewportHeight - panelHeight - padding;
+
+            // Position at bottom-left of available area
+            const initialX = Math.max(leftBoundary, Math.min(leftBoundary, rightBoundary));
+            const initialY = Math.max(topBoundary, bottomBoundary);
+
             setPosition({
-                x: padding,
-                y: window.innerHeight - panelHeight - padding
+                x: initialX,
+                y: initialY
             });
         }
-    }, [isOpen, position]);
+    }, [isOpen, position, showNavigationPane, chatSidebarOpen]);
 
     const handleDragStart = useCallback((e: React.MouseEvent) => {
         if (!containerRef.current) return;
@@ -61,18 +91,30 @@ export default function WordCount({ editor, isOpen, onClose }: WordCountProps) {
         const panel = containerRef.current;
         const panelRect = panel.getBoundingClientRect();
 
-        // Find the tiptap-container boundary
-        const tiptapContainer = document.querySelector('.tiptap-container');
-        if (tiptapContainer) {
-            const containerRect = tiptapContainer.getBoundingClientRect();
+        // Calculate boundaries accounting for NavigationPane and ChatSidebar
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
 
-            // Clamp position within tiptap-container boundaries
-            newX = Math.max(containerRect.left, Math.min(newX, containerRect.right - panelRect.width));
-            newY = Math.max(containerRect.top, Math.min(newY, containerRect.bottom - panelRect.height));
-        }
+        // Left boundary (NavigationPane)
+        const navPaneWidth = showNavigationPane ? Math.max(viewportWidth * 0.15, 200) : 0;
+        const leftBoundary = navPaneWidth;
+
+        // Right boundary (ChatSidebar)
+        const chatSidebarWidth = chatSidebarOpen ? 320 : 0;
+        const rightBoundary = viewportWidth - chatSidebarWidth - panelRect.width;
+
+        // Top boundary (header area)
+        const topBoundary = 152;
+
+        // Bottom boundary
+        const bottomBoundary = viewportHeight - panelRect.height;
+
+        // Clamp position within calculated boundaries
+        newX = Math.max(leftBoundary, Math.min(newX, rightBoundary));
+        newY = Math.max(topBoundary, Math.min(newY, bottomBoundary));
 
         setPosition({ x: newX, y: newY });
-    }, [isDragging]);
+    }, [isDragging, showNavigationPane, chatSidebarOpen]);
 
     const handleDragEnd = useCallback(() => {
         setIsDragging(false);
@@ -90,6 +132,52 @@ export default function WordCount({ editor, isOpen, onClose }: WordCountProps) {
             };
         }
     }, [isDragging, handleDragMove, handleDragEnd]);
+
+    // Recalculate position when NavigationPane or ChatSidebar toggles - instant adjustment
+    useEffect(() => {
+        if (!position || !containerRef.current) return;
+
+        // Use requestAnimationFrame for immediate but smooth adjustment
+        const recalculateFrame = requestAnimationFrame(() => {
+            const panel = containerRef.current;
+            if (!panel) return;
+
+            const panelRect = panel.getBoundingClientRect();
+
+            // Calculate boundaries accounting for NavigationPane and ChatSidebar
+            const viewportWidth = window.innerWidth;
+            const viewportHeight = window.innerHeight;
+
+            // Left boundary (NavigationPane)
+            const navPaneWidth = showNavigationPane ? Math.max(viewportWidth * 0.15, 200) : 0;
+            const leftBoundary = navPaneWidth;
+
+            // Right boundary (ChatSidebar)
+            const chatSidebarWidth = chatSidebarOpen ? 320 : 0;
+            const rightBoundary = viewportWidth - chatSidebarWidth - panelRect.width;
+
+            // Top boundary (header area)
+            const topBoundary = 152;
+
+            // Bottom boundary
+            const bottomBoundary = viewportHeight - panelRect.height;
+
+            // Check if panel is outside new boundaries
+            let newX = position.x;
+            let newY = position.y;
+
+            // Clamp position to new boundaries
+            newX = Math.max(leftBoundary, Math.min(newX, rightBoundary));
+            newY = Math.max(topBoundary, Math.min(newY, bottomBoundary));
+
+            // Only update if position changed
+            if (newX !== position.x || newY !== position.y) {
+                setPosition({ x: newX, y: newY });
+            }
+        });
+
+        return () => cancelAnimationFrame(recalculateFrame);
+    }, [showNavigationPane, chatSidebarOpen, position]);
 
     useEffect(() => {
         if (!editor || !isOpen) return;

@@ -7,6 +7,7 @@ import { TextStyle } from "@tiptap/extension-text-style";
 import TextAlign from "@tiptap/extension-text-align";
 import Underline from "@tiptap/extension-underline";
 import Link from "@tiptap/extension-link";
+import HorizontalRule from "@tiptap/extension-horizontal-rule";
 import BulletList from "@tiptap/extension-bullet-list";
 import OrderedList from "@tiptap/extension-ordered-list";
 import ListItem from "@tiptap/extension-list-item";
@@ -53,6 +54,9 @@ export const getTipTapExtensions = () => [
     // Text formatting extensions
     Highlight.configure({
         multicolor: true,
+        HTMLAttributes: {
+            class: 'tiptap-highlight',
+        },
     }),
     Color.configure({
         types: ['textStyle'],
@@ -78,6 +82,12 @@ export const getTipTapExtensions = () => [
             target: '_blank',
         },
         validate: (href: string) => /^https?:\/\//.test(href) || /^mailto:/.test(href) || /^tel:/.test(href),
+    }),
+    // Horizontal rule (divider)
+    HorizontalRule.configure({
+        HTMLAttributes: {
+            class: 'tiptap-hr',
+        },
     }),
     // Table extensions
     Table.configure({
@@ -117,6 +127,8 @@ export const getTipTapEditorProps = (extraClasses: string = '') => ({
         class: cn(`document-content prose prose-lg max-w-none [&_ol]:list-decimal [&_ul]:list-disc focus:outline-none`, extraClasses),
         spellcheck: 'true',
     },
+    // Allow default selection behavior - don't intercept DOM events
+    // This ensures cross-block text selection works properly
 });
 
 // Complete Editor Configuration Factory
@@ -137,8 +149,10 @@ export const createTipTapConfig = (options: {
     // Event handlers
     onCreate: options.onCreate,
     onUpdate: options.onUpdate,
-    // Editor props for better UX
+    // Editor props for better UX and selection support
     editorProps: getTipTapEditorProps(options.extraClasses),
+    // Selection persistence - prevent toolbar updates from breaking selection
+    onSelectionUpdate: undefined, // Don't add custom handlers that might interfere
 });
 
 // Legacy support - keeping the original editor creation for backwards compatibility

@@ -49,15 +49,21 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
 
         extractHeadings();
 
-        // Listen for content updates
+        // Listen for content updates - both manual edits and programmatic changes
         const updateHandler = () => {
             extractHeadings();
         };
 
+        const transactionHandler = () => {
+            extractHeadings();
+        };
+
         editor.on("update", updateHandler);
+        editor.on("transaction", transactionHandler);
 
         return () => {
             editor.off("update", updateHandler);
+            editor.off("transaction", transactionHandler);
         };
     }, [editor, isOpen]);
 
@@ -109,9 +115,34 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
             );
         }
 
-        return headings.map((heading, index) => {
-            const isCollapsed = collapsedLevels.has(heading.id);
+        const visibleHeadings: HeadingNode[] = [];
+        const parentStack: { heading: HeadingNode; collapsed: boolean }[] = [];
+
+        headings.forEach((heading, index) => {
+            // Pop parents that are no longer ancestors
+            while (parentStack.length > 0 && parentStack[parentStack.length - 1].heading.level >= heading.level) {
+                parentStack.pop();
+            }
+
+            // Check if any parent is collapsed
+            const isHidden = parentStack.some(parent => parent.collapsed);
+
+            if (!isHidden) {
+                visibleHeadings.push(heading);
+            }
+
+            // Add current heading to parent stack if it has children
             const nextHeading = headings[index + 1];
+            const hasChildren = nextHeading && nextHeading.level > heading.level;
+            if (hasChildren) {
+                const isCollapsed = collapsedLevels.has(heading.id);
+                parentStack.push({ heading, collapsed: isCollapsed });
+            }
+        });
+
+        return visibleHeadings.map((heading) => {
+            const isCollapsed = collapsedLevels.has(heading.id);
+            const nextHeading = headings[headings.indexOf(heading) + 1];
             const hasChildren = nextHeading && nextHeading.level > heading.level;
 
             return (
@@ -135,6 +166,7 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
                                 )}
                             </button>
                         )}
+                        {!hasChildren && <div className="w-6" />}
                         <button
                             onClick={() => handleNavigateToHeading(heading.position)}
                             className="flex-1 text-left py-2 px-2 text-sm truncate"
@@ -154,23 +186,12 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
     if (!isOpen) return null;
 
     return (
-        <div className="fixed left-6 top-[180px] bottom-6 w-72 bg-white border border-gray-200 rounded-xl shadow-2xl flex flex-col" style={{ zIndex: 5 }}>
+        <div className="h-full w-full bg-white flex flex-col overflow-hidden">
             {/* Header with gradient background */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50 rounded-t-xl">
-                <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                    <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50 flex-shrink-0">
+                <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
                     Navigation
                 </h3>
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={onClose}
-                    className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700 hover:bg-white rounded-md"
-                >
-                    <X className="w-4 h-4" />
-                </Button>
             </div>
 
             {/* Headings List with better scrollbar */}
