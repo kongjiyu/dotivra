@@ -12,9 +12,9 @@ import DocumentProjectList from "@/pages/Document/DocumentProjectList";
 import DocumentHistory from "@/pages/Document/DocumentHistory";
 import { DocumentProvider } from "./context/DocumentContext";
 import Profile from "./pages/Profile";
-import FeedbackForm from "./pages/FeedbackForm";
 import ProtectedRoute from "./components/ProtectedRoute";
 import ErrorBoundary from "./components/ErrorBoundary";
+import AppLayout from "./components/AppLayout";
 
 import Projects from "./pages/Projects"; // NEW: All projects page
 import AllTemplate from "./pages/AllTemplate";
@@ -53,11 +53,14 @@ const ProtectedDocumentWrapper = ({ children }: { children: React.ReactNode }) =
 
 const router = createBrowserRouter([
   {
-    path: "/",
-    element: <Login />,
-    errorElement: <ErrorPage />
-  },
-  {
+    element: <AppLayout />,
+    errorElement: <ErrorPage />,
+    children: [
+      {
+        path: "/",
+        element: <Login />,
+      },
+      {
     path: "/dashboard",
     element: <ProtectedRoute><Dashboard /></ProtectedRoute>,
     errorElement: <ErrorPage />
@@ -102,7 +105,7 @@ const router = createBrowserRouter([
     element: <ProtectedDocumentWrapper><DocumentHistory /></ProtectedDocumentWrapper>,
     errorElement: <ErrorPage />
   },
-  // Redirect old /editor path to new document editor
+      // Redirect old /editor path to new document editor
   {
     path: "/editor",
     element: <ProtectedDocumentWrapper><DocumentEditor /></ProtectedDocumentWrapper>,

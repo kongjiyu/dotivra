@@ -506,13 +506,25 @@ app.get('/api/github/repository/:owner/:repo/file', async (req, res) => {
 
 // TEMPLATE OPERATIONS ENDPOINTS 
 
+// Helper function to get all templates from Firestore
+async function getAllTemplates() {
+  const templatesRef = collection(firestore, 'Templates');
+  const snapshot = await getDocs(templatesRef);
+  
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
+}
+
 // Get all templates
 app.get('/api/templates', async (req, res) => {
   try {
     const templates = await getAllTemplates();
+    console.log(`GET /api/templates - Returned ${templates.length} templates`);
     res.json({ templates });
   } catch (error) {
-    console.error('Error fetching templates:', error);
+    console.error('GET /api/templates - Error:', error.message);
     res.status(500).json({
       error: 'Failed to fetch templates',
       details: error.message
