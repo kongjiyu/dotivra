@@ -6,8 +6,17 @@ import ProjectHeader from '../components/project/ProjectHeader';
 import DocumentSection from '../components/project/DocumentSection';
 import AddDocumentModal from '../components/project/AddDocumentModal';
 import EditProjectModal from '@/components/modal/EditProject';
+import AIGenerationProgressModal from '@/components/modal/AIGenerationProgressModal';
 import { API_ENDPOINTS } from '../lib/apiConfig';
+import { aiService } from '../services/aiService';
 import type { Document, Template, Project } from '../types';
+
+type GenerationStep = {
+  id: string;
+  label: string;
+  status: 'pending' | 'in-progress' | 'completed' | 'error';
+  details?: string;
+};
 
 type CreateDocumentPayload = {
   template: Template;
@@ -30,6 +39,12 @@ const ProjectOverview: React.FC = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // AI Generation Progress Modal State
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationRepository, setGenerationRepository] = useState('');
+  const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>([]);
+  const [currentGenerationStep, setCurrentGenerationStep] = useState<string>('');
 
   // Get project data from URL parameter
   const currentProjectId = projectId; // Keep as string, don't parse as integer
@@ -60,13 +75,10 @@ const ProjectOverview: React.FC = () => {
         setProject(projectData.project);
         
         // Load documents for this project
-        console.log('🔄 Loading documents for project:', currentProjectId);
         const documentsResponse = await fetch(API_ENDPOINTS.projectDocuments(currentProjectId));
-        console.log('📡 Documents API response status:', documentsResponse.status);
         
         if (documentsResponse.ok) {
           const documentsData = await documentsResponse.json();
-          console.log('📋 Raw documents data received:', documentsData);
           
           // Handle both array response and object with documents property
           const rawDocuments = Array.isArray(documentsData) ? documentsData : (documentsData.documents || []);
@@ -104,8 +116,6 @@ const ProjectOverview: React.FC = () => {
           });
           
           setDocuments(transformedDocuments);
-          console.log('✅ Transformed documents:', transformedDocuments);
-          console.log('📊 Document categories:', transformedDocuments.map((doc: any) => ({ name: doc.DocumentName, category: doc.DocumentCategory })));
         } else {
           const errorText = await documentsResponse.text();
           console.error('❌ Failed to load documents:', documentsResponse.status, errorText);
@@ -173,10 +183,6 @@ const ProjectOverview: React.FC = () => {
   };
 
   const handleEditProject = () => {
-    console.log('Edit project:', project?.ProjectName);
-    // TODO: Implement project editing functionality
-    // For now, just open the edit modal
-    // This requires managing the state for the EditProjectModal
     setEditedProjectModalOpen(true);  
   };
 
@@ -187,12 +193,10 @@ const ProjectOverview: React.FC = () => {
   };
 
   const handleEditDocument = (document: Document) => {
-    console.log('Navigate to document editor:', document.DocumentName);
     navigate(`/document/${document.id}`);
   };
 
   const handleDeleteDocument = (document: Document) => {
-    console.log('Delete document:', document.DocumentName);
     alert(`Delete "${document.DocumentName}"? (This is just a demo)`);
   };
 
@@ -204,8 +208,6 @@ const ProjectOverview: React.FC = () => {
     githubRepo
   }: CreateDocumentPayload) => {
     try {
-      console.log('Creating document with template:', template.TemplateName, 'for category:', category, 'name:', name, 'role:', role);
-      
       if (!project?.id && !project?.Project_Id) {
         throw new Error('Project ID not available');
       }
@@ -214,18 +216,138 @@ const ProjectOverview: React.FC = () => {
         throw new Error('User must be logged in to create documents');
       }
 
+      const projectId = project.Project_Id || project.id;
+      const userId = user.uid || userProfile.uid;
+      const documentCategory = category === 'user' ? 'User' : category === 'developer' ? 'Developer' : 'General';
+      
+      // Initialize content with template
+      let documentContent = template.TemplatePrompt || '';
+      
+      // Get repository URL from project or use provided githubRepo
+      let repositoryUrl = githubRepo || project.GitHubRepo || null;
+      
+      // If repository exists and user is authenticated, use AI to generate content
+      if (repositoryUrl && user) {
+        try {
+          // Parse repository owner and name
+          const repoMatch = repositoryUrl.match(/(?:https?:\/\/github\.com\/)?([^\/]+)\/([^\/\s]+)/);
+          if (repoMatch) {
+            const [, owner, repo] = repoMatch;
+            
+            // Initialize progress modal
+            const repoFullName = `${owner}/${repo}`;
+            setGenerationRepository(repoFullName);
+            setIsGenerating(true);
+            
+            // Initialize generation steps
+            const steps: GenerationStep[] = [
+              { id: 'parse', label: 'Parsing repository information', status: 'completed', details: `Repository: ${repoFullName}` },
+              { id: 'structure', label: 'Fetching repository structure', status: 'in-progress', details: 'Analyzing files and directories...' },
+              { id: 'analysis', label: 'AI analyzing codebase', status: 'pending', details: 'Understanding project structure...' },
+              { id: 'iteration', label: 'AI examining code files', status: 'pending', details: 'Reading relevant files...' },
+              { id: 'files', label: 'Processing repository files', status: 'pending', details: 'Gathering context...' },
+              { id: 'generate', label: 'Writing documentation', status: 'pending', details: 'AI creating content...' },
+              { id: 'done', label: 'Finalizing document', status: 'pending' }
+            ];
+            setGenerationSteps(steps);
+            setCurrentGenerationStep('structure');
+            
+            // Progress callback for iterative AI
+            const handleProgress = (step: string, detail?: string) => {
+              setGenerationSteps(prev => prev.map(s => {
+                // Mark completed steps based on workflow
+                const completedSteps = ['parse'];
+                
+                if (step === 'analysis' || step === 'iteration' || step === 'files' || step === 'generate' || step === 'done') {
+                  completedSteps.push('structure');
+                }
+                if (step === 'iteration' || step === 'files' || step === 'generate' || step === 'done') {
+                  completedSteps.push('analysis');
+                }
+                if (step === 'files' || step === 'generate' || step === 'done') {
+                  completedSteps.push('iteration');
+                }
+                if (step === 'generate' || step === 'done') {
+                  completedSteps.push('files');
+                }
+                if (step === 'done') {
+                  completedSteps.push('generate');
+                }
+                
+                // Mark completed
+                if (completedSteps.includes(s.id) && s.id !== step) {
+                  return { ...s, status: 'completed' as const };
+                }
+                
+                // Update current step
+                if (s.id === step) {
+                  return { 
+                    ...s, 
+                    status: step === 'done' ? 'completed' as const : 'in-progress' as const,
+                    details: detail || s.details 
+                  };
+                }
+                
+                return s;
+              }));
+              setCurrentGenerationStep(step);
+            };
+
+            try {
+              // Call iterative AI generation
+              documentContent = await aiService.generateDocumentFromTemplateAndRepoIterative(
+                user,
+                template.TemplatePrompt || '',
+                { owner, repo, fullName: repoFullName },
+                role,
+                name,
+                handleProgress
+              );
+              
+              setGenerationSteps(prev => prev.map(s => 
+                s.id === 'generate' 
+                  ? { ...s, status: 'completed' as const, details: 'AI content ready' }
+                  : s
+              ));
+              setGenerationSteps(prev => prev.map(s => 
+                s.id === 'done' 
+                  ? { ...s, status: 'completed' as const, details: 'Document ready!' }
+                  : s
+              ));
+              
+              // Wait a bit to show completion
+              await new Promise(resolve => setTimeout(resolve, 800));
+            } catch (aiError) {
+              console.error('❌ AI generation failed:', aiError);
+              
+              // Update steps to show error
+              setGenerationSteps(prev => prev.map(step => 
+                step.status === 'in-progress' 
+                  ? { ...step, status: 'error' as const, details: 'Failed - using fallback' }
+                  : step
+              ));
+              
+              // Wait a bit to show error
+              await new Promise(resolve => setTimeout(resolve, 1500));
+            }
+          } else {
+            console.warn('⚠️ Could not parse repository URL:', repositoryUrl);
+          }
+        } catch (error) {
+          console.error('❌ Repository processing failed:', error);
+          setIsGenerating(false);
+        }
+      }
+
       // Create document data matching API expectations
       const documentData = {
-        title: name, // Backend expects 'title' field (lowercase)
-        content: template.TemplatePrompt || '', // Initial content from template
-        projectId: project.Project_Id || project.id, // Backend expects 'projectId' field
-        userId: user.uid || userProfile.uid, // Backend expects 'userId' field
-        templateId: template.id || template.Template_Id, // Backend expects 'templateId'
-        documentCategory: category === 'user' ? 'User' : category === 'developer' ? 'Developer' : 'General',
-        githubRepository: githubRepo || undefined, // Optional GitHub integration
+        title: name,
+        content: documentContent,
+        projectId: projectId,
+        userId: userId,
+        templateId: template.id || template.Template_Id,
+        documentCategory: documentCategory,
       };
-
-      console.log('Sending document creation request:', documentData);
 
       const response = await fetch(API_ENDPOINTS.documents(), {
         method: 'POST',
@@ -241,26 +363,23 @@ const ProjectOverview: React.FC = () => {
       }
 
       const result = await response.json();
-      console.log('✅ Document created successfully:', result.document);
+      const createdDocument = result.document || result;
+      const documentId = createdDocument.id;
 
-      // Close modal
+      // Close modals
       setShowAddModal(false);
       setSelectedCategory(null);
+      setIsGenerating(false);
       
-      // Reload documents to show the new document
-      const documentsResponse = await fetch(API_ENDPOINTS.projectDocuments(currentProjectId!));
-      if (documentsResponse.ok) {
-        const documentsData = await documentsResponse.json();
-        setDocuments(documentsData.documents || []);
-      }
-      
-      alert(`Document "${name}" created successfully!`);
-      
-      // Optionally navigate to document editor
-      // navigate(`/document/${result.document.id}`);
+      // Navigate to the new document, passing the full document data including content
+      // This allows the editor to display content immediately without waiting for Firestore
+      navigate(`/document/${documentId}`, {
+        state: { documentData: createdDocument }
+      });
       
     } catch (error) {
       console.error('❌ Error creating document:', error);
+      setIsGenerating(false);
       alert(`Failed to create document: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   };
@@ -280,16 +399,6 @@ const ProjectOverview: React.FC = () => {
       />
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Debug Info */}
-        {process.env.NODE_ENV === 'development' && (
-          <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <h4 className="font-medium text-yellow-800">Debug Info:</h4>
-            <p className="text-sm text-yellow-700">Project ID: {currentProjectId}</p>
-            <p className="text-sm text-yellow-700">Total Documents: {documents.length}</p>
-            <p className="text-sm text-yellow-700">User Docs: {userDocs.length}, Dev Docs: {devDocs.length}, General Docs: {generalDocs.length}</p>
-          </div>
-        )}
-        
         <DocumentSection
           title="Users"
           category="user"
@@ -387,8 +496,12 @@ const ProjectOverview: React.FC = () => {
         }}
       />
 
-      
-
+      <AIGenerationProgressModal
+        isOpen={isGenerating}
+        repositoryName={generationRepository}
+        steps={generationSteps}
+        currentStep={currentGenerationStep}
+      />
 
     </div>
   );
