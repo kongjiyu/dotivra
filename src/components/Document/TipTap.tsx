@@ -149,8 +149,11 @@ const Tiptap = ({
 
     // Apply initialContent when it changes, suppress history + update.
     useEffect(() => {
-        if (!editor || !initialContent) return;
-
+        if (!editor) return;
+        
+        // Allow undefined or null to be skipped, but not empty string
+        if (initialContent === undefined || initialContent === null) return;
+        
         // Check if this content was already applied
         if (lastAppliedContentRef.current === initialContent) return;
 

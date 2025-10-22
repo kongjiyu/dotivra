@@ -140,7 +140,7 @@ export const createTipTapConfig = (options: {
     extraClasses?: string;
 }) => ({
     extensions: getTipTapExtensions(),
-    content: options.content || "<p>Start writing your document...</p>",
+    content: options.content !== undefined ? options.content : "<p>Start writing your document...</p>",
     editable: options.editable !== false,
     // Performance optimizations
     enableInputRules: true,

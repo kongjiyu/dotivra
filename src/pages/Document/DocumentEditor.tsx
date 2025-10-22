@@ -3,7 +3,7 @@ import TipTap from "@/components/document/TipTap";
 import AIActionContainer from "@/components/document/AIActionContainer";
 import { useDocument } from "@/context/DocumentContext";
 import { useRef, useEffect, useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useLocation } from "react-router-dom";
 import { API_ENDPOINTS } from "@/lib/apiConfig";
 import { fetchDocument } from "@/services/apiService";
 import { useAuth } from "@/context/AuthContext";
@@ -24,6 +24,7 @@ interface AIOperation {
 
 export default function DocumentEditor() {
     const { documentId } = useParams<{ documentId: string }>();
+    const location = useLocation();
     const { user } = useAuth();
     const {
         setDocumentContent,
@@ -72,9 +73,55 @@ export default function DocumentEditor() {
                 return;
             }
 
+            // Check if we have document data passed through navigation state (from document creation)
+            const navigationState = location.state as { documentData?: any } | null;
+            if (navigationState?.documentData) {
+                const documentData = navigationState.documentData;
+                console.log('📄 Using document data from navigation state:', {
+                    id: documentData.id,
+                    contentLength: documentData.Content?.length || 0
+                });
+                
+                setDocumentId(documentId);
+                setDocumentTitle(documentData.DocumentName || documentData.Title || "Untitled Document");
+                setDocumentContent(documentData.Content || "");
+                
+                // Load project info if available
+                const projectIdFromDoc = documentData.Project_Id || documentData.ProjectId;
+                if (projectIdFromDoc) {
+                    setProjectId(projectIdFromDoc);
+                    
+                    // Skip API call for mock projects
+                    if (!projectIdFromDoc.startsWith('mock-')) {
+                        try {
+                            const projectResponse = await fetch(API_ENDPOINTS.project(projectIdFromDoc));
+                            if (projectResponse.ok) {
+                                const projectData = await projectResponse.json();
+                                const project = projectData.success ? projectData.project : projectData;
+
+                                if (project && project.GitHubRepo) {
+                                    const repoMatch = project.GitHubRepo.match(/github\.com\/([^\/]+\/[^\/]+)/) ||
+                                        project.GitHubRepo.match(/^([^\/]+\/[^\/]+)$/);
+
+                                    if (repoMatch) {
+                                        const fullName = repoMatch[1];
+                                        const [owner, repo] = fullName.split('/');
+                                        setRepositoryInfo({ owner, repo });
+                                    }
+                                }
+                            }
+                        } catch (projectError) {
+                            console.warn('Could not load project information:', projectError);
+                        }
+                    }
+                }
+                
+                return; // Skip fetching from API since we have fresh data
+            }
+
             setIsLoadingDocument(true);
             try {
-                console.log('📄 Loading document using apiService:', documentId);
+                console.log('📄 Loading document from API:', documentId);
 
                 // Use the improved fetchDocument function with fallback logic
                 const documentData = await fetchDocument(documentId);

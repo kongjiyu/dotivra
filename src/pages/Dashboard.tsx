@@ -140,8 +140,10 @@ const Dashboard: React.FC = () => {
             const steps: GenerationStep[] = [
               { id: 'parse', label: 'Parsing repository information', status: 'completed', details: `Repository: ${repoFullName}` },
               { id: 'structure', label: 'Fetching repository structure', status: 'in-progress', details: 'Analyzing files and directories...' },
-              { id: 'iteration', label: 'AI requesting files', status: 'pending' },
-              { id: 'generate', label: 'Generating AI documentation', status: 'pending' },
+              { id: 'analysis', label: 'AI analyzing codebase', status: 'pending', details: 'Understanding project structure...' },
+              { id: 'iteration', label: 'AI examining code files', status: 'pending', details: 'Reading relevant files...' },
+              { id: 'files', label: 'Processing repository files', status: 'pending', details: 'Gathering context...' },
+              { id: 'generate', label: 'Writing documentation', status: 'pending', details: 'AI creating content...' },
               { id: 'done', label: 'Finalizing document', status: 'pending' }
             ];
             setGenerationSteps(steps);
@@ -150,18 +152,26 @@ const Dashboard: React.FC = () => {
             // Progress callback for iterative AI
             const handleProgress = (step: string, detail?: string) => {
               setGenerationSteps(prev => prev.map(s => {
-                // Mark completed steps
+                // Mark completed steps based on workflow
                 const completedSteps = ['parse'];
-                if (step === 'structure' || step === 'analysis' || step === 'iteration' || step === 'files' || step === 'done') {
+                
+                if (step === 'analysis' || step === 'iteration' || step === 'files' || step === 'generate' || step === 'done') {
                   completedSteps.push('structure');
                 }
-                if (step === 'iteration' || step === 'files' || step === 'done') {
+                if (step === 'iteration' || step === 'files' || step === 'generate' || step === 'done') {
                   completedSteps.push('analysis');
                 }
+                if (step === 'files' || step === 'generate' || step === 'done') {
+                  completedSteps.push('iteration');
+                }
+                if (step === 'generate' || step === 'done') {
+                  completedSteps.push('files');
+                }
                 if (step === 'done') {
-                  completedSteps.push('iteration', 'generate');
+                  completedSteps.push('generate');
                 }
                 
+                // Mark completed
                 if (completedSteps.includes(s.id) && s.id !== step) {
                   return { ...s, status: 'completed' as const };
                 }
@@ -172,24 +182,6 @@ const Dashboard: React.FC = () => {
                     ...s, 
                     status: step === 'done' ? 'completed' as const : 'in-progress' as const,
                     details: detail || s.details 
-                  };
-                }
-                
-                // Map 'analysis' and 'files' to 'iteration' step
-                if ((step === 'analysis' || step === 'files') && s.id === 'iteration') {
-                  return {
-                    ...s,
-                    status: 'in-progress' as const,
-                    details: detail || s.details
-                  };
-                }
-                
-                // Map final content generation to 'generate' step
-                if (step === 'init' && s.id === 'structure') {
-                  return {
-                    ...s,
-                    status: 'in-progress' as const,
-                    details: detail || s.details
                   };
                 }
                 
@@ -266,23 +258,17 @@ const Dashboard: React.FC = () => {
       const createdDocument = documentResult.document || documentResult;
       const documentId = createdDocument.id;
 
-      // If AI generation was used, wait longer to ensure Firestore write completes
-      if (repositoryUrl && user) {
-        await new Promise(resolve => setTimeout(resolve, 2500)); // Increased to 2.5 seconds
-      }
-
       // Close modals and navigate to document
       setIsTemplateModalOpen(false);
       setSelectedTemplate(null);
       setIsGenerating(false); // Close AI generation progress modal
       
-      // Show success message
-      console.log(`📄 Document created with ID: ${documentId}, navigating now...`);
-      console.log(`📄 Original content length: ${documentContent.length}`);
-      
-      // Navigate to the created document
+      // Navigate to the created document, passing the full document data including content
+      // This allows the editor to display content immediately without waiting for Firestore
       if (documentId) {
-        navigate(`/document/${documentId}`);
+        navigate(`/document/${documentId}`, {
+          state: { documentData: createdDocument }
+        });
       } else {
         // Fallback to project view if no document ID
         alert(`Document "${data.documentName}" created successfully!\n\nTemplate: ${data.template.TemplateName}\nRole: ${data.documentRole}\nCategory: ${documentCategory}`);
