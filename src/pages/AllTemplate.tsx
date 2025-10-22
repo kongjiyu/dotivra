@@ -1,8 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Header from '../components/header/Header';
 import { useAuth } from '../context/AuthContext';
 import TemplateCard from '../components/allTemplate/TemplateCard';
-import AddDocumentFromTemplate from '../components/modal/addDocumentFromTemplate';
+import TemplateModal from '../components/allTemplate/TemplateModal';
+import AIGenerationProgressModal from '../components/modal/AIGenerationProgressModal';
 import { getUserDisplayInfo } from '../utils/user';
 import { FileText } from 'lucide-react';
 import type { LegacyTemplate } from '../types';
@@ -11,14 +13,21 @@ import { useFeedback } from '../components/AppLayout';
 
 const AllTemplate: React.FC = () => {
   const { user, userProfile } = useAuth();
+  const navigate = useNavigate();
   const { name: displayName, initials } = getUserDisplayInfo(userProfile, user);
   const { openFeedbackModal } = useFeedback();
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'developer' | 'user'>('all');
-  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // AI Generation states
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [generationRepository, setGenerationRepository] = useState('');
+  const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>([]);
+  const [currentGenerationStep, setCurrentGenerationStep] = useState<string>('parse');
 
   // Fetch templates from API
   useEffect(() => {
@@ -81,21 +90,6 @@ const AllTemplate: React.FC = () => {
     return result;
   }, [query, uiTemplates, selectedCategory]);
 
-  // Handle template selection
-  const handleTemplateSelect = (id: number) => {
-    const template = templates[id]; // Use original template data from API
-    if (template) {
-      setSelectedTemplate(template);
-    }
-  };
-
-  // Handle document creation
-  const handleCreateDocument = async (data: any) => {
-    console.log('Creating document with data:', data);
-    // TODO: Implement document creation logic
-    setSelectedTemplate(null);
-  };
-
   // Count templates by category
   const categoryCounts = useMemo(() => {
     return {
@@ -104,6 +98,229 @@ const AllTemplate: React.FC = () => {
       user: uiTemplates.filter(t => t.category === 'user').length,
     };
   }, [uiTemplates]);
+
+  // Handle template selection
+  const handleTemplateSelect = (id: number) => {
+    setSelected(id);
+  };
+
+  // Handle document creation
+  const handleCreateDocument = async (data: {
+    template: Template;
+    projectId?: string;
+    newProjectName?: string;
+    newProjectDescription?: string;
+    selectedRepo?: string;
+    documentName: string;
+    documentRole: string;
+  }) => {
+    if (!user) return;
+
+    const {
+      template,
+      projectId,
+      newProjectName,
+      newProjectDescription,
+      selectedRepo,
+      documentName,
+      documentRole
+    } = data;
+
+    try {
+      const idToken = await user.getIdToken();
+      
+      let finalProjectId = projectId;
+      
+      // Create new project if needed
+      if (!projectId && newProjectName) {
+        const createProjectRes = await fetch('/api/projects', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`
+          },
+          body: JSON.stringify({
+            projectName: newProjectName,
+            description: newProjectDescription || '',
+            githubRepo: selectedRepo || ''
+          })
+        });
+
+        if (!createProjectRes.ok) throw new Error('Failed to create project');
+        
+        const newProject = await createProjectRes.json();
+        finalProjectId = newProject.projectId;
+      }
+
+      if (!finalProjectId) {
+        alert('Project ID is required');
+        return;
+      }
+
+      // Try AI generation if GitHub repo is available
+      let content = template.TemplatePrompt || '';
+      const repositoryUrl = selectedRepo;
+
+      if (repositoryUrl && user) {
+        const repoMatch = repositoryUrl.match(/github\.com\/([^\/]+)\/([^\/\s]+)/);
+        
+        if (repoMatch) {
+          const [, owner, repo] = repoMatch;
+          const repoFullName = `${owner}/${repo}`;
+          
+          setGenerationRepository(repoFullName);
+          setIsGenerating(true);
+          
+          const steps: GenerationStep[] = [
+            { id: 'parse', label: 'Parsing repository information', status: 'completed', details: repoFullName },
+            { id: 'structure', label: 'Fetching repository structure', status: 'in-progress', details: 'Analyzing files and directories...' },
+            { id: 'analysis', label: 'AI analyzing codebase', status: 'pending', details: 'Understanding project structure...' },
+            { id: 'iteration', label: 'AI examining code files', status: 'pending', details: 'Reading relevant files...' },
+            { id: 'files', label: 'Processing repository files', status: 'pending', details: 'Gathering context...' },
+            { id: 'generate', label: 'Writing documentation', status: 'pending', details: 'AI creating content...' },
+            { id: 'done', label: 'Finalizing document', status: 'pending' }
+          ];
+          setGenerationSteps(steps);
+          setCurrentGenerationStep('structure');
+          
+          // Progress callback for iterative AI
+          const handleProgress = (step: string, detail?: string) => {
+            setGenerationSteps(prev => prev.map(s => {
+              // Mark completed steps based on workflow
+              const completedSteps = ['parse'];
+              
+              if (step === 'analysis' || step === 'iteration' || step === 'files' || step === 'generate' || step === 'done') {
+                completedSteps.push('structure');
+              }
+              if (step === 'iteration' || step === 'files' || step === 'generate' || step === 'done') {
+                completedSteps.push('analysis');
+              }
+              if (step === 'files' || step === 'generate' || step === 'done') {
+                completedSteps.push('iteration');
+              }
+              if (step === 'generate' || step === 'done') {
+                completedSteps.push('files');
+              }
+              if (step === 'done') {
+                completedSteps.push('generate');
+              }
+              
+              // Mark completed
+              if (completedSteps.includes(s.id) && s.id !== step) {
+                return { ...s, status: 'completed' as const };
+              }
+              
+              // Update current step
+              if (s.id === step) {
+                return { 
+                  ...s, 
+                  status: step === 'done' ? 'completed' as const : 'in-progress' as const,
+                  details: detail || s.details 
+                };
+              }
+              
+              // Map 'analysis' and 'files' to 'iteration' step
+              if ((step === 'analysis' || step === 'files') && s.id === 'iteration') {
+                return {
+                  ...s,
+                  status: 'in-progress' as const,
+                  details: detail || s.details
+                };
+              }
+              
+              // Map final content generation to 'generate' step
+              if (step === 'init' && s.id === 'structure') {
+                return {
+                  ...s,
+                  status: 'in-progress' as const,
+                  details: detail || s.details
+                };
+              }
+              
+              return s;
+            }));
+            setCurrentGenerationStep(step);
+          };
+          
+          try {
+            // Generate content using iterative AI method
+            content = await aiService.generateDocumentFromTemplateAndRepoIterative(
+              user,
+              template.TemplatePrompt || '',
+              { owner, repo, fullName: repoFullName },
+              documentRole,
+              documentName,
+              handleProgress
+            );
+            
+            // Finalize
+            handleProgress('done', 'Document ready!');
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } catch (aiError) {
+            console.error('AI generation failed, using template:', aiError);
+            
+            // Update steps to show error
+            setGenerationSteps(prev => prev.map(step => 
+              step.status === 'in-progress' 
+                ? { ...step, status: 'error' as const, details: 'Failed - using fallback' }
+                : step
+            ));
+            
+            // Wait a bit to show error
+            await new Promise(resolve => setTimeout(resolve, 1500));
+          }
+        }
+      }
+
+      // Get user ID
+      const userId = user.uid;
+
+      // Determine document category
+      let documentCategory = 'General';
+      if (documentRole.toLowerCase().includes('user')) {
+        documentCategory = 'User';
+      } else if (documentRole.toLowerCase().includes('developer') || documentRole.toLowerCase().includes('api')) {
+        documentCategory = 'Developer';
+      }
+
+      // Create document with consistent field names
+      const createDocRes = await fetch('/api/documents', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${idToken}`
+        },
+        body: JSON.stringify({
+          title: documentName,
+          content: content,
+          projectId: finalProjectId,
+          userId: userId,
+          templateId: template.Template_Id || template.id,
+          documentCategory: documentCategory
+        })
+      });
+
+      if (!createDocRes.ok) {
+        const errorData = await createDocRes.json();
+        throw new Error(errorData.error || 'Failed to create document');
+      }
+
+      const docData = await createDocRes.json();
+      const createdDocument = docData.document || docData;
+      
+      setIsGenerating(false);
+      
+      // Navigate to document editor, passing the full document data including content
+      // This allows the editor to display content immediately without waiting for Firestore
+      navigate(`/document/${docData.documentId}`, {
+        state: { documentData: createdDocument }
+      });
+    } catch (error) {
+      console.error('Error creating document:', error);
+      alert(error instanceof Error ? error.message : 'Failed to create document');
+      setIsGenerating(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -199,12 +416,21 @@ const AllTemplate: React.FC = () => {
         )}
       </main>
 
-      {/* Add Document Modal */}
-      <AddDocumentFromTemplate
-        isOpen={selectedTemplate !== null}
-        template={selectedTemplate}
-        onClose={() => setSelectedTemplate(null)}
-        onCreateDocument={handleCreateDocument}
+      {/* Template Modal */}
+      {selected !== null && (
+        <TemplateModal 
+          id={selected} 
+          onClose={() => setSelected(null)}
+          onCreateDocument={handleCreateDocument}
+        />
+      )}
+
+      {/* AI Generation Progress Modal */}
+      <AIGenerationProgressModal
+        isOpen={isGenerating}
+        repositoryName={generationRepository}
+        steps={generationSteps}
+        currentStep={currentGenerationStep}
       />
     </div>
   );

@@ -31,5 +31,10 @@ service cloud.firestore {
     match /ChatboxHistory/{chatboxId} {
       allow read, write: if true; // In production, add proper authentication
     }
+    
+    // Gemini Metrics collection - for tracking API usage
+    match /gemini-metrics/{id} {
+      allow read, write: if true;
+    }
   }
 }

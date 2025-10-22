@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import html2pdf from '@digivorefr/html2pdf.js';
 import { marked } from 'marked';
+import mammoth from 'mammoth';
 import { Input } from "@/components/ui/input";
 import {
 	Popover,
@@ -18,11 +19,32 @@ import {
 	X,
 	Download,
 	BookTemplate,
-	MoreHorizontal,
 	Copy,
 	ChevronUp,
-	ChevronDown
+	ChevronDown,
+	Wrench,
+	HelpCircle,
+	PanelLeft,
+	Menu,
+	FileBarChart,
+	Keyboard,
+	BookOpen,
+	Settings,
 } from "lucide-react";
+
+// Import new components
+// import NavigationPane from "./NavigationPane"; // Now integrated in DocumentLayout 3-column grid
+import DocsHelp from "./DocsHelp";
+import ShortcutKeys from "./ShortcutKeys";
+import WordCount from "./WordCount";
+import ZoomControl from "./ZoomControl";
+import ImportConfirmationModal from "./ImportConfirmationModal";
+
+// Import preferences utility
+import {
+	loadToolsPreferences,
+	updateToolPreference,
+} from "@/utils/documentToolsPreferences";
 
 // NEW: ProseMirror bits for decorations
 import { Plugin, PluginKey, TextSelection } from "prosemirror-state";
@@ -38,6 +60,8 @@ interface DocumentMenuProps {
 	documentContent?: string; // Current document content for PDF export
 	context?: 'main' | 'project'; // To distinguish between main menu and project tab imports
 	currentDocument?: any; // Current document data for template/copy operations
+	onToolbarToggle?: (show: boolean) => void; // Callback when toolbar visibility changes
+	onNavigationPaneToggle?: (show: boolean) => void; // Callback when navigation pane visibility changes
 }
 
 export default function DocumentMenu({
@@ -49,17 +73,76 @@ export default function DocumentMenu({
 	documentContent,
 	context = 'main',
 	currentDocument,
+	onToolbarToggle,
+	onNavigationPaneToggle,
 }: DocumentMenuProps) {
 	// Document menu state
 	const [showSearch, setShowSearch] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [showImportOptions, setShowImportOptions] = useState(false);
-	const [showExportOptions, setShowExportOptions] = useState(false);
-	const [showMoreOptions, setShowMoreOptions] = useState(false);
 	const [searchMatches, setSearchMatches] = useState<number>(0);
 	const [currentMatch, setCurrentMatch] = useState<number>(0);
 	const [searchResults, setSearchResults] = useState<Array<{ from: number, to: number }>>([]);
 	const [replaceText, setReplaceText] = useState<string>("");
+
+	// New Tools & Help state - Initialize from cookies immediately
+	const initialPrefs = loadToolsPreferences();
+	const [showToolsMenu, setShowToolsMenu] = useState(false);
+	const [showHelpMenu, setShowHelpMenu] = useState(false);
+	const [showNavigationPane, setShowNavigationPane] = useState(initialPrefs.showNavigationPane);
+	const [showWordCount, setShowWordCount] = useState(initialPrefs.showWordCount);
+	const [showDocsHelp, setShowDocsHelp] = useState(false);
+	const [showShortcutKeys, setShowShortcutKeys] = useState(false);
+	const [showToolbar, setShowToolbar] = useState(initialPrefs.showToolbar);
+
+	// Import confirmation modal state
+	const [showImportConfirm, setShowImportConfirm] = useState(false);
+	const [pendingImport, setPendingImport] = useState<{ content: string; fileName: string } | null>(null);
+
+	// Save preferences when they change
+	useEffect(() => {
+		updateToolPreference('showToolbar', showToolbar);
+		// Notify parent component about toolbar visibility change
+		if (onToolbarToggle) {
+			onToolbarToggle(showToolbar);
+		}
+	}, [showToolbar, onToolbarToggle]);
+
+	useEffect(() => {
+		updateToolPreference('showWordCount', showWordCount);
+	}, [showWordCount]);
+
+	useEffect(() => {
+		updateToolPreference('showNavigationPane', showNavigationPane);
+		// Notify parent component about navigation pane visibility change
+		if (onNavigationPaneToggle) {
+			onNavigationPaneToggle(showNavigationPane);
+		}
+	}, [showNavigationPane, onNavigationPaneToggle]);
+
+	// Add keyboard shortcut handlers for Ctrl+F, Ctrl+H, Ctrl+P
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			// Ctrl+F or Cmd+F - Open Search
+			if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+				e.preventDefault();
+				setShowSearch(true);
+			}
+			// Ctrl+H or Cmd+H - Open Search (same as Ctrl+F since replace is always visible)
+			if ((e.ctrlKey || e.metaKey) && e.key === 'h') {
+				e.preventDefault();
+				setShowSearch(true);
+			}
+			// Ctrl+P or Cmd+P - Print
+			if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+				e.preventDefault();
+				handlePrint();
+			}
+		};
+
+		document.addEventListener('keydown', handleKeyDown);
+		return () => document.removeEventListener('keydown', handleKeyDown);
+	}, [showSearch]);
 
 	// === NEW: Decoration plugin wiring ===
 	const searchPluginKeyRef = useRef(new PluginKey(`search-highlights-${Math.random().toString(36).substring(2)}`));
@@ -164,6 +247,35 @@ export default function DocumentMenu({
 				el.classList.add("avoid-break");
 			});
 
+			// Process code blocks to add language headers
+			doc.querySelectorAll(".code-block-wrapper, pre[class*='language-']").forEach((wrapper) => {
+				// Check if it's a code-block-wrapper or a standalone pre
+				const pre = wrapper.tagName === 'PRE' ? wrapper : wrapper.querySelector("pre");
+				if (!pre) return;
+
+				// Get language from data attribute or class
+				let language = wrapper.getAttribute("data-language");
+				if (!language) {
+					const classMatch = pre.className.match(/language-(\w+)/);
+					language = classMatch ? classMatch[1] : "plaintext";
+				}
+
+				// Create wrapper if it doesn't exist
+				let container = wrapper.tagName === 'PRE' ? null : wrapper;
+				if (!container) {
+					container = doc.createElement("div");
+					container.className = "code-block-wrapper";
+					pre.parentNode?.insertBefore(container, pre);
+					container.appendChild(pre);
+				}
+
+				// Add header with language label
+				const header = doc.createElement("div");
+				header.className = "code-block-header";
+				header.textContent = language;
+				container.insertBefore(header, pre);
+			});
+
 			// Serialize back to HTML string
 			const updatedContent = doc.body.innerHTML;
 
@@ -190,8 +302,9 @@ export default function DocumentMenu({
         <title>Document</title>
         <style>
           @media print {
+            * { box-sizing: border-box; }
             .page-break { page-break-before: always; break-before: page; }
-            .avoid-break { page-break-inside: avoid; break-inside: avoid; }
+            .avoid-break { page-break-inside: avoid !important; break-inside: avoid !important; }
 			.pm-search-hit, .pm-search-current {
 				background: transparent !important;
 				outline: none !important;
@@ -207,19 +320,95 @@ export default function DocumentMenu({
               background-color: white;
             }
 
-            h1, h2, h3, table, pre, blockquote { page-break-inside: avoid; break-inside: avoid; }
+            h1, h2, h3, table, pre, blockquote, .code-block-wrapper { 
+              page-break-inside: avoid !important; 
+              break-inside: avoid !important; 
+              page-break-after: avoid;
+              break-after: avoid;
+            }
             tr, img, figure { page-break-inside: avoid; break-inside: avoid; max-width: 100%; }
 
-            table { border-collapse: collapse; width: 100%; }
+            table { border-collapse: collapse; width: 100%; page-break-inside: auto; }
             th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
             th { background: #f5f5f5; font-weight: 600; }
 
             h1 { font-size: 28px; font-weight: 700; margin: 24px 0 12px; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
             h2 { font-size: 24px; font-weight: 700; margin: 20px 0 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
             h3 { font-size: 20px; font-weight: 700; margin: 18px 0 9px; }
-            p  { margin: 8px 0; text-align: justify; }
-            ul, ol { margin: 8px 0; padding-left: 24px; }
-            li { margin: 4px 0; }
+            p  { margin: 8px 0; text-align: justify; orphans: 3; widows: 3; }
+            ul, ol { margin: 8px 0; padding-left: 24px; page-break-inside: auto; }
+            li { margin: 4px 0; page-break-inside: avoid; }
+            
+            /* Links should be inline */
+            a {
+              display: inline !important;
+              color: #2563eb;
+              text-decoration: underline;
+            }
+            
+            code {
+              font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+              font-size: 13px;
+              background-color: #f3f4f6;
+              color: #1f2937;
+              padding: 2px 6px;
+              border-radius: 4px;
+              border: 1px solid #e5e7eb;
+              box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+              white-space: pre-wrap;
+              word-break: break-word;
+            }
+            
+            .code-block-wrapper {
+              margin: 16px 0;
+              page-break-inside: avoid;
+              break-inside: avoid;
+            }
+            
+            .code-block-header {
+              background-color: #000000 !important;
+              color: #9cdcfe !important;
+              font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+              font-size: 12px;
+              font-weight: 600;
+              padding: 8px 12px;
+              border-radius: 6px 6px 0 0;
+              text-transform: capitalize;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
+            
+            pre {
+              background-color: #000000 !important;
+              color: #d4d4d4 !important;
+              padding: 16px;
+              border-radius: 0 0 6px 6px;
+              overflow-x: auto;
+              margin: 0;
+              font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+              font-size: 13px;
+              line-height: 1.6;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
+            
+            pre code {
+              background: transparent;
+              border: none;
+              padding: 0;
+              color: inherit;
+              box-shadow: none;
+            }
+            
+            hr {
+              border: none;
+              border-top: 2px solid #e5e7eb;
+              margin: 24px 0;
+              page-break-after: avoid;
+              break-after: avoid;
+            }
           }
         </style>
       </head>
@@ -257,10 +446,60 @@ export default function DocumentMenu({
 		}
 
 		try {
+			// Parse and process content
+			const parser = new DOMParser();
+			const doc = parser.parseFromString(contentToExport, "text/html");
+
+			// Process code blocks to add language headers
+			doc.querySelectorAll(".code-block-wrapper, pre[class*='language-']").forEach((wrapper) => {
+				// Check if it's a code-block-wrapper or a standalone pre
+				const pre = wrapper.tagName === 'PRE' ? wrapper : wrapper.querySelector("pre");
+				if (!pre) return;
+
+				// Get language from data attribute or class
+				let language = wrapper.getAttribute("data-language");
+				if (!language) {
+					const classMatch = pre.className.match(/language-(\w+)/);
+					language = classMatch ? classMatch[1] : "plaintext";
+				}
+
+				// Create wrapper if it doesn't exist
+				let container = wrapper.tagName === 'PRE' ? null : wrapper;
+				if (!container) {
+					container = doc.createElement("div");
+					container.className = "code-block-wrapper";
+					pre.parentNode?.insertBefore(container, pre);
+					container.appendChild(pre);
+				}
+
+				// Add header with language label
+				const header = doc.createElement("div");
+				header.className = "code-block-header";
+				header.textContent = language;
+				container.insertBefore(header, pre);
+			});
+
+			// Smart page break logic - Break by ELEMENTS not content height
+			// 1. Add page breaks before each H1 heading (skip first H1)
+			const h1Headings = doc.querySelectorAll("h1");
+			h1Headings.forEach((heading, index) => {
+				// Skip the first h1 heading
+				if (index > 0) {
+					// Add a page break div before the heading
+					const pageBreak = doc.createElement("div");
+					pageBreak.className = "page-break";
+					pageBreak.setAttribute('data-page-break', 'h1');
+					heading.parentNode?.insertBefore(pageBreak, heading);
+				}
+			});
+
+			// 2. Ensure all H1 elements start on a new page (no content height calculation)
+			// Each H1 gets its own page regardless of content length
+
 			// Create element with content and styling
 			const element = document.createElement('div');
 			const style = document.createElement("style");
-			element.innerHTML = contentToExport;
+			element.innerHTML = doc.body.innerHTML;
 			element.style.cssText = `
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         font-size: 14px;
@@ -272,24 +511,157 @@ export default function DocumentMenu({
         background-color: white;
       `;
 			style.textContent = `
-      .page-break { page-break-before: always; break-before: page; }
-      .avoid-break { page-break-inside: avoid; break-inside: avoid; }
-      h1, h2, h3, table, pre, blockquote { page-break-inside: avoid; break-inside: avoid; }
+      * { box-sizing: border-box; }
+      
+      /* Page break rules - Break by ELEMENTS not content height */
+      .page-break { 
+        page-break-before: always !important; 
+        break-before: page !important; 
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
+        visibility: hidden !important;
+      }
+      
+      /* H1 - Each H1 starts on a new page (element-based, not height-based) */
+      h1 {
+        font-size: 28px; 
+        font-weight: 700; 
+        margin: 24px 0 12px; 
+        border-bottom: 2px solid #ccc; 
+        padding-bottom: 8px;
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+      
+      /* H2-H6 and other block elements should avoid breaks */
+      h2, h3, h4, h5, h6 { 
+        page-break-inside: avoid !important; 
+        break-inside: avoid !important; 
+        page-break-before: avoid !important;
+        break-before: avoid !important;
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+      
+      table, pre, blockquote, .code-block-wrapper { 
+        page-break-inside: avoid !important; 
+        break-inside: avoid !important; 
+        page-break-after: avoid !important;
+        break-after: avoid !important;
+      }
+      
+      /* Paragraphs and list items - allow natural breaks */
+      p { 
+        page-break-inside: auto !important;
+        break-inside: auto !important;
+        orphans: 2;
+        widows: 2;
+      }
+      
+      li { 
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      
+      /* Links should be inline */
+      a {
+        display: inline !important;
+        color: #2563eb;
+        text-decoration: underline;
+      }
+      
       tr, img, figure { page-break-inside: avoid; break-inside: avoid; max-width: 100%; }
-      table { border-collapse: collapse; width: 100%; }
+      table { border-collapse: collapse; width: 100%; page-break-inside: auto; }
       th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
       th { background: #f5f5f5; font-weight: 600; }
-      h1 { font-size: 28px; font-weight: 700; margin: 24px 0 12px; border-bottom: 2px solid #ccc; padding-bottom: 8px; }
       h2 { font-size: 24px; font-weight: 700; margin: 20px 0 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
       h3 { font-size: 20px; font-weight: 700; margin: 18px 0 9px; }
       p  { margin: 8px 0; text-align: justify; }
-      ul, ol { margin: 8px 0; padding-left: 24px; }
+      ul, ol { margin: 8px 0; padding-left: 24px; page-break-inside: auto; }
       li { margin: 4px 0; }
-	  .pm-search-hit, .pm-search-current { background-color: transparent !important; outline: none !important; }
+      
+      code {
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 13px;
+        background-color: #f3f4f6;
+        color: #1f2937;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      
+      .code-block-wrapper {
+        margin: 16px 0;
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      
+      .code-block-header {
+        background-color: #000000 !important;
+        color: #9cdcfe !important;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 12px;
+        font-weight: 600;
+        padding: 8px 12px;
+        border-radius: 6px 6px 0 0;
+        text-transform: capitalize;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      
+      pre {
+        background-color: #000000 !important;
+        color: #d4d4d4 !important;
+        padding: 16px;
+        border-radius: 0 0 6px 6px;
+        overflow-x: auto;
+        margin: 0;
+        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-size: 13px;
+        line-height: 1.6;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        color-adjust: exact !important;
+      }
+      
+      pre code {
+        background: transparent;
+        border: none;
+        padding: 0;
+        color: inherit;
+        box-shadow: none;
+      }
+      
+      hr {
+        border: none;
+        border-top: 2px solid #e5e7eb;
+        margin: 24px 0;
+        page-break-after: avoid;
+        break-after: avoid;
+      }
+      
+			@page { size: A4; margin: 20mm; }
+			/* Force page-breaks when printing or generating PDF */
+			@media print {
+				.page-break { display: block !important; page-break-before: always !important; break-before: page !important; }
+				h1 { page-break-before: always !important; break-before: page !important; }
+			}
+			.pm-search-hit, .pm-search-current { background-color: transparent !important; outline: none !important; }
     `;
 			element.prepend(style);
 
-			element.querySelectorAll("h1,h2,h3,table,ul,ol,pre,blockquote").forEach((el) => {
+			// Add avoid-break class to elements EXCEPT H1 (H1 needs to allow page breaks)
+			element.querySelectorAll("h2,h3,h4,h5,h6,table,ul,ol,pre,blockquote,.code-block-wrapper").forEach((el) => {
 				el.classList.add("avoid-break");
 			});
 
@@ -312,7 +684,7 @@ export default function DocumentMenu({
 				pagebreak: {
 					mode: ["css", "legacy"],
 					before: ".page-break",
-					avoid: "h1, h2, h3, table, pre, blockquote, .avoid-break, tr, img, figure",
+					avoid: "h2, h3, h4, h5, h6, table, pre, blockquote, .code-block-wrapper, .avoid-break, tr, img, figure",
 				}
 			};
 
@@ -499,49 +871,82 @@ export default function DocumentMenu({
 		}
 	};
 
-	const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
+	const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
 		const file = event.target.files?.[0];
 		if (!file) return;
 
-		// Only accept Markdown files
-		if (!file.name.endsWith('.md')) {
-			alert('Please select a Markdown (.md) file');
+		const fileName = file.name;
+		const fileExtension = fileName.split('.').pop()?.toLowerCase();
+
+		// Accept Markdown and Word documents
+		if (!['md', 'docx', 'doc'].includes(fileExtension || '')) {
+			alert('Please select a Markdown (.md) or Word (.docx, .doc) file');
 			return;
 		}
 
-		const reader = new FileReader();
-		reader.onload = async (e) => {
-			const markdownContent = e.target?.result as string;
+		try {
+			let htmlContent: string;
 
-			try {
-				// Convert Markdown to HTML using marked
-				const htmlContent = await marked(markdownContent);
+			if (fileExtension === 'md') {
+				// Handle Markdown files
+				const markdownContent = await file.text();
+				htmlContent = await marked(markdownContent);
+			} else if (fileExtension === 'docx' || fileExtension === 'doc') {
+				// Handle Word documents
+				const arrayBuffer = await file.arrayBuffer();
+				const result = await mammoth.convertToHtml({ arrayBuffer });
+				htmlContent = result.value;
 
-				if (htmlContent) {
-					let documentName: string | null = null;
-
-					// Only prompt for name if context is 'project' 
-					if (context === 'project') {
-						const defaultName = file.name.replace('.md', '');
-						documentName = prompt(`Enter a name for the imported document:`, defaultName);
-
-						if (!documentName) {
-							return; // User cancelled, don't import
-						}
-					}
-
-					if (onUpdate) {
-						onUpdate(htmlContent);
-					}
+				if (result.messages.length > 0) {
+					console.warn('Word conversion warnings:', result.messages);
 				}
-			} catch (error) {
-				console.error('Error parsing markdown:', error);
-				alert('Error parsing markdown file. Please check the file format.');
+			} else {
+				alert('Unsupported file format');
+				return;
 			}
-		};
-		reader.readAsText(file);
+
+			// Check if there's existing content
+			const hasContent = editor && editor.getText().trim().length > 0;
+
+			if (hasContent) {
+				// Show confirmation modal
+				setPendingImport({ content: htmlContent, fileName });
+				setShowImportConfirm(true);
+			} else {
+				// No existing content, just import directly
+				if (onUpdate) {
+					onUpdate(htmlContent);
+				}
+			}
+		} catch (error) {
+			console.error('Error importing file:', error);
+			alert('Error importing file. Please check the file format and try again.');
+		}
+
 		setShowImportOptions(false);
 		event.target.value = '';
+	};
+
+	const handleImportConfirm = (action: 'overwrite' | 'append') => {
+		if (!pendingImport) return;
+
+		if (action === 'overwrite') {
+			// Replace all content
+			if (onUpdate) {
+				onUpdate(pendingImport.content);
+			}
+		} else if (action === 'append') {
+			// Append to existing content
+			if (editor && onUpdate) {
+				const currentContent = editor.getHTML();
+				const combinedContent = currentContent + '<p></p>' + pendingImport.content;
+				onUpdate(combinedContent);
+			}
+		}
+
+		// Cleanup
+		setPendingImport(null);
+		setShowImportConfirm(false);
 	};
 
 	const handleExport = (format: 'md' | 'pdf') => {
@@ -600,7 +1005,7 @@ export default function DocumentMenu({
 		a.download = filename;
 		a.click();
 		URL.revokeObjectURL(url);
-		setShowExportOptions(false);
+		setShowImportOptions(false);
 	};
 
 	const handleSaveAsTemplate = async () => {
@@ -678,9 +1083,10 @@ export default function DocumentMenu({
 	return (
 		<div className="bg-white border-b border-gray-200">
 			<div className="px-6 py-3">
-				<div className="flex items-center justify-between">
+				<div className="flex items-center">
+					{/* All menu items on the left side */}
 					<div className="flex items-center space-x-1">
-						{/* Document Actions */}
+						{/* Document Actions - Undo/Redo */}
 						<div className="flex items-center bg-gray-50 rounded-lg p-1 space-x-1">
 							<Button
 								variant="ghost"
@@ -688,7 +1094,7 @@ export default function DocumentMenu({
 								onClick={handleUndo}
 								disabled={!canUndo}
 								className="h-7 w-7 p-0 text-gray-600 disabled:opacity-40 hover:bg-white hover:shadow-sm"
-								title="Undo"
+								title="Undo (Ctrl+Z)"
 							>
 								<Undo2 className="w-4 h-4" />
 							</Button>
@@ -698,137 +1104,239 @@ export default function DocumentMenu({
 								onClick={handleRedo}
 								disabled={!canRedo}
 								className="h-7 w-7 p-0 text-gray-600 disabled:opacity-40 hover:bg-white hover:shadow-sm"
-								title="Redo"
+								title="Redo (Ctrl+Y)"
 							>
 								<Redo2 className="w-4 h-4" />
 							</Button>
-							<div className="w-px h-4 bg-gray-300 mx-1"></div>
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={handlePrint}
-								className="h-7 w-7 p-0 text-gray-600 hover:bg-white hover:shadow-sm"
-								title="Print"
-							>
-								<Printer className="w-4 h-4" />
-							</Button>
-							<Button
-								variant="ghost"
-								size="sm"
-								onClick={() => setShowSearch((s) => !s)}
-								className={`h-7 w-7 p-0 hover:bg-white hover:shadow-sm ${showSearch ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600'}`}
-								title="Search"
-							>
-								<SearchIcon className="w-4 h-4" />
-							</Button>
 						</div>
+						<div className="w-px h-4 bg-gray-300 mx-1"></div>
 
-						{/* File Operations */}
-						<div className="flex items-center space-x-1 ml-2">
-							<Popover open={showImportOptions} onOpenChange={setShowImportOptions}>
-								<PopoverTrigger asChild>
+						{/* Zoom Control */}
+						<ZoomControl />
+						<div className="w-px h-4 bg-gray-300 mx-1"></div>
+						{/* Search */}
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={() => setShowSearch((s) => !s)}
+							className={`h-7 w-7 p-0 hover:bg-white hover:shadow-sm ${showSearch ? 'bg-white shadow-sm text-blue-600' : 'text-gray-600'}`}
+							title="Search (Ctrl+F)"
+						>
+							<SearchIcon className="w-4 h-4" />
+						</Button>
+						{/* Print */}
+						<Button
+							variant="ghost"
+							size="sm"
+							onClick={handlePrint}
+							className="h-7 w-7 p-0 text-gray-600 hover:bg-white hover:shadow-sm"
+							title="Print (Ctrl+P)"
+						>
+							<Printer className="w-4 h-4" />
+						</Button>
+
+
+
+
+
+						<div className="w-px h-4 bg-gray-300 mx-1"></div>
+
+						{/* File Menu - Combined Import, Export, Save as Template, Make a Copy */}
+						<Popover open={showImportOptions} onOpenChange={setShowImportOptions}>
+							<PopoverTrigger asChild>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 px-2 text-gray-600 hover:bg-gray-100"
+									title="File"
+								>
+									<FileText className="w-4 h-4 mr-1" />
+									<span className="text-xs">File</span>
+								</Button>
+							</PopoverTrigger>
+							<PopoverContent className="w-52 p-1">
+								<div className="space-y-1">
+									{/* Import Section */}
+
+									<label className="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer">
+										<input
+											type="file"
+											accept=".md,.docx,.doc"
+											onChange={handleImport}
+											className="hidden"
+										/>
+										<Upload className="w-4 h-4 mr-2" />
+										<span className="text-sm font-semibold">Import (.md, .docx)</span>
+									</label>
+
+									<div className="border-t border-gray-200 my-1"></div>
+
+									{/* Export Section */}
+									<div className="px-2 py-1">
+										<span className="text-xs font-semibold text-gray-500 uppercase">Export</span>
+									</div>
 									<Button
 										variant="ghost"
 										size="sm"
-										className="h-7 px-2 text-gray-600 hover:bg-gray-100"
-										title="Import"
+										onClick={() => {
+											handleExport('md');
+											setShowImportOptions(false);
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
 									>
-										<Upload className="w-4 h-4 mr-1" />
-										<span className="text-xs">Import</span>
+										<FileText className="w-4 h-4 mr-2" />
+										<span className="text-sm">Markdown (.md)</span>
 									</Button>
-								</PopoverTrigger>
-								<PopoverContent className="w-44 p-1">
-									<div className="space-y-1">
-										<label className="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer">
-											<input
-												type="file"
-												accept=".md"
-												onChange={handleImport}
-												className="hidden"
-											/>
-											<FileText className="w-4 h-4 mr-2" />
-											<span className="text-sm">Markdown (.md)</span>
-										</label>
-									</div>
-								</PopoverContent>
-							</Popover>
-
-							<Popover open={showExportOptions} onOpenChange={setShowExportOptions}>
-								<PopoverTrigger asChild>
 									<Button
 										variant="ghost"
 										size="sm"
-										className="h-7 px-2 text-gray-600 hover:bg-gray-100"
-										title="Export"
+										onClick={() => {
+											handleExport('pdf');
+											setShowImportOptions(false);
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
 									>
-										<Download className="w-4 h-4 mr-1" />
-										<span className="text-xs">Export</span>
+										<Download className="w-4 h-4 mr-2" />
+										<span className="text-sm">PDF (.pdf)</span>
 									</Button>
-								</PopoverTrigger>
-								<PopoverContent className="w-44 p-1">
-									<div className="space-y-1">
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => handleExport('md')}
-											className="w-full justify-start h-8 px-2 text-gray-700"
-										>
-											<FileText className="w-4 h-4 mr-2" />
-											<span className="text-sm">Markdown (.md)</span>
-										</Button>
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={() => handleExport('pdf')}
-											className="w-full justify-start h-8 px-2 text-gray-700"
-										>
-											<Download className="w-4 h-4 mr-2" />
-											<span className="text-sm">PDF (.pdf)</span>
-										</Button>
-									</div>
-								</PopoverContent>
-							</Popover>
 
-							{/* More Options */}
-							<Popover open={showMoreOptions} onOpenChange={setShowMoreOptions}>
-								<PopoverTrigger asChild>
+									<div className="border-t border-gray-200 my-1"></div>
+
+									{/* Document Actions */}
 									<Button
 										variant="ghost"
 										size="sm"
-										className="h-7 px-2 text-gray-600 hover:bg-gray-100"
-										title="More Options"
+										onClick={() => {
+											handleSaveAsTemplate();
+											setShowImportOptions(false);
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
 									>
-										<MoreHorizontal className="w-4 h-4" />
+										<BookTemplate className="w-4 h-4 mr-2" />
+										<span className="text-sm">Save as Template</span>
 									</Button>
-								</PopoverTrigger>
-								<PopoverContent className="w-52 p-1">
-									<div className="space-y-1">
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={handleSaveAsTemplate}
-											className="w-full justify-start h-8 px-2 text-gray-700"
-										>
-											<BookTemplate className="w-4 h-4 mr-2" />
-											<span className="text-sm">Save as Template</span>
-										</Button>
-										<Button
-											variant="ghost"
-											size="sm"
-											onClick={handleCopyDocument}
-											className="w-full justify-start h-8 px-2 text-gray-700"
-										>
-											<Copy className="w-4 h-4 mr-2" />
-											<span className="text-sm">Make a Copy</span>
-										</Button>
-									</div>
-								</PopoverContent>
-							</Popover>
-						</div>
-					</div>
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => {
+											handleCopyDocument();
+											setShowImportOptions(false);
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
+									>
+										<Copy className="w-4 h-4 mr-2" />
+										<span className="text-sm">Make a Copy</span>
+									</Button>
+								</div>
+							</PopoverContent>
+						</Popover>
 
-					{/* Tools Section */}
-					<div className="flex items-center gap-2">
+						{/* Tools Menu */}
+						<Popover open={showToolsMenu} onOpenChange={setShowToolsMenu}>
+							<PopoverTrigger asChild>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 px-2 text-gray-600 hover:bg-gray-100"
+									title="Tools"
+								>
+									<Wrench className="w-4 h-4 mr-1" />
+									<span className="text-xs">Tools</span>
+								</Button>
+							</PopoverTrigger>
+							<PopoverContent className="w-56 p-1">
+								<div className="space-y-1">
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => {
+											setShowToolbar(!showToolbar);
+											setShowToolsMenu(false);
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
+									>
+										<Settings className="w-4 h-4 mr-2" />
+										<span className="text-sm">Toolbar</span>
+										{showToolbar && (
+											<span className="ml-auto text-blue-600">✓</span>
+										)}
+									</Button>
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => {
+											setShowWordCount(!showWordCount);
+											setShowToolsMenu(false);
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
+									>
+										<FileBarChart className="w-4 h-4 mr-2" />
+										<span className="text-sm">Word Count</span>
+										{showWordCount && (
+											<span className="ml-auto text-blue-600">✓</span>
+										)}
+									</Button>
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => {
+											setShowNavigationPane(!showNavigationPane);
+											setShowToolsMenu(false);
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
+									>
+										<Menu className="w-4 h-4 mr-2" />
+										<span className="text-sm">Navigation Pane</span>
+										{showNavigationPane && (
+											<span className="ml-auto text-blue-600">✓</span>
+										)}
+									</Button>
+								</div>
+							</PopoverContent>
+						</Popover>
+
+						{/* Help Menu */}
+						<Popover open={showHelpMenu} onOpenChange={setShowHelpMenu}>
+							<PopoverTrigger asChild>
+								<Button
+									variant="ghost"
+									size="sm"
+									className="h-7 px-2 text-gray-600 hover:bg-gray-100"
+									title="Help"
+								>
+									<HelpCircle className="w-4 h-4 mr-1" />
+									<span className="text-xs">Help</span>
+								</Button>
+							</PopoverTrigger>
+							<PopoverContent className="w-52 p-1">
+								<div className="space-y-1">
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => {
+											setShowDocsHelp(true);
+											setShowHelpMenu(false);
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
+									>
+										<BookOpen className="w-4 h-4 mr-2" />
+										<span className="text-sm">Docs Help</span>
+									</Button>
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => {
+											setShowShortcutKeys(true);
+											setShowHelpMenu(false);
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
+									>
+										<Keyboard className="w-4 h-4 mr-2" />
+										<span className="text-sm">Shortcut Keys</span>
+									</Button>
+								</div>
+							</PopoverContent>
+						</Popover>
 					</div>
 				</div>
 			</div>
@@ -965,6 +1473,43 @@ export default function DocumentMenu({
 					</div>
 				</div>
 			)}
+
+			{/* Navigation Pane - Now integrated in DocumentLayout 3-column grid */}
+			{/* <NavigationPane
+				editor={editor || null}
+				isOpen={showNavigationPane}
+				onClose={() => setShowNavigationPane(false)}
+			/> */}
+
+			{/* Word Count */}
+			<WordCount
+				editor={editor || null}
+				isOpen={showWordCount}
+				onClose={() => setShowWordCount(false)}
+			/>
+
+			{/* Docs Help Modal */}
+			<DocsHelp
+				isOpen={showDocsHelp}
+				onClose={() => setShowDocsHelp(false)}
+			/>
+
+			{/* Shortcut Keys Modal */}
+			<ShortcutKeys
+				isOpen={showShortcutKeys}
+				onClose={() => setShowShortcutKeys(false)}
+			/>
+
+			{/* Import Confirmation Modal */}
+			<ImportConfirmationModal
+				isOpen={showImportConfirm}
+				onClose={() => {
+					setShowImportConfirm(false);
+					setPendingImport(null);
+				}}
+				fileName={pendingImport?.fileName || ''}
+				onConfirm={handleImportConfirm}
+			/>
 		</div>
 	);
 }

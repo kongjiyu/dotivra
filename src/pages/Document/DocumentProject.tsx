@@ -364,7 +364,7 @@ export default function DocumentProject() {
                                 <p>No other documents in this project yet.</p>
                                 <Button variant="outline" className="mt-4" onClick={handleNewDocument}>
                                     <Plus className="w-4 h-4 mr-2" />
-                                    Create First Document
+                                    Create Document
                                 </Button>
                             </div>
                         )}

@@ -759,6 +759,7 @@ app.post('/api/documents', async (req, res) => {
     
     const responseData = {
       id: docRef.id,
+      documentId: docRef.id, // Add documentId for consistency
       ...docData,
       CreatedAt: docData.CreatedAt.toDate().toISOString(),
       UpdatedAt: docData.UpdatedAt.toDate().toISOString()
@@ -766,6 +767,7 @@ app.post('/api/documents', async (req, res) => {
     
     res.status(201).json({
       success: true,
+      documentId: docRef.id,
       document: responseData
     });
   } catch (error) {

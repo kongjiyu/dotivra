@@ -1,7 +1,168 @@
 /* Reset editor base so headings use root-relative sizing */
 .tiptap { 
   font-size: 1rem !important; 
-  line-height: 1.5; 
+  line-height: 1.5;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  cursor: text !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure ProseMirror container allows text selection */
+.ProseMirror {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  cursor: text !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure document-content allows text selection */
+.document-content {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  cursor: text !important;
+  pointer-events: auto !important;
+}
+
+/* Ensure all direct children allow text selection */
+.tiptap > *,
+.ProseMirror > *,
+.document-content > * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  cursor: text !important;
+  pointer-events: auto !important;
+}
+
+/* Text selection highlight - consistent across all elements */
+.tiptap ::selection {
+  background-color: #d1d5db;
+  color: inherit;
+}
+
+.tiptap ::-moz-selection {
+  background-color: #d1d5db;
+  color: inherit;
+}
+
+/* Ensure selection works across inline formatting elements */
+.tiptap strong::selection,
+.tiptap em::selection,
+.tiptap u::selection,
+.tiptap s::selection,
+.tiptap code::selection,
+.tiptap mark::selection,
+.tiptap a::selection {
+  background-color: #d1d5db;
+  color: inherit;
+}
+
+.tiptap strong::-moz-selection,
+.tiptap em::-moz-selection,
+.tiptap u::-moz-selection,
+.tiptap s::-moz-selection,
+.tiptap code::-moz-selection,
+.tiptap mark::-moz-selection,
+.tiptap a::-moz-selection {
+  background-color: #d1d5db;
+  color: inherit;
+}
+
+/* Ensure inline elements allow text selection */
+.tiptap strong,
+.tiptap em,
+.tiptap u,
+.tiptap s,
+.tiptap mark,
+.tiptap a,
+.tiptap code {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+}
+
+/* Ensure selection works across block elements (paragraphs and headings) */
+.tiptap p::selection,
+.tiptap h1::selection,
+.tiptap h2::selection,
+.tiptap h3::selection,
+.tiptap h4::selection,
+.tiptap h5::selection,
+.tiptap h6::selection,
+.tiptap blockquote::selection,
+.tiptap li::selection,
+.tiptap div::selection,
+.tiptap span::selection {
+  background-color: #d1d5db;
+  color: inherit;
+}
+
+.tiptap p::-moz-selection,
+.tiptap h1::-moz-selection,
+.tiptap h2::-moz-selection,
+.tiptap h3::-moz-selection,
+.tiptap h4::-moz-selection,
+.tiptap h5::-moz-selection,
+.tiptap h6::-moz-selection,
+.tiptap blockquote::-moz-selection,
+.tiptap li::-moz-selection,
+.tiptap div::-moz-selection,
+.tiptap span::-moz-selection {
+  background-color: #d1d5db;
+  color: inherit;
+}
+
+/* Ensure block elements allow text selection */
+.tiptap p,
+.tiptap h1,
+.tiptap h2,
+.tiptap h3,
+.tiptap h4,
+.tiptap h5,
+.tiptap h6,
+.tiptap blockquote,
+.tiptap li,
+.tiptap div,
+.tiptap span,
+.tiptap ul,
+.tiptap ol,
+.tiptap table,
+.tiptap tr,
+.tiptap td,
+.tiptap th {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  cursor: text !important;
+}
+
+/* Override any Tailwind prose styles that might interfere */
+.prose p,
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6,
+.prose blockquote,
+.prose li,
+.prose div,
+.prose span {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  cursor: text !important;
 }
 
 /* Default paragraph styling - 18px Times New Roman */
@@ -28,6 +189,26 @@
   border: none;
 }
 
+/* Inline code styling - kbd-like appearance */
+.tiptap code {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.9em;
+  background-color: #f3f4f6;
+  color: #1f2937;
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Inline code in dark backgrounds */
+.tiptap blockquote code {
+  background-color: #e5e7eb;
+  border-color: #d1d5db;
+}
+
 /* Vertical line styling */
 .tiptap blockquote::before {
   content: '';
@@ -38,6 +219,34 @@
   width: 4px;
   background-color: #c3cde3; /* Light Cloud Blue vertical line */
   border-radius: 2px;
+}
+
+/* Horizontal rule (divider) styling */
+.tiptap hr,
+.tiptap hr.tiptap-hr {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 32px 0;
+  cursor: default;
+}
+
+.tiptap hr:hover,
+.tiptap hr.tiptap-hr:hover {
+  border-top-color: #d1d5db;
+}
+
+/* Highlight text styling - multicolor support */
+.tiptap mark,
+.tiptap .tiptap-highlight {
+  color: inherit;
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+}
+
+/* Default gray highlight when no color is specified */
+.tiptap mark:not([data-color]),
+.tiptap .tiptap-highlight:not([data-color]) {
+  background-color: #e5e7eb;
 }
 
 /* Style for text inside blockquote */
@@ -1070,9 +1279,9 @@
   text-underline-offset: 2px;
   cursor: pointer;
   transition: all 0.2s ease;
-  display: inline-block;
-  max-width: 100px;
-  white-space: nowrap;
+  display: inline;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .tiptap a.tiptap-link:hover {
@@ -1125,11 +1334,162 @@
 /* Dark theme link styles */
 .theme-dark .tiptap a.tiptap-link {
   color: #60a5fa;
-  display: inline-block;
-  max-width: 100px;
-  white-space: nowrap;
+  display: inline;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .theme-dark .tiptap a.tiptap-link:hover {
   color: #93c5fd;
+}
+
+/* Search highlight styles - using decorations instead of marks */
+.pm-search-hit {
+  background-color: rgba(255, 215, 0, 0.4) !important;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.pm-search-current {
+  background-color: rgba(255, 165, 0, 0.6) !important;
+  border-radius: 2px;
+  padding: 0 2px;
+  box-shadow: 0 0 0 2px rgba(255, 165, 0, 0.3);
+}
+
+.pm-search-hover {
+  animation: pulse-highlight 1s ease-out;
+}
+
+@keyframes pulse-highlight {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(255, 165, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(255, 165, 0, 0.5), 0 0 8px rgba(255, 165, 0, 0.3);
+  }
+}
+
+/* Custom scrollbar for components */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e0 #f7fafc;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f7fafc;
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e0;
+  border-radius: 4px;
+  border: 2px solid #f7fafc;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* Zoom transform wrapper */
+.document-content-wrapper {
+  transition: transform 0.2s ease;
+}
+
+/* Navigation pane hover effects */
+.navigation-pane-item {
+  transition: all 0.15s ease;
+}
+
+.navigation-pane-item:hover {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
+/* Word count floating panel */
+.word-count-panel {
+  backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+/* Keyboard key styling */
+kbd {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1;
+  background-color: #f7fafc;
+  border: 1px solid #cbd5e0;
+  border-radius: 0.25rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05), inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-weight: 600;
+  color: #2d3748;
+}
+
+/* ChatSidebar inline code styling - matches TipTap editor */
+.chat-markdown-content code {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+  font-size: 0.9em !important;
+  background-color: #f3f4f6 !important;
+  color: #1f2937 !important;
+  padding: 0.2em 0.4em !important;
+  border-radius: 4px !important;
+  border: 1px solid #e5e7eb !important;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05) !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+}
+
+/* ChatSidebar code inside pre blocks should not have these styles */
+.chat-markdown-content pre code {
+  background-color: transparent !important;
+  color: inherit !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* ChatSidebar code blocks with topics - Dark styling matching code content */
+.code-block-with-topic {
+  margin: 0.5rem 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #2d2d2d;
+}
+
+.code-topic-header {
+  background-color: #1e1e1e; /* Dark background matching code block */
+  color: #9cdcfe; /* Light blue text for better contrast */
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #2d2d2d;
+  text-transform: lowercase;
+  letter-spacing: 0.5px;
+}
+
+.code-block-pre {
+  background-color: #1e1e1e !important;
+  color: #d4d4d4 !important;
+  padding: 1rem !important;
+  margin: 0 !important;
+  overflow-x: auto;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.code-block-pre code {
+  background: transparent !important;
+  color: inherit !important;
+  padding: 0 !important;
+  border: none !important;
+  box-shadow: none !important;
+  font-family: inherit;
 }

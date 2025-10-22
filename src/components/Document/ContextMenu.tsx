@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/react'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,7 +19,8 @@ import {
     FileText,
     Eraser,
     Bot,
-    Link
+    Link,
+    Code
 } from 'lucide-react'
 
 interface ContextMenuProps {
@@ -40,6 +42,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 }) => {
     const menuRef = useRef<HTMLDivElement>(null)
 
+    // Always declare hooks at the top level
+    const [menuHeight, setMenuHeight] = React.useState(500)
+
     // Close menu when clicking outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -57,23 +62,15 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         }
     }, [isVisible, onClose])
 
-    // Close menu on escape key
+    // Get menu ref to calculate actual height
     useEffect(() => {
-        const handleEscape = (event: KeyboardEvent) => {
-            if (event.key === 'Escape') {
-                onClose()
-            }
+        if (menuRef.current && isVisible) {
+            const rect = menuRef.current.getBoundingClientRect()
+            setMenuHeight(rect.height)
         }
+    }, [isVisible, isTableContext])
 
-        if (isVisible) {
-            document.addEventListener('keydown', handleEscape)
-        }
-
-        return () => {
-            document.removeEventListener('keydown', handleEscape)
-        }
-    }, [isVisible, onClose])
-
+    // Early return after all hooks
     if (!isVisible || !editor) {
         return null
     }
@@ -86,19 +83,45 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     const isTextSelected = !editor.state.selection.empty
     const canPaste = true // We'll assume paste is always available
 
-    // Ensure menu stays within viewport
-    const adjustedPosition = {
-        x: Math.min(position.x, window.innerWidth - 250), // 250px is approximate menu width + padding
-        y: Math.min(position.y, window.innerHeight - 500), // 500px is approximate expanded menu height
+    // Smart positioning: keep close to cursor but prevent overflow at bottom-right
+    const menuWidth = 350;
+    const menuPadding = 20;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let adjustedX = position.x;
+    let adjustedY = position.y - (menuHeight / 2); // Center vertically at cursor
+
+    // Check right overflow
+    if (adjustedX + menuWidth + menuPadding > viewportWidth) {
+        // Position to the left of cursor instead
+        adjustedX = Math.max(menuPadding, position.x - menuWidth - 10);
     }
 
-    return (
+    // Check bottom overflow
+    if (adjustedY + menuHeight + menuPadding > viewportHeight) {
+        // Position above instead, as close to bottom as possible
+        adjustedY = Math.max(menuPadding, viewportHeight - menuHeight - menuPadding);
+    }
+
+    // Check top overflow
+    if (adjustedY < menuPadding) {
+        adjustedY = menuPadding;
+    }
+
+    const adjustedPosition = {
+        x: adjustedX,
+        y: adjustedY,
+    }
+
+    const menuContent = (
         <div
             ref={menuRef}
-            className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-2 w-[350px]"
+            className="fixed bg-white border border-gray-200 rounded-lg shadow-xl py-2 w-[350px] max-h-[80vh] overflow-y-auto"
             style={{
-                left: adjustedPosition.x,
-                top: adjustedPosition.y,
+                left: `${adjustedPosition.x}px`,
+                top: `${adjustedPosition.y}px`,
+                zIndex: 99999,
             }}
         >
             {isTableContext ? (
@@ -517,6 +540,31 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                                 variant="ghost"
                                 size="sm"
                                 className="w-full justify-between px-3 py-2 text-sm"
+                                onClick={() => executeCommand(() => editor.chain().focus().toggleCode().run())}
+                            >
+                                <div className="flex items-center">
+                                    <Code className="w-4 h-4 mr-2" />
+                                    Inline Code
+                                </div>
+                                <span className="text-xs text-gray-400">Ctrl+E</span>
+                            </Button>
+
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start px-3 py-2 text-sm"
+                                onClick={() => executeCommand(() => editor.chain().focus().setHorizontalRule().run())}
+                            >
+                                <div className="flex items-center">
+                                    <Minus className="w-4 h-4 mr-2" />
+                                    Insert Divider
+                                </div>
+                            </Button>
+
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-between px-3 py-2 text-sm"
                                 onClick={() => executeCommand(() => {
                                     // Check if the selected text already has a link
                                     const existingHref = editor.getAttributes('link').href;
@@ -631,6 +679,9 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             )}
         </div>
     )
+
+    // Render using Portal to escape DocumentMenu's stacking context
+    return createPortal(menuContent, document.body)
 }
 
 export default ContextMenu

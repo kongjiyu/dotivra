@@ -18,8 +18,14 @@ export function markdownToHTML(markdown: string): string {
   html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
 
-  // Code blocks
-  html = html.replace(/```(\w+)?\n?([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
+  // Code blocks (must come before inline code)
+  html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (_match, lang, code) => {
+    const language = lang || 'plaintext';
+    const trimmedCode = code.trim();
+    return `<pre><code class="language-${language}">${trimmedCode}</code></pre>`;
+  });
+  
+  // Inline code (backticks) - must come after code blocks
   html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
 
   // Links
@@ -156,8 +162,14 @@ export function enhancedContentProcessor(content: string): string {
   processed = processed.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   processed = processed.replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, '<em>$1</em>');
   
-  // Code (convert markdown to HTML)
-  processed = processed.replace(/```(\w+)?\n?([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>');
+  // Code blocks (must come before inline code) - Convert markdown to TipTap compatible HTML
+  processed = processed.replace(/```(\w+)?\n([\s\S]*?)```/g, (_match, lang, code) => {
+    const language = lang || 'plaintext';
+    const trimmedCode = code.trim();
+    return `<pre><code class="language-${language}">${trimmedCode}</code></pre>`;
+  });
+  
+  // Inline code (backticks) - must come after code blocks
   processed = processed.replace(/`([^`\n]+)`/g, '<code>$1</code>');
   
   // Links (convert markdown to HTML)

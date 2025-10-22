@@ -251,7 +251,7 @@ export default function DocumentProjectList() {
                             </p>
                             <Button onClick={handleNewDocument}>
                                 <Plus className="w-4 h-4 mr-2" />
-                                Create First Document
+                                Create Document
                             </Button>
                         </div>
                     </div>
