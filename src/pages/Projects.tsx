@@ -8,10 +8,12 @@ import { Plus, Search } from 'lucide-react';
 import Header from '../components/header/Header';
 import { useAuth } from '../context/AuthContext';
 import { getUserDisplayInfo } from '../utils/user';
+import { useFeedback } from '../components/AppLayout';
 
 const Projects: React.FC = () => {
   const navigate = useNavigate();
   const { user, userProfile } = useAuth();
+  const { openFeedbackModal } = useFeedback();
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
@@ -117,7 +119,7 @@ const Projects: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="Dotriva" subtitle={projectSubtitle} userName={displayName} initials={initials} />
+      <Header title="Dotriva" subtitle={projectSubtitle} userName={displayName} initials={initials} onFeedbackClick={openFeedbackModal} />
 
       <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">

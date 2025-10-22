@@ -1,5 +1,5 @@
 import React from 'react';
-import { FolderOpen, Home, Folder, FileText, Layout } from 'lucide-react';
+import { FolderOpen, Home, Folder, FileText, Layout, MessageSquare } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../ui/dropdown-menu';
 import { useAuth } from '../../context/AuthContext';
@@ -11,6 +11,7 @@ interface HeaderProps {
   initials?: string;
   showProfile?: boolean;
   showNavigation?: boolean;
+  onFeedbackClick?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -20,6 +21,7 @@ const Header: React.FC<HeaderProps> = ({
   initials,
   showProfile = true,
   showNavigation = true,
+  onFeedbackClick,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -38,6 +40,7 @@ const Header: React.FC<HeaderProps> = ({
     { path: '/dashboard', label: 'Home', icon: Home },
     { path: '/projects', label: 'Projects', icon: Folder },
     { path: '/templates', label: 'Templates', icon: Layout },
+    { path: '/feedback', label: 'Feedback', icon: MessageSquare, action: onFeedbackClick },
   ];
 
   const isActiveRoute = (path: string) => {
@@ -75,7 +78,13 @@ const Header: React.FC<HeaderProps> = ({
                 return (
                   <button
                     key={item.path}
-                    onClick={() => navigate(item.path)}
+                    onClick={() => {
+                      if (item.action) {
+                        item.action();
+                      } else {
+                        navigate(item.path);
+                      }
+                    }}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                       isActive
                         ? 'bg-blue-100 text-blue-700 shadow-sm'
@@ -123,7 +132,13 @@ const Header: React.FC<HeaderProps> = ({
               return (
                 <button
                   key={item.path}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => {
+                    if (item.action) {
+                      item.action();
+                    } else {
+                      navigate(item.path);
+                    }
+                  }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                     isActive
                       ? 'bg-blue-100 text-blue-700 shadow-sm'

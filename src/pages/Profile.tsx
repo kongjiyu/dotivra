@@ -5,9 +5,11 @@ import { ProfileInfoCard, DangerZoneCard } from '../components/profile';
 import GitHubConnectionCard from '../components/profile/GitHubConnectionCard';
 import { useAuth } from '../context/AuthContext';
 import { getUserDisplayInfo } from '../utils/user';
+import { useFeedback } from '../components/AppLayout';
 
 const Profile: React.FC = () => {
   const { user: firebaseUser, userProfile, loading } = useAuth();
+  const { openFeedbackModal } = useFeedback();
 
   // Show loading state while fetching user data
   if (loading) {
@@ -86,7 +88,7 @@ const Profile: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header userName={headerName} initials={headerInitials} />
+      <Header userName={headerName} initials={headerInitials} onFeedbackClick={openFeedbackModal} />
       {/* Header with Logout Button */}
      
 
