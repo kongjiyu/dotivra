@@ -10,6 +10,7 @@ import type { ContentPosition } from "@/utils/enhancedAIContentWriter";
 import { aiService } from "@/services/aiService";
 import { useAuth } from "@/context/AuthContext";
 import { marked } from "marked";
+import { documentAgentService } from "@/services/documentAgentService";
 
 export type ChatMessage = {
     id: string;
@@ -96,13 +97,13 @@ export default function ChatSidebar({
     // Add initial hello message when chat opens
     useEffect(() => {
         if (open && !externalMessages && internalMessages.length === 0) {
-            let content = 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content.\n\n**Special AI Operations:**\n• Type `add <content>` to add new content\n• Type `remove <content>` to mark content for removal\n• Type `edit <content>` to replace existing content\n\nThese operations will show highlighted changes in your document with accept/reject options.\n```test\n This is a code block \n```';
+            let content = 'Hello! I\'m your AI writing assistant powered by Gemini Pro 2.5 with advanced reasoning capabilities.\n\n**✍️ MCP-Powered Document Agent:**\nI work as an intelligent agent with precise tools to help you write, edit, and improve your documents.\n\n**🛠️ Available Tools:**\n• **Append** - Add content to the end of your document\n• **Insert** - Place content at any specific position\n• **Replace** - Improve existing text at any location\n• **Delete** - Remove unwanted content precisely\n• **Read** - Analyze your document for insights\n\n**🤖 Natural Language Commands:**\n• "Add a conclusion paragraph at the end"\n• "Insert a transition sentence after the introduction"\n• "Replace the third paragraph with something more engaging"\n• "Delete the repetitive sentences in the middle section"\n• "Improve the selected text to be more professional"\n\nI can determine exact positions in your document and make precise edits. Just tell me what you need!\n\n**💡 Quick Actions:**\n• Type `add <content>` to add new content with AI suggestions\n• Type `remove <content>` to mark content for removal\n• Type `edit <content>` to replace and improve existing text\n\nThese operations show highlighted changes with accept/reject options.';
 
             if (repositoryInfo) {
                 content += `\n\n**🚀 Repository Integration Active!**\n📂 Connected to: \`${repositoryInfo.owner}/${repositoryInfo.repo}\`\n\n**Repository Commands:**\n• "Analyze code in [filename]" - Explain specific files\n• "Improve the React components" - Code improvements\n• "Debug the authentication flow" - Find issues\n• "Explain how routing works" - Understand patterns\n• "Document the API endpoints" - Generate docs\n\nI have access to your repository structure, README, and key files to provide contextual assistance!`;
             }
 
-            content += '\n\nHow can I assist you today?';
+            content += '\n\nHow can I assist with your writing today?';
 
             const helloMsg: ChatMessage = {
                 id: 'hello-msg',
@@ -561,17 +562,86 @@ export default function ChatSidebar({
                         }
                     } else {
 
-                        // Regular chat response - don't add to document
-                        const aiResponse = await aiService.chatResponse(text, editor ? editor.getHTML() : '');
+                        // Check if this is an agent command (MCP-style tools)
+                        const isAgentCommand = text.toLowerCase().includes('append') ||
+                            text.toLowerCase().includes('insert') ||
+                            text.toLowerCase().includes('replace') ||
+                            text.toLowerCase().includes('delete') ||
+                            text.toLowerCase().includes('add to document') ||
+                            text.toLowerCase().includes('add a ') ||
+                            text.toLowerCase().includes('change the') ||
+                            text.toLowerCase().includes('remove the') ||
+                            text.toLowerCase().includes('improve the') ||
+                            text.toLowerCase().includes('make the') ||
+                            text.toLowerCase().includes('rewrite the') ||
+                            text.toLowerCase().includes('edit the') ||
+                            text.startsWith('/agent');
 
-                        const assistantMsg: ChatMessage = {
-                            id: crypto.randomUUID(),
-                            role: "assistant",
-                            content: aiResponse,
-                            timestamp: Date.now(),
-                        };
+                        if (isAgentCommand && editor) {
+                            // Show progress message
+                            const progressId = crypto.randomUUID();
+                            const progressMsg: ChatMessage = {
+                                id: progressId,
+                                role: "assistant",
+                                content: "🤔 Agent analyzing your request...",
+                                timestamp: Date.now(),
+                            };
+                            setInternalMessages(prev => [...prev, progressMsg]);
 
-                        setInternalMessages(prev => [...prev, assistantMsg]);
+                            // Use document agent with reasoning and progress updates
+                            const agentResponse = await documentAgentService.processPrompt(
+                                text,
+                                editor,
+                                (status) => {
+                                    // Update progress message
+                                    setInternalMessages(prev =>
+                                        prev.map(msg =>
+                                            msg.id === progressId
+                                                ? { ...msg, content: status }
+                                                : msg
+                                        )
+                                    );
+                                }
+                            );
+
+                            // Build final response message
+                            let agentMessage = `🤖 **Agent Reasoning:**\n${agentResponse.reasoning}\n\n`;
+
+                            if (agentResponse.actions && agentResponse.actions.length > 0) {
+                                agentMessage += `**Actions Taken:**\n`;
+                                agentResponse.actions.forEach((action, index) => {
+                                    const posInfo = typeof action.position === 'number'
+                                        ? `at position ${action.position}`
+                                        : action.position
+                                            ? `from ${action.position.from} to ${action.position.to}`
+                                            : '';
+                                    agentMessage += `${index + 1}. **${action.type}** ${posInfo}: ${action.reason || 'Processing...'}\n`;
+                                });
+                            } else {
+                                agentMessage += `No document modifications needed.`;
+                            }
+
+                            // Replace progress message with final result
+                            setInternalMessages(prev =>
+                                prev.map(msg =>
+                                    msg.id === progressId
+                                        ? { ...msg, content: agentMessage }
+                                        : msg
+                                )
+                            );
+                        } else {
+                            // Regular chat response - don't add to document
+                            const aiResponse = await aiService.chatResponse(text, editor ? editor.getHTML() : '');
+
+                            const assistantMsg: ChatMessage = {
+                                id: crypto.randomUUID(),
+                                role: "assistant",
+                                content: aiResponse,
+                                timestamp: Date.now(),
+                            };
+
+                            setInternalMessages(prev => [...prev, assistantMsg]);
+                        }
                     }
                 }
             } catch (error) {

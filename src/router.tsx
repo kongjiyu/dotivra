@@ -94,6 +94,11 @@ const router = createBrowserRouter([
     errorElement: <ErrorPage />
   },
   {
+    path: "/document/summary/:documentId",
+    element: <ProtectedDocumentWrapper><DocumentSummary /></ProtectedDocumentWrapper>,
+    errorElement: <ErrorPage />
+  },
+  {
     path: "/document/project",
     element: <ProtectedDocumentWrapper><DocumentProjectList /></ProtectedDocumentWrapper>,
     errorElement: <ErrorPage />
