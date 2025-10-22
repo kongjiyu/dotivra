@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { FileText, Code } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Header from '../components/header/Header';
 import ProjectHeader from '../components/project/ProjectHeader';
@@ -34,8 +33,6 @@ const ProjectOverview: React.FC = () => {
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [editedProjectModalOpen, setEditedProjectModalOpen] = useState(false);
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<'user' | 'developer' | 'general' | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -180,17 +177,11 @@ const ProjectOverview: React.FC = () => {
   };
 
   const handleAddDocumentClick = () => {
-    setShowCategoryModal(true);
+    setShowAddModal(true);
   };
 
   const handleEditProject = () => {
     setEditedProjectModalOpen(true);  
-  };
-
-  const handleAddDocument = (category: 'user' | 'developer' | 'general') => {
-    setSelectedCategory(category);
-    setShowCategoryModal(false);
-    setShowAddModal(true);
   };
 
   const handleEditDocument = (document: Document) => {
@@ -369,7 +360,6 @@ const ProjectOverview: React.FC = () => {
 
       // Close modals
       setShowAddModal(false);
-      setSelectedCategory(null);
       setIsGenerating(false);
       
       // Navigate to the new document, passing the full document data including content
@@ -387,7 +377,6 @@ const ProjectOverview: React.FC = () => {
 
   const handleCloseModal = () => {
     setShowAddModal(false);
-    setSelectedCategory(null);
   };
 
   return (
@@ -426,66 +415,8 @@ const ProjectOverview: React.FC = () => {
         />
       </div>
 
-      {showCategoryModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm" onClick={() => setShowCategoryModal(false)} />
-          <div className="flex min-h-full items-center justify-center p-4">
-            <div className="relative w-full max-w-md transform overflow-hidden rounded-2xl bg-white shadow-2xl">
-              <div className="p-8">
-                <h3 className="text-2xl font-bold text-gray-900 mb-6">Choose Document Type</h3>
-                <div className="space-y-4">
-                  <button
-                    onClick={() => handleAddDocument('user')}
-                    className="w-full flex items-center p-5 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 hover:shadow-md group"
-                  >
-                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors mr-4">
-                      <FileText className="h-6 w-6 text-blue-600" />
-                    </div>
-                    <div className="text-left flex-1">
-                      <div className="font-semibold text-gray-900 mb-1">User Documentation</div>
-                      <div className="text-sm text-gray-600">For end users and customers</div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => handleAddDocument('developer')}
-                    className="w-full flex items-center p-5 border-2 border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 hover:shadow-md group"
-                  >
-                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition-colors mr-4">
-                      <Code className="h-6 w-6 text-purple-600" />
-                    </div>
-                    <div className="text-left flex-1">
-                      <div className="font-semibold text-gray-900 mb-1">Developer Documentation</div>
-                      <div className="text-sm text-gray-600">For developers and technical users</div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => handleAddDocument('general')}
-                    className="w-full flex items-center p-5 border-2 border-gray-200 rounded-xl hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 hover:shadow-md group"
-                  >
-                    <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center group-hover:bg-gray-200 transition-colors mr-4">
-                      <FileText className="h-6 w-6 text-gray-600" />
-                    </div>
-                    <div className="text-left flex-1">
-                      <div className="font-semibold text-gray-900 mb-1">General Documentation</div>
-                      <div className="text-sm text-gray-600">For general information and mixed content</div>
-                    </div>
-                  </button>
-                </div>
-                <button
-                  onClick={() => setShowCategoryModal(false)}
-                  className="w-full mt-6 px-4 py-3 text-sm font-medium text-gray-700 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <AddDocumentModal
         isOpen={showAddModal}
-        category={selectedCategory}
         onClose={handleCloseModal}
         onCreateDocument={handleCreateDocument}
         projectGithubRepo={project?.GitHubRepo || undefined}

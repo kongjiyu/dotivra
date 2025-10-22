@@ -4,18 +4,6 @@ import { X, FileText, Github } from 'lucide-react';
 import { templates } from '../../utils/mockData';
 import type { Template } from '../../types';
 
-// GitHub types
-interface GitHubRepository {
-  id: number;
-  name: string;
-  full_name: string;
-  html_url: string;
-  description: string | null;
-  private: boolean;
-  language: string;
-  updated_at: string;
-}
-
 interface CreateDocumentArgs {
   template: Template;
   category: 'user' | 'developer' | 'general';
@@ -26,7 +14,7 @@ interface CreateDocumentArgs {
 
 interface AddDocumentModalProps {
   isOpen: boolean;
-  category: 'user' | 'developer' | 'general' | null;
+  category?: 'user' | 'developer' | 'general' | null;
   onClose: () => void;
   onCreateDocument: (args: CreateDocumentArgs) => void;
   projectGithubRepo?: string; // GitHub repo linked to the project
@@ -40,24 +28,22 @@ const roleOptions = [
 
 const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
   isOpen,
-  category,
+  category: initialCategory,
   onClose,
   onCreateDocument,
   projectGithubRepo
 }) => {
-  if (!isOpen || !category) return null;
+  if (!isOpen) return null;
 
   const [documentName, setDocumentName] = useState('');
   const [selectedRole, setSelectedRole] = useState(roleOptions[0]?.value ?? 'author');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [selectedRepo, setSelectedRepo] = useState('');
-  const [repositories, setRepositories] = useState<GitHubRepository[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<'user' | 'developer' | 'general'>(initialCategory || 'user');
 
-  // Show all templates regardless of category
+  // Filter templates by active tab
   const relevantTemplates = useMemo(
-    () => templates,
-    []
+    () => templates.filter(template => template.Category === activeTab),
+    [activeTab]
   );
 
   const selectedTemplate = useMemo(
@@ -69,47 +55,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
     setDocumentName('');
     setSelectedTemplateId(null);
     setSelectedRole(roleOptions[0]?.value ?? 'author');
-    setSelectedRepo('');
   }, []);
-
-  // Load GitHub repositories (project repo + OAuth repositories)
-  const loadGitHubRepositories = async () => {
-    try {
-      setLoading(true);
-      let allRepositories: GitHubRepository[] = [];
-      
-      // If project has a linked GitHub repo, add it first
-      if (projectGithubRepo) {
-        // Extract repo info from URL or full_name
-        const repoMatch = projectGithubRepo.match(/github\.com\/([^\/]+\/[^\/]+)/) || projectGithubRepo.match(/^([^\/]+\/[^\/]+)$/);
-        if (repoMatch) {
-          const fullName = repoMatch[1];
-          const name = fullName.split('/')[1];
-          
-          // Create a repository object for the project's linked repo
-          allRepositories.push({
-            id: Date.now(), // Mock ID
-            name: name,
-            full_name: fullName,
-            html_url: `https://github.com/${fullName}`,
-            description: `Project linked repository`,
-            private: false,
-            language: 'Unknown',
-            updated_at: new Date().toISOString()
-          });
-          
-          // Auto-select the project's repository
-          setSelectedRepo(fullName);
-        }
-      }
-
-      setRepositories(allRepositories);
-    } catch (error) {
-      console.warn('Failed to load GitHub repositories:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleTemplateClick = (template: Template) => {
     setSelectedTemplateId(template.id || null);
@@ -122,10 +68,10 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
 
     onCreateDocument({
       template: selectedTemplate,
-      category,
+      category: activeTab,
       name: documentName.trim(),
       role: selectedRole,
-      githubRepo: selectedRepo || undefined
+      githubRepo: projectGithubRepo || undefined
     });
 
     resetForm();
@@ -140,10 +86,11 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       resetForm();
-      // Load GitHub repositories as optional enhancement
-      loadGitHubRepositories();
+      if (initialCategory) {
+        setActiveTab(initialCategory);
+      }
     }
-  }, [isOpen, category, resetForm]);
+  }, [isOpen, initialCategory, resetForm]);
 
   const canCreate = Boolean(selectedTemplate && documentName.trim());
 
@@ -151,7 +98,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
     <>
       {/* Backdrop */}
       <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[85vh] overflow-hidden">
+        <div className="bg-white rounded-lg max-w-4xl w-full max-h-[85vh] overflow-hidden flex flex-col">
           {/* Modal Header */}
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <div>
@@ -170,7 +117,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
             </button>
           </div>
 
-          <div className="px-6 py-6 overflow-y-auto">
+          <div className="px-6 py-6 overflow-y-auto flex-1">
             <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
               <div className="space-y-4">
                 <div>
@@ -187,61 +134,25 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-role">
-                    Document Type
-                  </label>
-                  <select
-                    id="document-role"
-                    value={selectedRole}
-                    onChange={(event) => setSelectedRole(event.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    {roleOptions.map((role) => (
-                      <option key={role.value} value={role.value}>
-                        {role.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* GitHub Repository Selection - Optional */}
+                {/* GitHub Repository - Disabled, shows project repo */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="github-repo">
-                    GitHub Repository (Optional)
+                    GitHub Repository
                   </label>
-                  {loading ? (
-                    <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                  {projectGithubRepo ? (
+                    <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed">
                       <div className="flex items-center space-x-2">
-                        <div className="animate-spin rounded-full h-3 w-3 border-2 border-blue-600 border-t-transparent"></div>
-                        <span className="text-xs text-gray-600">Loading repositories...</span>
+                        <Github className="h-4 w-4 text-gray-500" />
+                        <span className="text-sm text-gray-700 truncate">{projectGithubRepo}</span>
                       </div>
-                    </div>
-                  ) : repositories.length > 0 ? (
-                    <div>
-                      <select
-                        id="github-repo"
-                        value={selectedRepo}
-                        onChange={(event) => setSelectedRepo(event.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="">No repository (create standalone document)</option>
-                        {repositories.map((repo) => (
-                          <option key={repo.id} value={repo.full_name}>
-                            {repo.name} - {repo.description || 'No description'}
-                          </option>
-                        ))}
-                      </select>
-                      {projectGithubRepo && selectedRepo && (
-                        <p className="text-xs text-blue-600 mt-1">
-                          ✓ Using project's linked repository
-                        </p>
-                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        Project's linked repository
+                      </p>
                     </div>
                   ) : (
-                    <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 flex items-center space-x-2">
+                    <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 cursor-not-allowed flex items-center space-x-2">
                       <Github className="h-4 w-4 text-gray-400" />
-                      <span className="text-sm text-gray-600">No repositories found. Connect GitHub in your profile.</span>
+                      <span className="text-sm text-gray-600">No repository linked</span>
                     </div>
                   )}
                 </div>
@@ -249,7 +160,52 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
 
               <div className="flex flex-col min-w-0">
                 <h4 className="text-sm font-semibold text-gray-700 mb-3">Document Template</h4>
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-h-96 overflow-y-auto pr-2">
+                
+                {/* Tab Bar */}
+                <div className="flex space-x-1 mb-4 border-b border-gray-200">
+                  <button
+                    onClick={() => setActiveTab('user')}
+                    className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                      activeTab === 'user'
+                        ? 'text-blue-600 border-b-2 border-blue-600'
+                        : 'text-gray-600 hover:text-gray-900 hover:border-b-2 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      User
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('developer')}
+                    className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                      activeTab === 'developer'
+                        ? 'text-purple-600 border-b-2 border-purple-600'
+                        : 'text-gray-600 hover:text-gray-900 hover:border-b-2 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      Developer
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setActiveTab('general')}
+                    className={`px-4 py-2 text-sm font-medium transition-colors relative ${
+                      activeTab === 'general'
+                        ? 'text-gray-700 border-b-2 border-gray-700'
+                        : 'text-gray-600 hover:text-gray-900 hover:border-b-2 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-4 w-4" />
+                      General
+                    </div>
+                  </button>
+                </div>
+
+                {/* Fixed height scrollable container */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-[400px] overflow-y-auto pr-2 border border-gray-200 rounded-lg p-4 bg-gray-50/50">
                   {relevantTemplates.map((template) => {
                     const Icon = FileText; // Default icon for all templates
                     const isSelected = selectedTemplateId === template.id;
@@ -257,7 +213,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                       <div
                         key={template.id}
                         onClick={() => handleTemplateClick(template)}
-                        className={`relative rounded-xl p-4 transition-all duration-200 cursor-pointer group border-2 overflow-hidden ${
+                        className={`relative rounded-lg p-3 transition-all duration-200 cursor-pointer group border-2 overflow-hidden h-[140px] flex flex-col ${
                           isSelected
                             ? 'border-blue-500 bg-blue-50/50 shadow-lg shadow-blue-100/50 ring-1 ring-blue-200/30'
                             : 'border-gray-200 hover:border-blue-300 hover:shadow-md hover:shadow-gray-100/50 bg-white hover:bg-gray-50/30'
@@ -270,49 +226,42 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                           </div>
                         )}
 
-                        <div className="space-y-4">
-                          {/* Icon and Title Section */}
-                          <div className="flex items-start space-x-4">
-                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-200 shadow-sm ${
-                              isSelected
-                                ? 'bg-blue-500 text-white shadow-blue-200'
-                                : 'bg-gray-100 text-gray-600 group-hover:bg-blue-500 group-hover:text-white group-hover:shadow-blue-200'
-                            }`}>
-                              <Icon className="h-6 w-6" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <h4 className={`font-semibold text-base mb-1 transition-colors ${
-                                isSelected ? 'text-blue-900' : 'text-gray-900 group-hover:text-blue-900'
-                              }`}>
-                                {template.TemplateName}
-                              </h4>
-                              <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">
-                                {template.Description}
-                              </p>
-                            </div>
+                        {/* Icon and Title Section */}
+                        <div className="flex items-start space-x-3 flex-1">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-200 shadow-sm ${
+                            isSelected
+                              ? 'bg-blue-500 text-white shadow-blue-200'
+                              : 'bg-gray-100 text-gray-600 group-hover:bg-blue-500 group-hover:text-white group-hover:shadow-blue-200'
+                          }`}>
+                            <Icon className="h-5 w-5" />
                           </div>
-
-                          {/* Category Badge */}
-                          <div className="flex items-center justify-between">
-                            <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium border ${
-                              template.Category === 'user'
-                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                : template.Category === 'developer'
-                                ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                : 'bg-gray-50 text-gray-700 border-gray-200'
+                          <div className="flex-1 min-w-0">
+                            <h4 className={`font-semibold text-sm mb-1 transition-colors ${
+                              isSelected ? 'text-blue-900' : 'text-gray-900 group-hover:text-blue-900'
                             }`}>
-                              {template.Category}
-                            </span>
-                            {isSelected && (
-                              <span className="inline-flex items-center text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
-                                Selected
-                              </span>
-                            )}
+                              {template.TemplateName}
+                            </h4>
+                            <p className="text-xs text-gray-600 leading-snug line-clamp-3">
+                              {template.Description}
+                            </p>
                           </div>
                         </div>
 
+                        {/* Category Badge */}
+                        <div className="flex items-center justify-start mt-2 pt-2 border-t border-gray-200">
+                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            template.Category === 'user'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : template.Category === 'developer'
+                              ? 'bg-purple-50 text-purple-700'
+                              : 'bg-gray-100 text-gray-700'
+                          }`}>
+                            {template.Category}
+                          </span>
+                        </div>
+
                         {/* Hover overlay effect */}
-                        <div className={`absolute inset-0 rounded-xl transition-opacity duration-200 ${
+                        <div className={`absolute inset-0 rounded-lg transition-opacity duration-200 pointer-events-none ${
                           isSelected 
                             ? 'opacity-0' 
                             : 'opacity-0 group-hover:opacity-100 bg-gradient-to-br from-blue-500/5 to-blue-600/10'

@@ -13,6 +13,20 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "DocumentHistory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "Document_Id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "Version",
+          "order": "DESCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
