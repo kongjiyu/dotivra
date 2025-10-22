@@ -11,6 +11,7 @@ import type { Template } from '../types';
 import { getUserDisplayInfo } from '../utils/user';
 import { useAuth } from '../context/AuthContext';
 import { aiService } from '../services/aiService';
+import { useFeedback } from '../components/AppLayout';
 
 interface GenerationStep {
   id: string;
@@ -23,6 +24,7 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user, userProfile } = useAuth();
   const { name: displayName, initials } = getUserDisplayInfo(userProfile, user);
+  const { openFeedbackModal } = useFeedback();
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -310,6 +312,7 @@ const Dashboard: React.FC = () => {
       <Header
         userName={displayName}
         initials={initials}
+        onFeedbackClick={openFeedbackModal}
       />
 
       {/* Main Content */}
