@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { FileText, Code } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import Header from '../components/header/Header';
 import ProjectHeader from '../components/project/ProjectHeader';
 import DocumentSection from '../components/project/DocumentSection';
 import AddDocumentModal from '../components/project/AddDocumentModal';
@@ -33,8 +33,6 @@ const ProjectOverview: React.FC = () => {
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [editedProjectModalOpen, setEditedProjectModalOpen] = useState(false);
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState<'user' | 'developer' | 'general' | null>(null);
   const [project, setProject] = useState<Project | null>(null);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -179,17 +177,11 @@ const ProjectOverview: React.FC = () => {
   };
 
   const handleAddDocumentClick = () => {
-    setShowCategoryModal(true);
+    setShowAddModal(true);
   };
 
   const handleEditProject = () => {
     setEditedProjectModalOpen(true);  
-  };
-
-  const handleAddDocument = (category: 'user' | 'developer' | 'general') => {
-    setSelectedCategory(category);
-    setShowCategoryModal(false);
-    setShowAddModal(true);
   };
 
   const handleEditDocument = (document: Document) => {
@@ -368,7 +360,6 @@ const ProjectOverview: React.FC = () => {
 
       // Close modals
       setShowAddModal(false);
-      setSelectedCategory(null);
       setIsGenerating(false);
       
       // Navigate to the new document, passing the full document data including content
@@ -386,11 +377,11 @@ const ProjectOverview: React.FC = () => {
 
   const handleCloseModal = () => {
     setShowAddModal(false);
-    setSelectedCategory(null);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <Header />
       <ProjectHeader 
         project={project}
         onBackToDashboard={handleBackToDashboard}
@@ -398,7 +389,7 @@ const ProjectOverview: React.FC = () => {
         onEditProject={handleEditProject}
       />
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-6 py-10">
         <DocumentSection
           title="Users"
           category="user"
@@ -424,60 +415,8 @@ const ProjectOverview: React.FC = () => {
         />
       </div>
 
-      {showCategoryModal && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={() => setShowCategoryModal(false)} />
-          <div className="flex min-h-full items-center justify-center p-4">
-            <div className="relative w-full max-w-md transform overflow-hidden rounded-xl bg-white shadow-xl">
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Choose Document Type</h3>
-                <div className="space-y-3">
-                  <button
-                    onClick={() => handleAddDocument('user')}
-                    className="w-full flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
-                  >
-                    <FileText className="h-5 w-5 text-blue-600 mr-3" />
-                    <div className="text-left">
-                      <div className="font-medium text-gray-900">User Documentation</div>
-                      <div className="text-sm text-gray-600">For end users and customers</div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => handleAddDocument('developer')}
-                    className="w-full flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
-                  >
-                    <Code className="h-5 w-5 text-purple-600 mr-3" />
-                    <div className="text-left">
-                      <div className="font-medium text-gray-900">Developer Documentation</div>
-                      <div className="text-sm text-gray-600">For developers and technical users</div>
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => handleAddDocument('general')}
-                    className="w-full flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
-                  >
-                    <FileText className="h-5 w-5 text-gray-600 mr-3" />
-                    <div className="text-left">
-                      <div className="font-medium text-gray-900">General Documentation</div>
-                      <div className="text-sm text-gray-600">For general information and mixed content</div>
-                    </div>
-                  </button>
-                </div>
-                <button
-                  onClick={() => setShowCategoryModal(false)}
-                  className="w-full mt-4 px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <AddDocumentModal
         isOpen={showAddModal}
-        category={selectedCategory}
         onClose={handleCloseModal}
         onCreateDocument={handleCreateDocument}
         projectGithubRepo={project?.GitHubRepo || undefined}
