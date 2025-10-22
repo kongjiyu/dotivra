@@ -20,6 +20,7 @@ import Projects from "./pages/Projects"; // NEW: All projects page
 import AllTemplate from "./pages/AllTemplate";
 import GeminiDashboard from "./pages/gemini/geminiDashboard";
 import GeminiTestBalancer from "./pages/gemini/geminiTestBalancer";
+import FeedbackForm from "./pages/FeedbackForm";
 
 // Error page component
 const ErrorPage = () => (
@@ -61,94 +62,96 @@ const router = createBrowserRouter([
         element: <Login />,
       },
       {
-    path: "/dashboard",
-    element: <ProtectedRoute><Dashboard /></ProtectedRoute>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/ai-generator",
-    element: <ProtectedRoute><AllTemplate /></ProtectedRoute>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/github-connect",
-    element: <ProtectedRoute><GithubConnect /></ProtectedRoute>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/document/editor",
-    element: <ProtectedDocumentWrapper><DocumentEditor /></ProtectedDocumentWrapper>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/document/:documentId",
-    element: <ProtectedDocumentWrapper><DocumentEditor /></ProtectedDocumentWrapper>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/document/summary",
-    element: <ProtectedDocumentWrapper><DocumentSummary /></ProtectedDocumentWrapper>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/document/project",
-    element: <ProtectedDocumentWrapper><DocumentProjectList /></ProtectedDocumentWrapper>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/document/project/:documentId",
-    element: <ProtectedDocumentWrapper><DocumentProject /></ProtectedDocumentWrapper>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/document/history",
-    element: <ProtectedDocumentWrapper><DocumentHistory /></ProtectedDocumentWrapper>,
-    errorElement: <ErrorPage />
-  },
+        path: "/dashboard",
+        element: <ProtectedRoute><Dashboard /></ProtectedRoute>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/ai-generator",
+        element: <ProtectedRoute><AllTemplate /></ProtectedRoute>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/github-connect",
+        element: <ProtectedRoute><GithubConnect /></ProtectedRoute>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/document/editor",
+        element: <ProtectedDocumentWrapper><DocumentEditor /></ProtectedDocumentWrapper>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/document/:documentId",
+        element: <ProtectedDocumentWrapper><DocumentEditor /></ProtectedDocumentWrapper>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/document/summary",
+        element: <ProtectedDocumentWrapper><DocumentSummary /></ProtectedDocumentWrapper>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/document/project",
+        element: <ProtectedDocumentWrapper><DocumentProjectList /></ProtectedDocumentWrapper>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/document/project/:documentId",
+        element: <ProtectedDocumentWrapper><DocumentProject /></ProtectedDocumentWrapper>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/document/history",
+        element: <ProtectedDocumentWrapper><DocumentHistory /></ProtectedDocumentWrapper>,
+        errorElement: <ErrorPage />
+      },
       // Redirect old /editor path to new document editor
-  {
-    path: "/editor",
-    element: <ProtectedDocumentWrapper><DocumentEditor /></ProtectedDocumentWrapper>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/profile",
-    element: <ProtectedRoute><Profile /></ProtectedRoute>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/project/:projectId",  // NEW: Dynamic project route
-    element: <ProtectedRoute><ProjectView /></ProtectedRoute>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/projects", // NEW: All projects page
-    element: <ProtectedRoute><Projects /></ProtectedRoute>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/templates",
-    element: <ProtectedRoute><AllTemplate /></ProtectedRoute>,
-  },
-  {
-    path: "/feedback",
-    element: <ProtectedRoute><FeedbackForm /></ProtectedRoute>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/gemini",
-    element: <ProtectedRoute><GeminiDashboard /></ProtectedRoute>,
-    errorElement: <ErrorPage />
-  },
-  {
-    path: "/gemini/test-balancer",
-    element: <ProtectedRoute><GeminiTestBalancer /></ProtectedRoute>,
-    errorElement: <ErrorPage />
-  },
-  // Catch-all route for 404s
-  {
-    path: "*",
-    element: <ErrorPage />
+      {
+        path: "/editor",
+        element: <ProtectedDocumentWrapper><DocumentEditor /></ProtectedDocumentWrapper>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/profile",
+        element: <ProtectedRoute><Profile /></ProtectedRoute>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/project/:projectId",  // NEW: Dynamic project route
+        element: <ProtectedRoute><ProjectView /></ProtectedRoute>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/projects", // NEW: All projects page
+        element: <ProtectedRoute><Projects /></ProtectedRoute>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/templates",
+        element: <ProtectedRoute><AllTemplate /></ProtectedRoute>,
+      },
+      {
+        path: "/feedback",
+        element: <ProtectedRoute><FeedbackForm /></ProtectedRoute>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/gemini",
+        element: <ProtectedRoute><GeminiDashboard /></ProtectedRoute>,
+        errorElement: <ErrorPage />
+      },
+      {
+        path: "/gemini/test-balancer",
+        element: <ProtectedRoute><GeminiTestBalancer /></ProtectedRoute>,
+        errorElement: <ErrorPage />
+      },
+      // Catch-all route for 404s
+      {
+        path: "*",
+        element: <ErrorPage />
+      },
+    ]
   }
 ]);
 
