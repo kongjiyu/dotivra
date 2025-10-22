@@ -73,8 +73,23 @@ export default function DocumentEditor() {
                 return;
             }
 
-            // Check if we have document data passed through navigation state (from document creation)
-            const navigationState = location.state as { documentData?: any } | null;
+            // Check if we have document data passed through navigation state (from document creation or version restore)
+            const navigationState = location.state as { documentData?: any, skipFetch?: boolean } | null;
+            
+            // If skipFetch flag is set, use existing content from context (e.g., from version restore)
+            if (navigationState?.skipFetch) {
+                console.log('📄 Skipping document fetch - using content from context (restored version)');
+                setDocumentId(documentId);
+                
+                // Clear any pending autosave and sync the ref with context content
+                if (autoSaveTimeoutRef.current) {
+                    clearTimeout(autoSaveTimeoutRef.current);
+                }
+                latestContentRef.current = documentContent || "";
+                
+                return;
+            }
+            
             if (navigationState?.documentData) {
                 const documentData = navigationState.documentData;
                 console.log('📄 Using document data from navigation state:', {
@@ -84,7 +99,14 @@ export default function DocumentEditor() {
                 
                 setDocumentId(documentId);
                 setDocumentTitle(documentData.DocumentName || documentData.Title || "Untitled Document");
-                setDocumentContent(documentData.Content || "");
+                const content = documentData.Content || "";
+                setDocumentContent(content);
+                
+                // Clear any pending autosave and sync the ref with loaded content
+                if (autoSaveTimeoutRef.current) {
+                    clearTimeout(autoSaveTimeoutRef.current);
+                }
+                latestContentRef.current = content;
                 
                 // Load project info if available
                 const projectIdFromDoc = documentData.Project_Id || documentData.ProjectId;
@@ -131,6 +153,12 @@ export default function DocumentEditor() {
                     setDocumentTitle(documentData.DocumentName || "Untitled Document");
                     const content = documentData.Content || "";
 
+                    // Clear any pending autosave and sync the ref with loaded content
+                    if (autoSaveTimeoutRef.current) {
+                        clearTimeout(autoSaveTimeoutRef.current);
+                    }
+                    latestContentRef.current = content;
+                    
                     setDocumentContent(content); // Use exact content from DB, empty if empty
 
                     // Load project information if document has a project ID
@@ -205,7 +233,7 @@ export default function DocumentEditor() {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            content: contentToSave,
+                            Content: contentToSave,
                             EditedBy: user?.uid || 'anonymous',
                         }),
                     });
