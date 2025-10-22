@@ -650,8 +650,13 @@ export default function DocumentMenu({
         break-after: avoid;
       }
       
-      @page { size: A4; margin: 20mm; }
-      .pm-search-hit, .pm-search-current { background-color: transparent !important; outline: none !important; }
+			@page { size: A4; margin: 20mm; }
+			/* Force page-breaks when printing or generating PDF */
+			@media print {
+				.page-break { display: block !important; page-break-before: always !important; break-before: page !important; }
+				h1 { page-break-before: always !important; break-before: page !important; }
+			}
+			.pm-search-hit, .pm-search-current { background-color: transparent !important; outline: none !important; }
     `;
 			element.prepend(style);
 
@@ -678,9 +683,8 @@ export default function DocumentMenu({
 				},
 				pagebreak: {
 					mode: ["css", "legacy"],
-					before: ".page-break",  // Break before page-break elements (before H1)
-					after: [],  // Don't break after any elements
-					avoid: "h1, h2, h3, h4, h5, h6, table, pre, blockquote, .code-block-wrapper, .avoid-break, tr, img, figure",
+					before: ".page-break",
+					avoid: "h2, h3, h4, h5, h6, table, pre, blockquote, .code-block-wrapper, .avoid-break, tr, img, figure",
 				}
 			};
 

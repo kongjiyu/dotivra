@@ -136,6 +136,18 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     const [toolbarPosition, setToolbarPosition] = useState<{ x: number; y: number } | null>(null);
     const [isDragging, setIsDragging] = useState(false);
     const [isVertical, setIsVertical] = useState<boolean>(false);
+    // Max available width for toolbar (viewport minus nav/chat panes)
+    const [toolbarMaxWidth, setToolbarMaxWidth] = useState<number | null>(null);
+    // Selection debug info when user selects across different block elements
+    const [selectionDebug, setSelectionDebug] = useState<{
+        active: boolean;
+        startType?: string;
+        endType?: string;
+        from?: number;
+        to?: number;
+        startDepth?: number;
+        endDepth?: number;
+    } | null>(null);
     const dragStartPos = useRef<{ x: number; y: number; toolbarX: number; toolbarY: number } | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -414,9 +426,22 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             }, 150); // Debounce by 150ms
         };
 
+        // Update toolbarMaxWidth on resize as well
+        const updateMaxWidth = () => {
+            const viewportWidth = window.innerWidth;
+            const navPaneWidth = showNavigationPane ? Math.max(viewportWidth * 0.15, 200) : 0;
+            const chatWidth = chatSidebarOpen ? 320 : 0;
+            const available = Math.max(200, viewportWidth - navPaneWidth - chatWidth - 40); // 40px padding
+            setToolbarMaxWidth(available);
+        };
+
+        updateMaxWidth();
+        window.addEventListener('resize', updateMaxWidth);
+        
         window.addEventListener('resize', handleResize);
         return () => {
             window.removeEventListener('resize', handleResize);
+            window.removeEventListener('resize', updateMaxWidth);
             clearTimeout(resizeTimeout);
         };
     }, [toolbarPosition, safeClampPosition]);
@@ -513,6 +538,41 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         if (!editor) return;
 
         const updateToolbarState = () => {
+            // SELECTION DEBUG: detect cross-block selection and populate debug state
+            try {
+                const { state } = editor;
+                const { from, to, empty } = state.selection;
+                if (!empty && from !== to) {
+                    const resolvedFrom = state.doc.resolve(from);
+                    const resolvedTo = state.doc.resolve(to);
+                    const startNode = resolvedFrom.parent;
+                    const endNode = resolvedTo.parent;
+
+                    if (startNode && endNode && startNode.type && endNode.type && (startNode.type !== endNode.type || resolvedFrom.depth !== resolvedTo.depth)) {
+                        // Cross-block selection detected
+                        setSelectionDebug({
+                            active: true,
+                            startType: startNode.type.name,
+                            endType: endNode.type.name,
+                            from,
+                            to,
+                            startDepth: resolvedFrom.depth,
+                            endDepth: resolvedTo.depth,
+                        });
+                        console.debug('[ToolBar] Cross-block selection detected:', { from, to, startType: startNode.type.name, endType: endNode.type.name, startDepth: resolvedFrom.depth, endDepth: resolvedTo.depth });
+                    } else {
+                        // Clear debug if single-block selection
+                        if (selectionDebug && selectionDebug.active) setSelectionDebug(null);
+                    }
+                } else {
+                    // Clear when no selection
+                    if (selectionDebug && selectionDebug.active) setSelectionDebug(null);
+                }
+            } catch (err) {
+                // ignore debug errors
+                console.error('[ToolBar] selection debug error', err);
+            }
+
             // Check if we're in a code block first
             const inCodeBlock = editor.isActive('codeBlock');
 
@@ -1008,7 +1068,9 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     cursor: isDragging ? 'grabbing' : 'default',
                     zIndex: 100,
                     ...(isVertical && { maxHeight: '600px', overflowY: 'auto' }),
-                    transition: isDragging ? 'none' : undefined
+                    transition: isDragging ? 'none' : undefined,
+                    // Ensure toolbar doesn't exceed available width
+                    ...(toolbarMaxWidth ? { maxWidth: `${toolbarMaxWidth}px`, width: 'auto' } : {})
                 } : (() => {
                     // Calculate initial position within tiptap-container based on NavigationPane state
                     const tiptapContainer = document.querySelector('.tiptap-container');
@@ -1031,12 +1093,15 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                         // Calculate center based on actual container position (accounts for NavigationPane)
                         if (containerRect) {
                             const centerX = containerRect.left + containerRect.width / 2;
+                            const available = toolbarMaxWidth || window.innerWidth - (showNavigationPane ? Math.max(window.innerWidth * 0.15, 200) : 0) - (chatSidebarOpen ? 320 : 0) - 40;
                             return {
                                 position: 'fixed' as const,
                                 left: `${centerX}px`,
                                 top: '168px',
                                 transform: 'translateX(-50%)',
-                                zIndex: 100
+                                zIndex: 100,
+                                maxWidth: `${available}px`,
+                                width: 'auto'
                             };
                         } else {
                             // Fallback when container not ready - center of viewport
@@ -1051,6 +1116,15 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     }
                 })()}
             >
+
+                {/* Selection debug overlay (visible when cross-block selection detected) */}
+                {selectionDebug && selectionDebug.active && (
+                    <div className="absolute -top-10 left-0 bg-red-50 text-red-700 px-2 py-1 rounded text-xs z-50 border border-red-100 shadow-sm">
+                        <strong>Selection debug:</strong>
+                        <div>from: {selectionDebug.from} ({selectionDebug.startType}@d{selectionDebug.startDepth})</div>
+                        <div>to: {selectionDebug.to} ({selectionDebug.endType}@d{selectionDebug.endDepth})</div>
+                    </div>
+                )}
                 {/* Drag Handle and Orientation Toggle */}
                 <div className={`flex ${isVertical ? 'flex-col gap-1 items-center' : 'items-center gap-1'} flex-shrink-0`}>
                     {/* Drag Handle - Enlarged for better grab area */}
