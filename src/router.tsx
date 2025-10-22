@@ -18,6 +18,7 @@ import AppLayout from "./components/AppLayout";
 
 import Projects from "./pages/Projects"; // NEW: All projects page
 import AllTemplate from "./pages/AllTemplate";
+import FeedbackForm from "./pages/FeedbackForm";
 import GeminiDashboard from "./pages/gemini/geminiDashboard";
 import GeminiTestBalancer from "./pages/gemini/geminiTestBalancer";
 
@@ -60,7 +61,9 @@ const router = createBrowserRouter([
         path: "/",
         element: <Login />,
       },
-      {
+    ],
+  },
+  {
     path: "/dashboard",
     element: <ProtectedRoute><Dashboard /></ProtectedRoute>,
     errorElement: <ErrorPage />
