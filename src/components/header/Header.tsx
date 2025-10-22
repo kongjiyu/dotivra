@@ -17,7 +17,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({
   title = 'Dotivra',
   subtitle = 'Your documentation home base',
-  userName = 'John Doe',
+  userName,
   initials,
   showProfile = true,
   showNavigation = true,
@@ -25,10 +25,13 @@ const Header: React.FC<HeaderProps> = ({
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signOut } = useAuth();
+  const { signOut, userProfile } = useAuth();
+
+  // Use provided userName or fallback to userProfile
+  const displayName = userName || userProfile?.displayName || userProfile?.email || 'User';
 
   const avatarLabel = (initials && initials.trim()) ||
-    userName
+    displayName
       .split(/\s+/)
       .filter(Boolean)
       .map((part) => part[0]?.toUpperCase())
@@ -108,7 +111,7 @@ const Header: React.FC<HeaderProps> = ({
                   aria-label="Open profile menu"
                   className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-colors"
                 >
-                  <span className="text-xs font-medium text-gray-700 hidden sm:block">{userName}</span>
+                  <span className="text-xs font-medium text-gray-700 hidden sm:block">{displayName}</span>
                   <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-semibold uppercase">
                     {avatarLabel}
                   </div>
