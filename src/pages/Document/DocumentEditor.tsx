@@ -211,19 +211,19 @@ export default function DocumentEditor() {
                     });
 
                     if (!response.ok) {
-                        console.error('? Failed to auto-save document:', response.status, await response.text());
+                        console.error('❌ Failed to auto-save document:', response.status, await response.text());
                     }
 
-                    // Periodically reflect saved content to context
-                    setDocumentContent(contentToSave);
+                    // DO NOT update context here - it causes TipTap to re-apply content and overwrite user edits
+                    // The latestContentRef already tracks the current content
                 } catch (error) {
-                    console.error('? Auto-save error:', error);
+                    console.error('❌ Auto-save error:', error);
                 } finally {
                     setIsSaving(false);
                 }
             }, 2000);
         }
-    }, [documentId, setDocumentContent, user?.uid]);
+    }, [documentId, user?.uid]);
 
     // Cleanup pending autosave on unmount
     useEffect(() => {
