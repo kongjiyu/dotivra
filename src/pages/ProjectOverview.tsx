@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FileText, Code } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import Header from '../components/header/Header';
 import ProjectHeader from '../components/project/ProjectHeader';
 import DocumentSection from '../components/project/DocumentSection';
 import AddDocumentModal from '../components/project/AddDocumentModal';
@@ -391,6 +392,7 @@ const ProjectOverview: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+      <Header />
       <ProjectHeader 
         project={project}
         onBackToDashboard={handleBackToDashboard}

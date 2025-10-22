@@ -58,22 +58,22 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
   return (
     <div
       onClick={handleCardClick}
-      className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-lg hover:border-blue-300 transition-all duration-300 cursor-pointer group hover:-translate-y-0.5"
+      className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-xl hover:border-blue-300 transition-all duration-300 cursor-pointer group hover:-translate-y-1"
     >
       {/* Thumbnail Section */}
-      <div className={`relative h-20 flex items-center justify-center ${getIconBgColor()} transition-colors`}>
-        <FileText className={`h-8 w-8 ${getIconColor()}`} />
+      <div className={`relative h-28 flex items-center justify-center ${getIconBgColor()} transition-colors`}>
+        <FileText className={`h-12 w-12 ${getIconColor()}`} />
         
         {/* Actions Dropdown - Top Right */}
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-3 right-3">
           <button
             onClick={(e) => {
               e.stopPropagation();
               setShowDropdown(!showDropdown);
             }}
-            className="p-1 rounded-lg bg-white/90 hover:bg-white shadow-sm transition-all opacity-0 group-hover:opacity-100 hover:scale-110"
+            className="p-1.5 rounded-lg bg-white/90 hover:bg-white shadow-md transition-all opacity-0 group-hover:opacity-100 hover:scale-110"
           >
-            <MoreHorizontal className="h-3.5 w-3.5 text-gray-600" />
+            <MoreHorizontal className="h-4 w-4 text-gray-600" />
           </button>
 
           {showDropdown && (
@@ -85,19 +85,19 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
               />
 
               {/* Dropdown Menu */}
-              <div className="absolute right-0 top-9 w-32 bg-white border border-gray-200 rounded-lg shadow-xl z-20 overflow-hidden">
+              <div className="absolute right-0 top-10 w-36 bg-white border border-gray-200 rounded-lg shadow-xl z-20 overflow-hidden">
                 <button
                   onClick={handleEdit}
-                  className="w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-blue-50 flex items-center gap-2 transition-colors"
+                  className="w-full px-4 py-2.5 text-left text-sm text-gray-700 hover:bg-blue-50 flex items-center gap-2 transition-colors"
                 >
-                  <Edit className="h-3.5 w-3.5" />
+                  <Edit className="h-4 w-4" />
                   Edit
                 </button>
                 <button
                   onClick={handleDelete}
-                  className="w-full px-3 py-2 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-gray-100 transition-colors"
+                  className="w-full px-4 py-2.5 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2 border-t border-gray-100 transition-colors"
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Trash2 className="h-4 w-4" />
                   Delete
                 </button>
               </div>
@@ -107,24 +107,24 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
       </div>
 
       {/* Details Section */}
-      <div className="p-3.5 space-y-2">
+      <div className="p-5 space-y-3">
         {/* Document Title */}
-        <h3 className="font-semibold text-sm text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 min-h-[2.5rem] leading-tight">
+        <h3 className="font-semibold text-gray-900 group-hover:text-blue-600 transition-colors line-clamp-2 min-h-[3rem]">
           {document.DocumentName}
         </h3>
 
         {/* Template Badge */}
         <div>
-          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getCategoryColor()}`}>
+          <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium ${getCategoryColor()}`}>
             {document.DocumentType}
           </span>
         </div>
 
         {/* Last Edited */}
-        <div className="flex items-center text-xs text-gray-500 pt-1.5 border-t border-gray-100">
-          <Clock className="h-3 w-3 mr-1" />
+        <div className="flex items-center text-xs text-gray-500 pt-2 border-t border-gray-100">
+          <Clock className="h-3.5 w-3.5 mr-1.5" />
           <span>
-            {document.Updated_Time 
+            Edited {document.Updated_Time 
               ? new Date(document.Updated_Time).toLocaleDateString('en-US', { 
                   month: 'short', 
                   day: 'numeric', 
