@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/react'
 import { Button } from '@/components/ui/button'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import {
     Copy,
     Scissors,
@@ -117,14 +118,14 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     const menuContent = (
         <div
             ref={menuRef}
-            className="fixed bg-white border border-gray-200 rounded-lg shadow-xl py-2 w-[350px] max-h-[80vh] overflow-y-auto"
+            className="fixed bg-white border border-gray-200 rounded-lg shadow-xl py-2 w-[350px] max-h-[80vh]"
             style={{
                 left: `${adjustedPosition.x}px`,
                 top: `${adjustedPosition.y}px`,
                 zIndex: 99999,
             }}
         >
-            {isTableContext ? (
+            <ScrollArea className="max-h-[75vh]">{isTableContext ? (
                 // Table-specific context menu with basic features
                 <>
                     {/* Basic Actions */}
@@ -677,6 +678,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
                 </>
             )}
+            </ScrollArea>
         </div>
     )
 

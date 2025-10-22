@@ -9,7 +9,9 @@ export default function DocumentSummary() {
         summaryContent,
         setSummaryContent,
         setCurrentEditor,
-        documentId
+        documentId,
+        showToolbar,
+        onOpenChat
     } = useDocument();
     const [, setIsLoadingSummary] = useState(false);
 
@@ -75,6 +77,8 @@ export default function DocumentSummary() {
                 initialContent={summaryContent || "Document summary will appear here..."}
                 onUpdate={handleSummaryUpdate}
                 onEditorReady={handleSummaryEditorReady}
+                onOpenChat={onOpenChat}
+                showToolbar={showToolbar}
                 className="min-h-[500px]"
             />
         </DocumentLayout>

@@ -45,8 +45,8 @@ export default function WordCount({ editor, isOpen, onClose }: WordCountProps) {
             const leftBoundary = navPaneWidth + padding;
 
             // Calculate right boundary (account for ChatSidebar if open)
-            // ChatSidebar is 20rem = 320px
-            const chatSidebarWidth = chatSidebarOpen ? 320 : 0;
+            // ChatSidebar is 26rem = 416px
+            const chatSidebarWidth = chatSidebarOpen ? 416 : 0;
             const rightBoundary = viewportWidth - chatSidebarWidth - panelWidth - padding;
 
             // Calculate top boundary (account for header: 20px + menu: 56px + padding)
@@ -100,7 +100,7 @@ export default function WordCount({ editor, isOpen, onClose }: WordCountProps) {
         const leftBoundary = navPaneWidth;
 
         // Right boundary (ChatSidebar)
-        const chatSidebarWidth = chatSidebarOpen ? 320 : 0;
+        const chatSidebarWidth = chatSidebarOpen ? 416 : 0;
         const rightBoundary = viewportWidth - chatSidebarWidth - panelRect.width;
 
         // Top boundary (header area)
@@ -153,7 +153,7 @@ export default function WordCount({ editor, isOpen, onClose }: WordCountProps) {
             const leftBoundary = navPaneWidth;
 
             // Right boundary (ChatSidebar)
-            const chatSidebarWidth = chatSidebarOpen ? 320 : 0;
+            const chatSidebarWidth = chatSidebarOpen ? 416 : 0;
             const rightBoundary = viewportWidth - chatSidebarWidth - panelRect.width;
 
             // Top boundary (header area)
@@ -243,10 +243,10 @@ export default function WordCount({ editor, isOpen, onClose }: WordCountProps) {
         >
             {/* Header with drag handle */}
             <div
-                className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 cursor-grab active:cursor-grabbing"
+                className="flex items-center justify-between px-6 py-3 border-b border-gray-200 bg-gradient-to-r from-blue-50 to-indigo-50 cursor-grab active:cursor-grabbing select-none"
                 onMouseDown={handleDragStart}
             >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 pointer-events-none">
                     <GripVertical className="w-4 h-4 text-gray-400" />
                     <h3 className="font-semibold text-gray-900 flex items-center gap-2">
                         <FileText className="w-4 h-4 text-blue-600" />
@@ -257,7 +257,7 @@ export default function WordCount({ editor, isOpen, onClose }: WordCountProps) {
                     variant="ghost"
                     size="sm"
                     onClick={onClose}
-                    className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
+                    className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700 pointer-events-auto"
                 >
                     <X className="w-4 h-4" />
                 </Button>

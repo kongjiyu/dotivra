@@ -46,6 +46,9 @@ import {
 	updateToolPreference,
 } from "@/utils/documentToolsPreferences";
 
+// Import document context
+import { useDocument } from "@/context/DocumentContext";
+
 // NEW: ProseMirror bits for decorations
 import { Plugin, PluginKey, TextSelection } from "prosemirror-state";
 import { Decoration, DecorationSet } from "prosemirror-view";
@@ -76,6 +79,9 @@ export default function DocumentMenu({
 	onToolbarToggle,
 	onNavigationPaneToggle,
 }: DocumentMenuProps) {
+	// Get context state for navigation pane
+	const { showNavigationPane, setShowNavigationPane: setContextNavigationPane } = useDocument();
+
 	// Document menu state
 	const [showSearch, setShowSearch] = useState(false);
 	const [searchQuery, setSearchQuery] = useState("");
@@ -89,7 +95,7 @@ export default function DocumentMenu({
 	const initialPrefs = loadToolsPreferences();
 	const [showToolsMenu, setShowToolsMenu] = useState(false);
 	const [showHelpMenu, setShowHelpMenu] = useState(false);
-	const [showNavigationPane, setShowNavigationPane] = useState(initialPrefs.showNavigationPane);
+	// Note: showNavigationPane now comes from context, not local state
 	const [showWordCount, setShowWordCount] = useState(initialPrefs.showWordCount);
 	const [showDocsHelp, setShowDocsHelp] = useState(false);
 	const [showShortcutKeys, setShowShortcutKeys] = useState(false);
@@ -436,35 +442,30 @@ export default function DocumentMenu({
 	};
 
 	const handleExportToPDF = async () => {
-		// Get content from props first, then fallback to editor
-		let contentToExport = documentContent;
-		if (!contentToExport && editor) {
-			contentToExport = editor.getHTML();
-		}
-		if (!contentToExport) {
-			return;
-		}
-
 		try {
-			// Parse and process content
+			// 1️⃣ Get content
+			let contentToExport = documentContent;
+			if (!contentToExport && editor) {
+				contentToExport = editor.getHTML();
+			}
+			if (!contentToExport) return;
+
+			// 2️⃣ Parse HTML
 			const parser = new DOMParser();
 			const doc = parser.parseFromString(contentToExport, "text/html");
 
-			// Process code blocks to add language headers
+			// 3️⃣ Process code-blocks
 			doc.querySelectorAll(".code-block-wrapper, pre[class*='language-']").forEach((wrapper) => {
-				// Check if it's a code-block-wrapper or a standalone pre
-				const pre = wrapper.tagName === 'PRE' ? wrapper : wrapper.querySelector("pre");
+				const pre = wrapper.tagName === "PRE" ? wrapper : wrapper.querySelector("pre");
 				if (!pre) return;
 
-				// Get language from data attribute or class
 				let language = wrapper.getAttribute("data-language");
 				if (!language) {
-					const classMatch = pre.className.match(/language-(\w+)/);
-					language = classMatch ? classMatch[1] : "plaintext";
+					const match = pre.className.match(/language-(\w+)/);
+					language = match ? match[1] : "plaintext";
 				}
 
-				// Create wrapper if it doesn't exist
-				let container = wrapper.tagName === 'PRE' ? null : wrapper;
+				let container = wrapper.tagName === "PRE" ? null : wrapper;
 				if (!container) {
 					container = doc.createElement("div");
 					container.className = "code-block-wrapper";
@@ -472,143 +473,95 @@ export default function DocumentMenu({
 					container.appendChild(pre);
 				}
 
-				// Add header with language label
 				const header = doc.createElement("div");
 				header.className = "code-block-header";
 				header.textContent = language;
 				container.insertBefore(header, pre);
 			});
 
-			// Smart page break logic - Break by ELEMENTS not content height
-			// 1. Add page breaks before each H1 heading (skip first H1)
+			// 4️⃣ Insert page-break divs before each <h1>, skipping the first one
 			const h1Headings = doc.querySelectorAll("h1");
+			console.log("[PDF Export] Found H1:", h1Headings.length);
 			h1Headings.forEach((heading, index) => {
-				// Skip the first h1 heading
-				if (index > 0) {
-					// Add a page break div before the heading
-					const pageBreak = doc.createElement("div");
-					pageBreak.className = "page-break";
-					pageBreak.setAttribute('data-page-break', 'h1');
-					heading.parentNode?.insertBefore(pageBreak, heading);
-				}
+				if (index === 0) return;  // skip first h1
+				const pageBreak = doc.createElement("div");
+				pageBreak.className = "page-break";
+				pageBreak.setAttribute("data-page-break", "h1");
+				pageBreak.textContent = "\u200B";
+				heading.parentNode?.insertBefore(pageBreak, heading);
 			});
 
-			// 2. Ensure all H1 elements start on a new page (no content height calculation)
-			// Each H1 gets its own page regardless of content length
+			// 5️⃣ Create wrapper for padding
+			const wrapper = document.createElement("div");
+			wrapper.className = "pdf-wrapper";
+			wrapper.style.cssText = `
+      width: 100%;
+      max-width: 794px; /* approx A4 width in px at 96dpi, adjust if needed */
+      margin: 0 auto;
+      padding: 56px; /* 56px padding all around */
+      background-color: white;
+    `;
 
-			// Create element with content and styling
-			const element = document.createElement('div');
-			const style = document.createElement("style");
+			const element = document.createElement("div");
 			element.innerHTML = doc.body.innerHTML;
-			element.style.cssText = `
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        font-size: 14px;
-        line-height: 1.6;
-        color: #333;
-        max-width: 800px;
-        margin: 0 auto;
-        padding: 40px;
-        background-color: white;
-      `;
+			wrapper.appendChild(element);
+
+			// 6️⃣ Inject styles
+			const style = document.createElement("style");
 			style.textContent = `
       * { box-sizing: border-box; }
-      
-      /* Page break rules - Break by ELEMENTS not content height */
-      .page-break { 
-        page-break-before: always !important; 
-        break-before: page !important; 
-        page-break-after: avoid !important;
-        break-after: avoid !important;
-        height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
+
+      /* Page-Break rules */
+      .page-break {
         display: block !important;
-        visibility: hidden !important;
+        height: 0 !important;
+        page-break-before: always !important;
+        break-before: page !important;
+		margin-bottom: 56px;
       }
-      
-      /* H1 - Each H1 starts on a new page (element-based, not height-based) */
+
+      /* Headings and content */
       h1 {
-        font-size: 28px; 
-        font-weight: 700; 
-        margin: 24px 0 12px; 
-        border-bottom: 2px solid #ccc; 
+        font-size: 28px;
+        font-weight: 700;
+        margin: 24px 0 12px;
+        border-bottom: 2px solid #ccc;
         padding-bottom: 8px;
         page-break-inside: avoid !important;
-        break-inside: avoid !important;
-        page-break-after: avoid !important;
-        break-after: avoid !important;
       }
-      
-      /* H2-H6 and other block elements should avoid breaks */
-      h2, h3, h4, h5, h6 { 
-        page-break-inside: avoid !important; 
-        break-inside: avoid !important; 
-        page-break-before: avoid !important;
-        break-before: avoid !important;
-        page-break-after: avoid !important;
-        break-after: avoid !important;
+      h2 {
+        font-size: 24px;
+        font-weight: 700;
+        margin: 20px 0 10px;
+        border-bottom: 1px solid #ccc;
+        padding-bottom: 6px;
       }
-      
-      table, pre, blockquote, .code-block-wrapper { 
-        page-break-inside: avoid !important; 
-        break-inside: avoid !important; 
-        page-break-after: avoid !important;
-        break-after: avoid !important;
+      h3 {
+        font-size: 20px;
+        font-weight: 700;
+        margin: 18px 0 9px;
       }
-      
-      /* Paragraphs and list items - allow natural breaks */
-      p { 
+
+      p {
+        margin: 8px 0;
+        text-align: justify;
         page-break-inside: auto !important;
-        break-inside: auto !important;
-        orphans: 2;
-        widows: 2;
       }
-      
-      li { 
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
+      ul, ol {
+        margin: 8px 0;
+        padding-left: 24px;
+        page-break-inside: auto !important;
       }
-      
-      /* Links should be inline */
-      a {
-        display: inline !important;
-        color: #2563eb;
-        text-decoration: underline;
-      }
-      
-      tr, img, figure { page-break-inside: avoid; break-inside: avoid; max-width: 100%; }
-      table { border-collapse: collapse; width: 100%; page-break-inside: auto; }
-      th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-      th { background: #f5f5f5; font-weight: 600; }
-      h2 { font-size: 24px; font-weight: 700; margin: 20px 0 10px; border-bottom: 1px solid #ccc; padding-bottom: 6px; }
-      h3 { font-size: 20px; font-weight: 700; margin: 18px 0 9px; }
-      p  { margin: 8px 0; text-align: justify; }
-      ul, ol { margin: 8px 0; padding-left: 24px; page-break-inside: auto; }
       li { margin: 4px 0; }
-      
-      code {
-        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-        font-size: 13px;
-        background-color: #f3f4f6;
-        color: #1f2937;
-        padding: 2px 6px;
-        border-radius: 4px;
-        border: 1px solid #e5e7eb;
-        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
-        white-space: pre-wrap;
-        word-break: break-word;
-      }
-      
+
       .code-block-wrapper {
         margin: 16px 0;
-        page-break-inside: avoid;
-        break-inside: avoid;
+        page-break-inside: auto !important;
       }
-      
       .code-block-header {
-        background-color: #000000 !important;
+        background-color: #000 !important;
         color: #9cdcfe !important;
-        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-family: 'Consolas','Monaco','Courier New', monospace;
         font-size: 12px;
         font-weight: 600;
         padding: 8px 12px;
@@ -616,84 +569,100 @@ export default function DocumentMenu({
         text-transform: capitalize;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
-        color-adjust: exact !important;
       }
-      
       pre {
-        background-color: #000000 !important;
+        background-color: #000 !important;
         color: #d4d4d4 !important;
         padding: 16px;
         border-radius: 0 0 6px 6px;
         overflow-x: auto;
         margin: 0;
-        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+        font-family: 'Consolas','Monaco','Courier New', monospace;
         font-size: 13px;
         line-height: 1.6;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
-        color-adjust: exact !important;
       }
-      
       pre code {
         background: transparent;
         border: none;
         padding: 0;
         color: inherit;
-        box-shadow: none;
       }
-      
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        page-break-inside: auto;
+      }
+      th, td {
+        border: 1px solid #ccc;
+        padding: 8px;
+        text-align: left;
+      }
+      th { background: #f5f5f5; font-weight: 600; }
+      img, figure, tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        max-width: 100%;
+      }
+
       hr {
         border: none;
         border-top: 2px solid #e5e7eb;
         margin: 24px 0;
-        page-break-after: avoid;
-        break-after: avoid;
+        page-break-after: avoid !important;
       }
-      
-			@page { size: A4; margin: 20mm; }
-			/* Force page-breaks when printing or generating PDF */
-			@media print {
-				.page-break { display: block !important; page-break-before: always !important; break-before: page !important; }
-				h1 { page-break-before: always !important; break-before: page !important; }
-			}
-			.pm-search-hit, .pm-search-current { background-color: transparent !important; outline: none !important; }
+      a {
+        display: inline !important;
+        color: #2563eb;
+        text-decoration: underline;
+      }
+
+      @page {
+        size: A4;
+        margin: 0; /* We'll handle padding ourselves */
+      }
     `;
-			element.prepend(style);
+			wrapper.prepend(style);
 
-			// Add avoid-break class to elements EXCEPT H1 (H1 needs to allow page breaks)
-			element.querySelectorAll("h2,h3,h4,h5,h6,table,ul,ol,pre,blockquote,.code-block-wrapper").forEach((el) => {
-				el.classList.add("avoid-break");
-			});
-
+			// 7️⃣ Setup html2pdf options with spacing after page break (based on SO suggestion)
 			const options = {
-				margin: 1,
-				filename: 'document.pdf',
-				image: { type: 'jpeg', quality: 0.98 },
+				margin: 0,
+				filename: "document.pdf",
+				image: { type: "jpeg", quality: 0.98 },
 				html2canvas: {
 					scale: 2,
 					useCORS: true,
 					allowTaint: true,
-					backgroundColor: '#ffffff',
-					logging: false,
+					backgroundColor: "#ffffff",
 				},
 				jsPDF: {
-					unit: 'in',
-					format: 'letter',
-					orientation: 'portrait'
+					unit: "mm",
+					format: "a4",
+					orientation: "portrait",
+					putTotalPages: true  // optional
 				},
 				pagebreak: {
 					mode: ["css", "legacy"],
-					before: ".page-break",
-					avoid: "h2, h3, h4, h5, h6, table, pre, blockquote, .code-block-wrapper, .avoid-break, tr, img, figure",
+					before: ".page-break",   // selector where break happens
+					// after: "56px",         // <-- remove this, invalid
+					avoid: "pre, blockquote, table, .code-block-wrapper, tr, img, figure"
 				}
 			};
 
-			await html2pdf().set(options).from(element).save();
+
+			console.log("[PDF Export] Generating PDF...");
+			await html2pdf().set(options).from(wrapper).save();
+			console.log("[PDF Export] PDF generation complete.");
 
 		} catch (error) {
-			console.error('Error generating PDF:', error);
+			console.error("Error generating PDF:", error);
 		}
 	};
+
+
+
 
 
 	const clearSearch = () => {
@@ -1280,7 +1249,9 @@ export default function DocumentMenu({
 										variant="ghost"
 										size="sm"
 										onClick={() => {
-											setShowNavigationPane(!showNavigationPane);
+											const newValue = !showNavigationPane;
+											setContextNavigationPane(newValue);
+											updateToolPreference('showNavigationPane', newValue);
 											setShowToolsMenu(false);
 										}}
 										className="w-full justify-start h-8 px-2 text-gray-700"
