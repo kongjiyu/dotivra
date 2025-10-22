@@ -390,7 +390,7 @@ const ProjectOverview: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       <ProjectHeader 
         project={project}
         onBackToDashboard={handleBackToDashboard}
@@ -398,7 +398,7 @@ const ProjectOverview: React.FC = () => {
         onEditProject={handleEditProject}
       />
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
+      <div className="max-w-7xl mx-auto px-6 py-10">
         <DocumentSection
           title="Users"
           category="user"
@@ -426,46 +426,52 @@ const ProjectOverview: React.FC = () => {
 
       {showCategoryModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={() => setShowCategoryModal(false)} />
+          <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm" onClick={() => setShowCategoryModal(false)} />
           <div className="flex min-h-full items-center justify-center p-4">
-            <div className="relative w-full max-w-md transform overflow-hidden rounded-xl bg-white shadow-xl">
-              <div className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Choose Document Type</h3>
-                <div className="space-y-3">
+            <div className="relative w-full max-w-md transform overflow-hidden rounded-2xl bg-white shadow-2xl">
+              <div className="p-8">
+                <h3 className="text-2xl font-bold text-gray-900 mb-6">Choose Document Type</h3>
+                <div className="space-y-4">
                   <button
                     onClick={() => handleAddDocument('user')}
-                    className="w-full flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                    className="w-full flex items-center p-5 border-2 border-gray-200 rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-all duration-200 hover:shadow-md group"
                   >
-                    <FileText className="h-5 w-5 text-blue-600 mr-3" />
-                    <div className="text-left">
-                      <div className="font-medium text-gray-900">User Documentation</div>
+                    <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors mr-4">
+                      <FileText className="h-6 w-6 text-blue-600" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <div className="font-semibold text-gray-900 mb-1">User Documentation</div>
                       <div className="text-sm text-gray-600">For end users and customers</div>
                     </div>
                   </button>
                   <button
                     onClick={() => handleAddDocument('developer')}
-                    className="w-full flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                    className="w-full flex items-center p-5 border-2 border-gray-200 rounded-xl hover:border-purple-500 hover:bg-purple-50 transition-all duration-200 hover:shadow-md group"
                   >
-                    <Code className="h-5 w-5 text-purple-600 mr-3" />
-                    <div className="text-left">
-                      <div className="font-medium text-gray-900">Developer Documentation</div>
+                    <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center group-hover:bg-purple-200 transition-colors mr-4">
+                      <Code className="h-6 w-6 text-purple-600" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <div className="font-semibold text-gray-900 mb-1">Developer Documentation</div>
                       <div className="text-sm text-gray-600">For developers and technical users</div>
                     </div>
                   </button>
                   <button
                     onClick={() => handleAddDocument('general')}
-                    className="w-full flex items-center p-4 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                    className="w-full flex items-center p-5 border-2 border-gray-200 rounded-xl hover:border-gray-400 hover:bg-gray-50 transition-all duration-200 hover:shadow-md group"
                   >
-                    <FileText className="h-5 w-5 text-gray-600 mr-3" />
-                    <div className="text-left">
-                      <div className="font-medium text-gray-900">General Documentation</div>
+                    <div className="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center group-hover:bg-gray-200 transition-colors mr-4">
+                      <FileText className="h-6 w-6 text-gray-600" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <div className="font-semibold text-gray-900 mb-1">General Documentation</div>
                       <div className="text-sm text-gray-600">For general information and mixed content</div>
                     </div>
                   </button>
                 </div>
                 <button
                   onClick={() => setShowCategoryModal(false)}
-                  className="w-full mt-4 px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="w-full mt-6 px-4 py-3 text-sm font-medium text-gray-700 border-2 border-gray-300 rounded-xl hover:bg-gray-100 transition-colors"
                 >
                   Cancel
                 </button>

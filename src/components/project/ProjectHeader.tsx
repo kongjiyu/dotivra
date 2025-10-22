@@ -19,51 +19,54 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
 
 
   return (
-    <div className="bg-white border-b border-gray-200">
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-blue-50">
-              <FolderOpen className="h-6 w-6 text-blue-600" />
+    <div className="bg-white border-b border-gray-200 shadow-sm">
+      <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="flex flex-col gap-6">
+          {/* Header with Icon and Title */}
+          <div className="flex items-start gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 shadow-lg shadow-blue-500/30">
+              <FolderOpen className="h-7 w-7 text-white" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold text-gray-900">{project.ProjectName}</h1>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-3 mb-2">
+                <h1 className="text-3xl font-bold text-gray-900 truncate">{project.ProjectName}</h1>
                 {onEditProject && (
                   <button
                     type="button"
                     onClick={onEditProject}
-                    className="inline-flex items-center justify-center rounded-md p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                    className="inline-flex items-center justify-center rounded-lg p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-all duration-200"
                     aria-label="Edit project"
+                    title="Edit project details"
                   >
-                    <PencilLine className="h-4 w-4" />
+                    <PencilLine className="h-5 w-5" />
                   </button>
                 )}
               </div>
-              <p className="mt-2 max-w-3xl text-base leading-relaxed text-gray-600">{project.Description}</p>
-              {project.GitHubRepo && (
-                <div className="mt-3">
-                  <a
-                    href={project.GitHubRepo}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center text-sm font-medium text-blue-600 transition-colors hover:text-blue-800"
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    <span className="truncate">{project.GitHubRepo}</span>
-                  </a>
-                </div>
-              )}
+              <p className="text-base leading-relaxed text-gray-600 max-w-3xl">{project.Description}</p>
             </div>
           </div>
 
-          <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+          {/* GitHub Link and Actions */}
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-2">
+            <div className="flex-1">
+              {project.GitHubRepo && (
+                <a
+                  href={project.GitHubRepo}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 hover:text-blue-700 transition-all duration-200 group"
+                >
+                  <ExternalLink className="h-4 w-4 group-hover:scale-110 transition-transform" />
+                  <span className="truncate max-w-xs">{project.GitHubRepo.replace(/^https?:\/\/(www\.)?/, '')}</span>
+                </a>
+              )}
+            </div>
 
             <button
               onClick={onAddDocument}
-              className="flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+              className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all duration-200 font-medium shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:scale-105"
             >
-              <Plus className="h-5 w-5 mr-2" />
+              <Plus className="h-5 w-5" />
               Add Document
             </button>
           </div>

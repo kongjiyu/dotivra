@@ -35,15 +35,15 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
   const Icon = getSectionIcon();
 
   return (
-    <div className="mb-8">
+    <div className="mb-10">
       {/* Section Header */}
-      <div className="flex items-center space-x-3 mb-6">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${getSectionColor()}`}>
-          <Icon className="h-4 w-4" />
+      <div className="flex items-center space-x-3 mb-6 pb-3 border-b border-gray-200">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-sm ${getSectionColor()}`}>
+          <Icon className="h-5 w-5" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
-          <p className="text-sm text-gray-600">
+          <h2 className="text-xl font-bold text-gray-900">{title}</h2>
+          <p className="text-sm text-gray-500">
             {documents.length} document{documents.length !== 1 ? 's' : ''}
           </p>
         </div>
@@ -51,7 +51,7 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
 
       {/* Documents Grid */}
       {documents.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {documents.map((document) => (
             <DocumentCard
               key={document.id}
@@ -63,12 +63,14 @@ const DocumentSection: React.FC<DocumentSectionProps> = ({
         </div>
       ) : (
         /* Empty State */
-        <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-lg bg-gray-50">
-          <Icon className="h-8 w-8 text-blue-500 mx-auto mb-3" />
-          <h3 className="text-sm font-medium text-gray-900 mb-1">
+        <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 hover:bg-gray-100/50 transition-colors">
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${getSectionColor()}`}>
+            <Icon className="h-8 w-8" />
+          </div>
+          <h3 className="text-base font-semibold text-gray-900 mb-2">
             No {category} documents yet
           </h3>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-gray-500 max-w-sm mx-auto">
             Use the "Add Document" button above to create your first {category} document
           </p>
         </div>
