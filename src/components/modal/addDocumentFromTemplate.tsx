@@ -24,7 +24,6 @@ interface AddDocumentFromTemplateProps {
   }) => void;
 }
 
-type FlowStep = 'project-selection' | 'document-details';
 type ProjectOption = 'new' | 'existing';
 
 const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
@@ -34,14 +33,12 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
   onCreateDocument
 }) => {
   const { user } = useAuth();
-  const [step, setStep] = useState<FlowStep>('project-selection');
   const [projectOption, setProjectOption] = useState<ProjectOption>('new');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDescription, setNewProjectDescription] = useState('');
   const [selectedRepo, setSelectedRepo] = useState('');
   const [documentName, setDocumentName] = useState('');
-  const [documentRole, setDocumentRole] = useState('');
   const [projects, setProjects] = useState<Project[]>([]);
   const [repositories, setRepositories] = useState<ServiceGitHubRepository[]>([]);
   const [loading, setLoading] = useState(false);
@@ -51,14 +48,12 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
     if (isOpen) {
       loadProjects();
       // Reset form when modal opens
-      setStep('project-selection');
       setProjectOption('new');
       setSelectedProjectId(null);
       setNewProjectName('');
       setNewProjectDescription('');
       setSelectedRepo('');
       setDocumentName('');
-      setDocumentRole('');
       // Load user's GitHub repositories immediately
       loadUserRepositories();
     }
@@ -135,18 +130,6 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
     }
   };
 
-  const handleNext = () => {
-    if (step === 'project-selection') {
-      setStep('document-details');
-    }
-  };
-
-  const handleBack = () => {
-    if (step === 'document-details') {
-      setStep('project-selection');
-    }
-  };
-
   const handleSubmit = () => {
     if (!template) return;
 
@@ -157,25 +140,23 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
       newProjectDescription: projectOption === 'new' ? newProjectDescription : undefined,
       selectedRepo: projectOption === 'new' ? selectedRepo : undefined,
       documentName,
-      documentRole
+      documentRole: 'General' // Default role
     };
 
     onCreateDocument(data);
   };
 
-  const isStepValid = () => {
-    if (step === 'project-selection') {
-      if (projectOption === 'new') {
-        return newProjectName.trim() && 
-               newProjectDescription.trim() && 
-               selectedRepo.trim();
-      } else {
-        return selectedProjectId !== null;
-      }
-    } else if (step === 'document-details') {
-      return documentName.trim() && documentRole.trim();
+  const isFormValid = () => {
+    const hasDocumentName = documentName.trim();
+    
+    if (projectOption === 'new') {
+      return hasDocumentName && 
+             newProjectName.trim() && 
+             newProjectDescription.trim() && 
+             selectedRepo.trim();
+    } else {
+      return hasDocumentName && selectedProjectId !== null;
     }
-    return false;
   };
 
   if (!isOpen || !template) return null;
@@ -209,7 +190,21 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
 
           {/* Content */}
           <div className="p-6">
-            {step === 'project-selection' && (
+            <div className="space-y-6">
+              {/* Document Name Field */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Document Name *
+                </label>
+                <input
+                  type="text"
+                  value={documentName}
+                  onChange={(e) => setDocumentName(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter document name"
+                />
+              </div>
+
               <div className="space-y-6">
                 <div>
                   <h4 className="text-base font-medium text-gray-900 mb-4">
@@ -366,77 +361,12 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                   </div>
                 )}
               </div>
-            )}
-
-            {step === 'document-details' && (
-              <div className="space-y-6">
-                <div>
-                  <h4 className="text-base font-medium text-gray-900 mb-4">
-                    Document Details
-                  </h4>
-                  
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Document Name *
-                      </label>
-                      <input
-                        type="text"
-                        value={documentName}
-                        onChange={(e) => setDocumentName(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Enter document name"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Role/Purpose *
-                      </label>
-                      <input
-                        type="text"
-                        value={documentRole}
-                        onChange={(e) => setDocumentRole(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="e.g., Frontend Developer, API Integration, User Guide"
-                      />
-                    </div>
-
-                    {/* Template Info */}
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <div className="flex items-center">
-                        <FileText className="h-5 w-5 text-blue-600 mr-2" />
-                        <div>
-                          <div className="font-medium text-blue-900">Template: {template.TemplateName}</div>
-                          <div className="text-sm text-blue-700">{template.Description}</div>
-                          <div className="text-xs text-blue-600 mt-1 capitalize">
-                            Category: {template.Category}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between p-6 bg-gray-50 border-t border-gray-200">
-            <div className="flex items-center text-sm text-gray-500">
-              Step {step === 'project-selection' ? '1' : '2'} of 2
-            </div>
-            
+          <div className="flex items-center justify-end p-6 bg-gray-50 border-t border-gray-200">
             <div className="flex items-center space-x-3">
-              {step === 'document-details' && (
-                <button
-                  onClick={handleBack}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  Back
-                </button>
-              )}
-              
               <button
                 onClick={onClose}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -444,24 +374,14 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                 Cancel
               </button>
 
-              {step === 'project-selection' ? (
-                <button
-                  onClick={handleNext}
-                  disabled={!isStepValid()}
-                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                >
-                  Next
-                </button>
-              ) : (
-                <button
-                  onClick={handleSubmit}
-                  disabled={!isStepValid()}
-                  className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Document
-                </button>
-              )}
+              <button
+                onClick={handleSubmit}
+                disabled={!isFormValid()}
+                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Create Document
+              </button>
             </div>
           </div>
         </div>

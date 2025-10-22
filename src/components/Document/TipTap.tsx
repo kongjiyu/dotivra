@@ -148,6 +148,7 @@ const Tiptap = ({
     }, [handleDestroy]);
 
     // Apply initialContent when it changes, suppress history + update.
+    // BUT only apply on first load, not on subsequent context updates
     useEffect(() => {
         if (!editor) return;
         
@@ -157,9 +158,19 @@ const Tiptap = ({
         // Check if this content was already applied
         if (lastAppliedContentRef.current === initialContent) return;
 
+        // CRITICAL FIX: Only apply initialContent if the editor is currently empty or hasn't been initialized
+        // This prevents overwriting user's edits when context updates from auto-save
         const currentHTML = editor.getHTML();
-
-        if (currentHTML !== initialContent) {
+        const isEditorEmpty = currentHTML === '<p></p>' || currentHTML === '' || currentHTML === '<p><br></p>';
+        
+        // Only apply if editor is empty OR this is genuinely different content (not just a context update)
+        if (isEditorEmpty || lastAppliedContentRef.current === null) {
+            console.log('📝 Applying initial content to editor:', {
+                contentLength: initialContent.length,
+                isEditorEmpty,
+                isFirstLoad: lastAppliedContentRef.current === null
+            });
+            
             // false => do not emit update event, avoids extra history noise
             editor.commands.setContent(initialContent, { emitUpdate: false });
             // Ensure no history entry for this transaction
@@ -167,10 +178,15 @@ const Tiptap = ({
                 const tr = editor.state.tr.setMeta('addToHistory', false);
                 editor.view.dispatch(tr);
             }
+            
+            // Mark this content as applied
+            lastAppliedContentRef.current = initialContent;
+        } else {
+            console.log('⏭️ Skipping content update - editor has content:', {
+                currentLength: currentHTML.length,
+                newLength: initialContent.length
+            });
         }
-
-        // Mark this content as applied
-        lastAppliedContentRef.current = initialContent;
     }, [editor, initialContent]);
 
     // Call onEditorReady when editor is ready

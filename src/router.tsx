@@ -54,6 +54,11 @@ const ProtectedDocumentWrapper = ({ children }: { children: React.ReactNode }) =
 
 const router = createBrowserRouter([
   {
+    path: "/",
+    element: <Login />,
+    errorElement: <ErrorPage />
+  },
+  {
     element: <AppLayout />,
     errorElement: <ErrorPage />,
     children: [

@@ -31,7 +31,16 @@ const Projects: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(API_ENDPOINTS.projects());
+      // Only fetch projects if user is logged in
+      if (!user?.uid) {
+        console.warn('⚠️ No user logged in, skipping project fetch');
+        setAllProjects([]);
+        setLoading(false);
+        return;
+      }
+
+      // Fetch only the current user's projects
+      const response = await fetch(API_ENDPOINTS.userProjects(user.uid));
       console.log('📡 API Response status:', response.status);
 
       if (!response.ok) {
@@ -78,10 +87,12 @@ const Projects: React.FC = () => {
     }
   };
 
-  // Load projects on component mount
+  // Load projects when user is available
   useEffect(() => {
-    loadProjects();
-  }, []);
+    if (user?.uid) {
+      loadProjects();
+    }
+  }, [user?.uid]);
 
   // Filter projects based on search
   const filteredProjects = useMemo(() => {

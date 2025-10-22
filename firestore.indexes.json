@@ -1,6 +1,20 @@
 {
   "indexes": [
     {
+      "collectionGroup": "Projects",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "User_Id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "Created_Time",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "DocumentHistory",
       "queryScope": "COLLECTION",
       "fields": [
