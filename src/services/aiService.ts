@@ -268,7 +268,7 @@ ${repoContext.readme?.substring(0, 1000) || 'None'}
 Start - which files do you need? JSON only:`;
 
             let iteration = 0;
-            const maxIter = 5;
+            const maxIter = 10; // Increased from 5 to 10 iterations
             let content = '';
             const provided: string[] = [];
 
@@ -277,7 +277,13 @@ Start - which files do you need? JSON only:`;
                 console.log(`\n${'='.repeat(60)}`);
                 console.log(`🔄 ITERATION ${iteration}/${maxIter}`);
                 console.log(`${'='.repeat(60)}`);
-                onProgress?.('iteration', `AI iteration ${iteration} of ${maxIter}...`);
+                
+                // More descriptive progress messages
+                if (iteration === 1) {
+                    onProgress?.('analysis', 'AI analyzing repository structure...');
+                } else {
+                    onProgress?.('iteration', `AI processing files and generating content...`);
+                }
 
                 let prompt = '';
                 if (iteration === 1) {
@@ -287,6 +293,10 @@ Start - which files do you need? JSON only:`;
                     console.log(`📦 Fetching ${provided.length} requested files...`);
                     const fileContents = await this.getFileContents(user, repositoryInfo, provided);
                     console.log(`✅ Files fetched successfully (${fileContents.length} chars)`);
+                    
+                    // Update progress with file count
+                    onProgress?.('files', `Processing ${provided.length} files from repository...`);
+                    
                     prompt = `You previously requested these files. Here they are:
 
 ${fileContents}
@@ -346,7 +356,11 @@ Your JSON response:`;
                 if (parsed.needFiles && parsed.files?.length > 0) {
                     console.log(`📂 AI REQUESTED FILES: ${JSON.stringify(parsed.files)}`);
                     console.log(`💭 AI's reason: ${parsed.reason || 'No reason provided'}`);
-                    onProgress?.('files', `AI requesting ${parsed.files.length} files: ${parsed.files.slice(0, 2).join(', ')}${parsed.files.length > 2 ? '...' : ''}`);
+                    
+                    // Show what AI is looking for
+                    const filePreview = parsed.files.slice(0, 3).join(', ');
+                    const moreCount = parsed.files.length > 3 ? ` and ${parsed.files.length - 3} more` : '';
+                    onProgress?.('files', `AI examining: ${filePreview}${moreCount}`);
                     
                     // Clear and set new files to fetch
                     provided.length = 0;
@@ -356,6 +370,7 @@ Your JSON response:`;
                     console.log(`✅ AI READY TO GENERATE!`);
                     console.log(`📄 Content received: ${parsed.content.length} chars`);
                     console.log(`📄 Content preview: ${parsed.content.substring(0, 200)}...`);
+                    onProgress?.('generate', 'AI writing document content...');
                     content = parsed.content;
                     break;
                 } else {
@@ -367,7 +382,11 @@ Your JSON response:`;
             }
 
             if (!content) {
+                console.warn(`⚠️ Reached ${maxIter} iterations without generating content, using fallback`);
+                onProgress?.('generate', 'Finalizing with template content...');
                 content = this.generateFallbackContent(templatePrompt, repositoryInfo, documentName, documentRole);
+            } else {
+                console.log(`✅ Content generation complete: ${content.length} characters`);
             }
 
             onProgress?.('done', 'Complete!');
