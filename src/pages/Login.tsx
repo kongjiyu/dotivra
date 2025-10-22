@@ -1,6 +1,6 @@
 // src/pages/Login.tsx - Login page with authentication redirect
 import React, { useState } from 'react';
-import { BookOpen, Zap, Users, Shield } from 'lucide-react';
+import { Zap, Users, Shield } from 'lucide-react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LoginForm from '../components/auth/LoginForm';
@@ -47,11 +47,8 @@ const Login: React.FC = () => {
         {/* Content */}
         <div className="relative z-10 flex flex-col justify-center px-12 text-white">
           <div className="mb-8">
-            <div className="flex items-center space-x-3 mb-6">
-              <div className="w-12 h-12 rounded-xl bg-white/15 backdrop-blur flex items-center justify-center shadow-lg">
-                <BookOpen className="h-7 w-7 text-white" strokeWidth={1.6} />
-              </div>
-              <h1 className="text-2xl font-bold">Dotivra </h1>
+            <div className="flex items-center mb-6">
+              <img src="/logo-banner.png" alt="Dotivra" className="h-16 w-auto brightness-0 invert" />
             </div>
             <h2 className="text-3xl font-bold mb-4">
               AI-Powered Documentation Made Simple
@@ -102,11 +99,8 @@ const Login: React.FC = () => {
         <div className="w-full max-w-md">
           {/* Mobile Logo */}
           <div className="lg:hidden text-center mb-8">
-            <div className="flex items-center justify-center space-x-3 mb-4">
-              <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-                <BookOpen className="h-7 w-7 text-white" strokeWidth={1.6} />
-              </div>
-              <h1 className="text-2xl font-bold text-gray-900">Documentation Hub</h1>
+            <div className="flex items-center justify-center mb-4">
+              <img src="/logo-banner.png" alt="Dotivra" className="h-12 w-auto" />
             </div>
           </div>
 
