@@ -434,7 +434,8 @@ app.get("/api/projects", async (req, res) => {
 app.get("/api/projects/:id", async (req, res) => {
   try {
     const projectId = req.params.id;
-    logger.info("GET /api/projects/" + projectId);
+    const requestingUserId = req.query.userId as string; // Get userId from query params
+    logger.info("GET /api/projects/" + projectId, { requestingUserId });
 
     // Query by Project_Id field
     const querySnapshot = await db.collection("Projects")
@@ -446,9 +447,19 @@ app.get("/api/projects/:id", async (req, res) => {
     }
 
     const projectDoc = querySnapshot.docs[0];
+    const projectData = projectDoc.data();
+    
+    // Check if requesting user owns this project
+    if (requestingUserId && projectData.User_Id !== requestingUserId) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "You don't have permission to access this project"
+      });
+    }
+
     const project = {
-      ...projectDoc.data(),
-      Created_Time: projectDoc.data().Created_Time?.toDate?.()?.toISOString() ||
+      ...projectData,
+      Created_Time: projectData.Created_Time?.toDate?.()?.toISOString() ||
         new Date().toISOString(),
     };
 
@@ -500,6 +511,7 @@ app.put("/api/projects/:id", async (req, res) => {
   try {
     const projectId = req.params.id;
     const updates = req.body;
+    const requestingUserId = req.query.userId as string; // Get userId from query params
 
     // Find document by Project_Id
     const querySnapshot = await db.collection("Projects")
@@ -511,6 +523,16 @@ app.put("/api/projects/:id", async (req, res) => {
     }
 
     const docRef = querySnapshot.docs[0].ref;
+    const projectData = querySnapshot.docs[0].data();
+    
+    // Check if requesting user owns this project
+    if (requestingUserId && projectData.User_Id !== requestingUserId) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "You don't have permission to update this project"
+      });
+    }
+
     await docRef.update({
       ...updates,
       Updated_Time: admin.firestore.Timestamp.now(),
@@ -533,6 +555,7 @@ app.put("/api/projects/:id", async (req, res) => {
 app.delete("/api/projects/:id", async (req, res) => {
   try {
     const projectId = req.params.id;
+    const requestingUserId = req.query.userId as string; // Get userId from query params
 
     // Find document by Project_Id
     const querySnapshot = await db.collection("Projects")
@@ -544,6 +567,16 @@ app.delete("/api/projects/:id", async (req, res) => {
     }
 
     const docRef = querySnapshot.docs[0].ref;
+    const projectData = querySnapshot.docs[0].data();
+    
+    // Check if requesting user owns this project
+    if (requestingUserId && projectData.User_Id !== requestingUserId) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "You don't have permission to delete this project"
+      });
+    }
+
     await docRef.delete();
 
     res.json({
@@ -730,6 +763,28 @@ app.get('/api/documents/project/:projectId', async (req, res) => {
   } catch (error) {
     logger.error('Error fetching project documents:', error);
     res.status(500).json({ error: 'Failed to fetch project documents' });
+  }
+});
+
+// Get all templates
+app.get('/api/templates', async (req, res) => {
+  try {
+    const templatesRef = db.collection('Templates');
+    const snapshot = await templatesRef.get();
+    
+    const templates = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    logger.info(`GET /api/templates - Returned ${templates.length} templates`);
+    res.json({ templates });
+  } catch (error) {
+    logger.error('GET /api/templates - Error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch templates',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

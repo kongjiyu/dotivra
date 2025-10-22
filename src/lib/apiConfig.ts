@@ -19,7 +19,19 @@ export const buildApiUrl = (endpoint: string): string => {
 export const API_ENDPOINTS = {
   // Projects
   projects: () => buildApiUrl('api/projects'),
-  project: (id: string) => buildApiUrl(`api/projects/${id}`),
+  userProjects: (userId: string) => buildApiUrl(`api/projects/user/${userId}`),
+  project: (id: string, userId?: string) => {
+    const url = buildApiUrl(`api/projects/${id}`);
+    return userId ? `${url}?userId=${userId}` : url;
+  },
+  updateProject: (id: string, userId?: string) => {
+    const url = buildApiUrl(`api/projects/${id}`);
+    return userId ? `${url}?userId=${userId}` : url;
+  },
+  deleteProject: (id: string, userId?: string) => {
+    const url = buildApiUrl(`api/projects/${id}`);
+    return userId ? `${url}?userId=${userId}` : url;
+  },
   
   // Documents  
   documents: () => buildApiUrl('api/documents'),
