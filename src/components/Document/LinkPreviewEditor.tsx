@@ -126,7 +126,7 @@ export const LinkPreviewEditor: React.FC<Props> = ({ url, isVisible, onClose, po
     return (
         <div
             ref={ref}
-            className="fixed z-50 animate-in fade-in-0 zoom-in-95 duration-200"
+            className="fixed z-[150] animate-in fade-in-0 zoom-in-95 duration-200"
             style={{ left: `${position.x}px`, top: `${position.y + 20}px`, maxWidth: '440px' }}
             onMouseEnter={onMouseEnter}
             onMouseLeave={onMouseLeave}

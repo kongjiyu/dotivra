@@ -1,32 +1,58 @@
 // src/services/aiService.ts
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { repositoryContextService } from './repositoryContextService';
 import type { User } from 'firebase/auth';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const GENERATE_API = '/api/gemini/generate';
 
 class AIService {
-    private genAI: GoogleGenerativeAI;
-    private model: any;
-
-    constructor() {
-        if (!GEMINI_API_KEY) {
-            throw new Error('VITE_GEMINI_API_KEY environment variable is required');
-        }
-        this.genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        // Using Gemini 2.5 Pro for better quality document generation
-        this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-pro' });
-    }
+    private defaultModel = 'gemini-2.0-flash';
 
     async generateContent(prompt: string, context?: string): Promise<string> {
         try {
             const fullPrompt = context ? `Context: ${context}\n\nRequest: ${prompt}` : prompt;
-            const result = await this.model.generateContent(fullPrompt);
-            const response = await result.response;
-            return response.text();
+            console.log('🚀 Calling Gemini API:', GENERATE_API);
+            console.log('📝 Request body:', {
+                prompt: fullPrompt.substring(0, 200) + (fullPrompt.length > 200 ? '...' : ''),
+                model: this.defaultModel,
+                generationConfig: { maxOutputTokens: 2048 }
+            });
+            
+            const resp = await fetch(GENERATE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: fullPrompt,
+                    model: this.defaultModel,
+                    generationConfig: { maxOutputTokens: 2048 },
+                }),
+            });
+            
+            console.log('📡 Gemini API Response Status:', resp.status);
+            console.log('📡 Gemini API Response Headers:', Object.fromEntries(resp.headers.entries()));
+            
+            // Try to get response body for better error details
+            const responseText = await resp.text();
+            console.log('📄 Raw response:', responseText.substring(0, 500));
+            
+            if (!resp.ok) {
+                let errorData;
+                try {
+                    errorData = JSON.parse(responseText);
+                } catch {
+                    errorData = { error: responseText || resp.statusText };
+                }
+                console.error('❌ Gemini API Error Response:', errorData);
+                throw new Error(errorData?.error || `Generate failed: ${resp.status} - ${resp.statusText}`);
+            }
+            
+            const data = JSON.parse(responseText);
+            console.log('✅ Gemini API Success, response keys:', Object.keys(data));
+            console.log('✅ Text length:', data.text?.length || 0);
+            
+            return data.text as string;
         } catch (error) {
             console.error('❌ AI Generation Error:', error);
-            throw new Error('Failed to generate AI content');
+            throw error instanceof Error ? error : new Error('Failed to generate AI content');
         }
     }
 
@@ -242,7 +268,7 @@ ${repoContext.readme?.substring(0, 1000) || 'None'}
 Start - which files do you need? JSON only:`;
 
             let iteration = 0;
-            const maxIter = 5;
+            const maxIter = 10; // Increased from 5 to 10 iterations
             let content = '';
             const provided: string[] = [];
 
@@ -251,7 +277,13 @@ Start - which files do you need? JSON only:`;
                 console.log(`\n${'='.repeat(60)}`);
                 console.log(`🔄 ITERATION ${iteration}/${maxIter}`);
                 console.log(`${'='.repeat(60)}`);
-                onProgress?.('iteration', `AI iteration ${iteration} of ${maxIter}...`);
+                
+                // More descriptive progress messages
+                if (iteration === 1) {
+                    onProgress?.('analysis', 'AI analyzing repository structure...');
+                } else {
+                    onProgress?.('iteration', `AI processing files and generating content...`);
+                }
 
                 let prompt = '';
                 if (iteration === 1) {
@@ -261,6 +293,10 @@ Start - which files do you need? JSON only:`;
                     console.log(`📦 Fetching ${provided.length} requested files...`);
                     const fileContents = await this.getFileContents(user, repositoryInfo, provided);
                     console.log(`✅ Files fetched successfully (${fileContents.length} chars)`);
+                    
+                    // Update progress with file count
+                    onProgress?.('files', `Processing ${provided.length} files from repository...`);
+                    
                     prompt = `You previously requested these files. Here they are:
 
 ${fileContents}
@@ -280,8 +316,17 @@ Your JSON response:`;
                 }
 
                 console.log(`🤖 Calling Gemini API (prompt length: ${prompt.length} chars)...`);
-                const resp = await this.model.generateContent(prompt);
-                const text = await resp.response.text();
+                const res = await fetch(GENERATE_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, model: this.defaultModel, generationConfig: { maxOutputTokens: 2048 } }),
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err?.error || `Generate failed: ${res.status}`);
+                }
+                const payload = await res.json();
+                const text = String(payload.text || '');
                 console.log(`📥 AI Response received (${text.length} chars)`);
                 console.log('📄 AI Response preview:', text.substring(0, 200));
                 
@@ -311,7 +356,11 @@ Your JSON response:`;
                 if (parsed.needFiles && parsed.files?.length > 0) {
                     console.log(`📂 AI REQUESTED FILES: ${JSON.stringify(parsed.files)}`);
                     console.log(`💭 AI's reason: ${parsed.reason || 'No reason provided'}`);
-                    onProgress?.('files', `AI requesting ${parsed.files.length} files: ${parsed.files.slice(0, 2).join(', ')}${parsed.files.length > 2 ? '...' : ''}`);
+                    
+                    // Show what AI is looking for
+                    const filePreview = parsed.files.slice(0, 3).join(', ');
+                    const moreCount = parsed.files.length > 3 ? ` and ${parsed.files.length - 3} more` : '';
+                    onProgress?.('files', `AI examining: ${filePreview}${moreCount}`);
                     
                     // Clear and set new files to fetch
                     provided.length = 0;
@@ -321,6 +370,7 @@ Your JSON response:`;
                     console.log(`✅ AI READY TO GENERATE!`);
                     console.log(`📄 Content received: ${parsed.content.length} chars`);
                     console.log(`📄 Content preview: ${parsed.content.substring(0, 200)}...`);
+                    onProgress?.('generate', 'AI writing document content...');
                     content = parsed.content;
                     break;
                 } else {
@@ -332,7 +382,11 @@ Your JSON response:`;
             }
 
             if (!content) {
+                console.warn(`⚠️ Reached ${maxIter} iterations without generating content, using fallback`);
+                onProgress?.('generate', 'Finalizing with template content...');
                 content = this.generateFallbackContent(templatePrompt, repositoryInfo, documentName, documentRole);
+            } else {
+                console.log(`✅ Content generation complete: ${content.length} characters`);
             }
 
             onProgress?.('done', 'Complete!');
@@ -497,9 +551,17 @@ Now generate the complete ${documentName} document following these guidelines:`;
             console.log('🚀 Sending request to Gemini AI...');
             
             // Generate content using Gemini
-            const generatedContent = await this.model.generateContent(aiPrompt);
-            const response = await generatedContent.response;
-            let htmlContent = response.text();
+            const res = await fetch(GENERATE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt: aiPrompt, model: this.defaultModel, generationConfig: { maxOutputTokens: 4096 } }),
+            });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err?.error || `Generate failed: ${res.status}`);
+            }
+            const payload = await res.json();
+            let htmlContent = String(payload.text || '');
 
             console.log('✅ AI generation complete');
             console.log('📄 Generated content length:', htmlContent.length);
