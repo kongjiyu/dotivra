@@ -7,6 +7,7 @@ import DocumentSection from '../components/project/DocumentSection';
 import AddDocumentModal from '../components/project/AddDocumentModal';
 import EditProjectModal from '@/components/modal/EditProject';
 import AIGenerationProgressModal from '@/components/modal/AIGenerationProgressModal';
+import ConfirmDeleteDialog from '@/components/modal/ConfirmDeleteDialog';
 import { API_ENDPOINTS } from '../lib/apiConfig';
 import { aiService } from '../services/aiService';
 import type { Document, Template, Project } from '../types';
@@ -37,6 +38,11 @@ const ProjectOverview: React.FC = () => {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // AI Generation Progress Modal State
   const [isGenerating, setIsGenerating] = useState(false);
@@ -188,25 +194,27 @@ const ProjectOverview: React.FC = () => {
     navigate(`/document/${document.id}`);
   };
 
-  const handleDeleteDocument = async (document: Document) => {
+  const handleDeleteDocument = (document: Document) => {
     if (!document.id) {
       console.error('❌ Document ID is missing');
-      alert('Cannot delete document: Document ID is missing');
+      return;
+    }
+    setDocumentToDelete(document);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteDocument = async () => {
+    if (!documentToDelete?.id) {
+      console.error('❌ Document ID is missing');
       return;
     }
 
-    const confirmDelete = window.confirm(
-      `Are you sure you want to delete "${document.DocumentName}"? This action cannot be undone.`
-    );
-    
-    if (!confirmDelete) {
-      return;
-    }
+    setIsDeleting(true);
 
     try {
-      console.log('🗑️ Deleting document:', document.id);
+      console.log('🗑️ Deleting document:', documentToDelete.id);
       
-      const response = await fetch(API_ENDPOINTS.deleteDocument(document.id), {
+      const response = await fetch(API_ENDPOINTS.deleteDocument(documentToDelete.id), {
         method: 'DELETE',
       });
 
@@ -219,13 +227,17 @@ const ProjectOverview: React.FC = () => {
       console.log('✅ Document deleted successfully:', result);
 
       // Update the documents list by removing the deleted document
-      setDocuments(prevDocs => prevDocs.filter(doc => doc.id !== document.id));
+      setDocuments(prevDocs => prevDocs.filter(doc => doc.id !== documentToDelete.id));
       
-      // Show success message
-      alert(`Document "${document.DocumentName}" has been deleted successfully.`);
+      // Close the dialog
+      setDeleteDialogOpen(false);
+      setDocumentToDelete(null);
     } catch (error) {
       console.error('❌ Error deleting document:', error);
+      // Keep the dialog open to show error state
       alert(`Failed to delete document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -479,6 +491,16 @@ const ProjectOverview: React.FC = () => {
         repositoryName={generationRepository}
         steps={generationSteps}
         currentStep={currentGenerationStep}
+      />
+
+      <ConfirmDeleteDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        onConfirm={confirmDeleteDocument}
+        title="Delete Document"
+        description="Are you sure you want to delete this document?"
+        itemName={documentToDelete?.DocumentName}
+        isDeleting={isDeleting}
       />
 
     </div>
