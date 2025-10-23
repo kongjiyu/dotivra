@@ -439,6 +439,7 @@ Option 2 - Ready to generate the document?
     /**
      * Generate document content in sections to handle token limits
      * This method generates the document part by part, allowing for longer documents
+     * Each section gets its own 8192 token budget, enabling unlimited document length
      */
     async generateDocumentInSections(
         user: User,
@@ -449,20 +450,239 @@ Option 2 - Ready to generate the document?
         onProgress?: (stage: string, message?: string) => void
     ): Promise<string> {
         try {
-            console.log('🔄 Falling back to standard iterative generation...');
+            console.log('🔄 Starting TRUE iterative section-by-section generation...');
+            onProgress?.('init', 'Preparing iterative generation...');
+
+            // PHASE 1: Collect repository files using existing iterative method
+            console.log('📚 PHASE 1: Collecting repository files...');
+            onProgress?.('files', 'Collecting repository files...');
             
-            // Use the proven iterative method instead of experimental section generation
-            return await this.generateDocumentFromTemplateAndRepoIterative(
+            const repoContext = await repositoryContextService.getRepositoryContext(
                 user,
-                templatePrompt,
-                repositoryInfo,
-                documentRole,
-                documentName,
-                onProgress
+                repositoryInfo.owner,
+                repositoryInfo.repo
             );
 
+            if (!repoContext) {
+                throw new Error('Failed to fetch repository context');
+            }
+
+            const directoryTree = this.buildDirectoryTree(repoContext.structure);
+
+            // Collect all relevant files first
+            const collectedFiles: { path: string; content: string; language: string }[] = [];
+            const requestedFiles: string[] = [];
+
+            const filePrompt = `${templatePrompt}
+
+---
+
+**YOUR TASK:**
+Analyze this repository to create "${documentName}" for the role: ${documentRole}
+
+**REPOSITORY:**
+${repositoryInfo.fullName}
+
+**STRUCTURE:**
+${directoryTree}
+
+**README:**
+${repoContext.readme?.substring(0, 800) || 'None'}
+
+**INSTRUCTION:**
+Respond with JSON listing the TOP 5-8 most important files needed to create this document.
+Focus on core implementation files, main components, configuration files.
+
+Format: {"files": ["path1", "path2", "path3"]}
+
+Respond with JSON only:`;
+
+            console.log('📋 Asking AI which files to collect...');
+            const fileRes = await fetch(GENERATE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    prompt: filePrompt, 
+                    model: this.defaultModel, 
+                    generationConfig: { maxOutputTokens: 512 } 
+                }),
+            });
+
+            if (fileRes.ok) {
+                const fileData = await fileRes.json();
+                const fileText = String(fileData.text || '');
+                try {
+                    const match = fileText.match(/\{[\s\S]*\}/);
+                    if (match) {
+                        const parsed = JSON.parse(match[0]);
+                        if (parsed.files && Array.isArray(parsed.files)) {
+                            requestedFiles.push(...parsed.files);
+                            console.log(`📂 AI requested ${requestedFiles.length} files:`, requestedFiles);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse file request, will use README only');
+                }
+            }
+
+            // Fetch the requested files
+            if (requestedFiles.length > 0) {
+                onProgress?.('files', `Fetching ${requestedFiles.length} key files...`);
+                for (const path of requestedFiles) {
+                    try {
+                        const file = await repositoryContextService.getFileWithContext(
+                            user,
+                            repositoryInfo.owner,
+                            repositoryInfo.repo,
+                            path
+                        );
+                        if (file?.content) {
+                            collectedFiles.push({
+                                path,
+                                content: file.content.substring(0, 3000), // Limit to 3000 chars per file
+                                language: file.language || 'text'
+                            });
+                            console.log(`✅ Collected: ${path}`);
+                        }
+                    } catch (error) {
+                        console.warn(`⚠️ Could not fetch ${path}`);
+                    }
+                }
+            }
+
+            console.log(`📦 Collected ${collectedFiles.length} files for context`);
+
+            // PHASE 2: Plan document sections
+            console.log('📋 PHASE 2: Planning document sections...');
+            onProgress?.('planning', 'Planning document sections...');
+
+            const planPrompt = `${templatePrompt}
+
+**TASK:** Plan the sections for "${documentName}"
+
+Analyze the template and break it into 4-8 major sections that should be generated separately.
+Each section should be substantial enough to warrant its own generation.
+
+Respond with JSON: {"sections": ["Section 1 Name", "Section 2 Name", ...]}
+
+Respond with JSON only:`;
+
+            const planRes = await fetch(GENERATE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    prompt: planPrompt, 
+                    model: this.defaultModel, 
+                    generationConfig: { maxOutputTokens: 512 } 
+                }),
+            });
+
+            let sections: string[] = [];
+            if (planRes.ok) {
+                const planData = await planRes.json();
+                const planText = String(planData.text || '');
+                try {
+                    const match = planText.match(/\{[\s\S]*\}/);
+                    if (match) {
+                        const parsed = JSON.parse(match[0]);
+                        if (parsed.sections && Array.isArray(parsed.sections)) {
+                            sections = parsed.sections;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse sections, using defaults');
+                }
+            }
+
+            // Fallback sections if planning failed
+            if (sections.length === 0) {
+                sections = ['Introduction', 'Getting Started', 'Core Features', 'Technical Details', 'Conclusion'];
+            }
+
+            console.log(`📋 Planned ${sections.length} sections:`, sections);
+
+            // PHASE 3: Generate each section with full 8192 token budget
+            console.log('✍️ PHASE 3: Generating sections...');
+            const generatedSections: string[] = [];
+            const filesContext = collectedFiles.map(f => 
+                `**${f.path}** (${f.language}):\n\`\`\`${f.language}\n${f.content}\n\`\`\``
+            ).join('\n\n');
+
+            for (let i = 0; i < sections.length; i++) {
+                const sectionName = sections[i];
+                onProgress?.('generate', `Generating ${i + 1}/${sections.length}: ${sectionName}`);
+                console.log(`\n📝 Generating section ${i + 1}/${sections.length}: ${sectionName}`);
+
+                const sectionPrompt = `${templatePrompt}
+
+---
+
+**REPOSITORY:** ${repositoryInfo.fullName}
+**DOCUMENT:** ${documentName}
+**ROLE:** ${documentRole}
+
+**KEY FILES:**
+${filesContext}
+
+**YOUR TASK:**
+Generate ONLY the "${sectionName}" section of the document.
+
+**CONTEXT - ALL SECTIONS:**
+${sections.map((s, idx) => `${idx + 1}. ${s}${idx < i ? ' ✅' : idx === i ? ' 👉 CURRENT' : ' ⏳'}`).join('\n')}
+
+**PREVIOUSLY GENERATED:**
+${generatedSections.length > 0 ? generatedSections.map((content, idx) => `[${sections[idx]}]: ${content.substring(0, 200)}...`).join('\n') : 'None - this is the first section'}
+
+**REQUIREMENTS:**
+- Generate ONLY the "${sectionName}" section
+- Follow the template's HTML format (<h2>, <h3>, <p>, <ul>, <code>, <pre>, etc.)
+- Be comprehensive and detailed for THIS section
+- Include code examples, explanations, and specifics from the repository files
+- Use your FULL 8192 token budget for quality content
+- DO NOT regenerate previous sections
+- Respond with ONLY the HTML content for this section (no JSON, no explanations)
+
+Generate the "${sectionName}" section now:`;
+
+                const sectionRes = await fetch(GENERATE_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        prompt: sectionPrompt, 
+                        model: this.defaultModel, 
+                        generationConfig: { maxOutputTokens: 8192 } 
+                    }),
+                });
+
+                if (!sectionRes.ok) {
+                    console.warn(`⚠️ Failed to generate section: ${sectionName}, skipping...`);
+                    continue;
+                }
+
+                const sectionData = await sectionRes.json();
+                const sectionContent = String(sectionData.text || '');
+                
+                // Clean the section content
+                const cleaned = this.cleanHTMLContent(sectionContent);
+                generatedSections.push(cleaned);
+                
+                console.log(`✅ Section ${i + 1} generated: ${cleaned.length} characters`);
+            }
+
+            // PHASE 4: Combine all sections
+            console.log('🔗 PHASE 4: Combining sections...');
+            onProgress?.('finalize', 'Combining all sections...');
+
+            const finalDocument = `<h1>${documentName}</h1>
+${generatedSections.join('\n\n')}`;
+
+            console.log(`✅ COMPLETE! Total document: ${finalDocument.length} characters`);
+            onProgress?.('done', 'Document generation complete!');
+
+            return finalDocument;
+
         } catch (error) {
-            console.error('❌ Generation error:', error);
+            console.error('❌ Section generation error:', error);
             onProgress?.('error', error instanceof Error ? error.message : 'Failed');
             throw error;
         }
