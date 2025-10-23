@@ -242,7 +242,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
                 <tr
                   key={project.id || `${project.ProjectName}-${index}`}
                   className="hover:bg-blue-50/40 cursor-pointer transition-colors"
-                  onClick={() => onProjectClick(String(project.id || project.Project_Id))}
+                  onClick={() => onProjectClick(String(project.Project_Id || project.id))}
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -297,7 +297,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
           return (
             <button
               key={project.id || `${project.ProjectName}-${index}`}
-              onClick={() => onProjectClick(String(project.id || project.Project_Id))}
+              onClick={() => onProjectClick(String(project.Project_Id || project.id))}
               className="relative text-left bg-white border border-gray-200 rounded-2xl shadow-sm hover:border-blue-200 hover:shadow-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 flex flex-col"
             >
               <div className="h-32 bg-gray-50 border-b border-gray-100 flex items-center justify-center">
