@@ -1,7 +1,7 @@
 // src/pages/Profile.tsx - Main profile page with real user data
 import React from 'react';
 import Header from '../components/header/Header';
-import { ProfileInfoCard, DangerZoneCard } from '../components/profile';
+import { ProfileInfoCard, DangerZoneCard, APIKeyCard } from '../components/profile';
 import GitHubConnectionCard from '../components/profile/GitHubConnectionCard';
 import { useAuth } from '../context/AuthContext';
 import { getUserDisplayInfo } from '../utils/user';
@@ -100,6 +100,9 @@ const Profile: React.FC = () => {
         <GitHubConnectionCard onConnectionChange={(connected) => {
           console.log('GitHub connection status changed:', connected);
         }} />
+
+        {/* API Key Settings */}
+        <APIKeyCard />
 
         {/* Danger Zone */}
         <DangerZoneCard onDeleteAccount={handleDeleteAccount} />
