@@ -177,12 +177,34 @@ const AllTemplate: React.FC = () => {
         return;
       }
 
-      // Try AI generation if GitHub repo is available
+      // Determine repository URL - either from modal selection or from existing project
+      let repositoryUrl = selectedRepo;
+      
+      // If using existing project and no repo selected in modal, fetch project's GitHub repo
+      if (!repositoryUrl && finalProjectId && projectId) {
+        try {
+          console.log('🔍 Fetching GitHub repo for existing project:', finalProjectId);
+          const projectResponse = await fetch(`/api/projects/${finalProjectId}`, {
+            headers: {
+              'Authorization': `Bearer ${idToken}`
+            }
+          });
+          if (projectResponse.ok) {
+            const projectData = await projectResponse.json();
+            const project = projectData.success ? projectData.project : projectData;
+            repositoryUrl = project.GitHubRepo || project.githubLink || null;
+            console.log('📦 Found repository for existing project:', repositoryUrl);
+          }
+        } catch (error) {
+          console.warn('⚠️ Could not fetch project GitHub repo:', error);
+        }
+      }
+
+      // Generate AI content if GitHub repository is available
       let content = template.TemplatePrompt || '';
-      const repositoryUrl = selectedRepo;
 
       if (repositoryUrl && user) {
-        const repoMatch = repositoryUrl.match(/github\.com\/([^\/]+)\/([^\/\s]+)/);
+        const repoMatch = repositoryUrl.match(/(?:https?:\/\/github\.com\/)?([^\/]+)\/([^\/\s]+)/);
         
         if (repoMatch) {
           const [, owner, repo] = repoMatch;
@@ -264,6 +286,7 @@ const AllTemplate: React.FC = () => {
           
           try {
             // Generate content using iterative AI method
+            console.log('🚀 Starting iterative AI generation...');
             content = await aiService.generateDocumentFromTemplateAndRepoIterative(
               user,
               template.TemplatePrompt || '',
@@ -272,12 +295,16 @@ const AllTemplate: React.FC = () => {
               documentName,
               handleProgress
             );
+            console.log('✅ AI generation completed, content length:', content.length);
+            console.log('📄 Generated content preview:', content.substring(0, 300));
             
             // Finalize
             handleProgress('done', 'Document ready!');
             await new Promise(resolve => setTimeout(resolve, 500));
+            
+            console.log('✅ All steps completed, proceeding to create document');
           } catch (aiError) {
-            console.error('AI generation failed, using template:', aiError);
+            console.error('❌ AI generation failed:', aiError);
             
             // Update steps to show error
             setGenerationSteps(prev => prev.map(step => 
@@ -289,6 +316,12 @@ const AllTemplate: React.FC = () => {
             // Wait a bit to show error
             await new Promise(resolve => setTimeout(resolve, 1500));
           }
+        } else {
+          console.warn('⚠️ Could not parse repository URL:', repositoryUrl);
+        }
+      } else {
+        if (!repositoryUrl) {
+          console.log('ℹ️ No repository URL available, using template prompt as content');
         }
       }
 
