@@ -449,156 +449,20 @@ Option 2 - Ready to generate the document?
         onProgress?: (stage: string, message?: string) => void
     ): Promise<string> {
         try {
-            console.log('🔄 Starting section-by-section generation...');
-            onProgress?.('analyze', 'Analyzing repository structure...');
-
-            // Get repository context
-            const repoContext = await repositoryContextService.getRepositoryContext(
+            console.log('🔄 Falling back to standard iterative generation...');
+            
+            // Use the proven iterative method instead of experimental section generation
+            return await this.generateDocumentFromTemplateAndRepoIterative(
                 user,
-                repositoryInfo.owner,
-                repositoryInfo.repo
+                templatePrompt,
+                repositoryInfo,
+                documentRole,
+                documentName,
+                onProgress
             );
-            
-            if (!repoContext) {
-                throw new Error('Failed to fetch repository context');
-            }
-
-            const structure = repoContext.structure || [];
-
-            // Step 1: Ask AI what sections to generate based on template
-            onProgress?.('planning', 'Planning document sections...');
-            const planningPrompt = `${templatePrompt}
-
-**REPOSITORY CONTEXT:**
-${this.buildDirectoryTree(structure || [])}
-
-**YOUR TASK:**
-Analyze the template and repository to plan the document sections.
-Respond with JSON listing the major sections to generate:
-{"sections": ["Introduction", "Installation", "Usage Guide", "API Reference", "Troubleshooting"]}
-
-Focus on the main sections defined in the template. Keep it to 5-10 major sections.
-Respond with JSON only:`;
-
-            const planRes = await fetch(GENERATE_API, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    prompt: planningPrompt, 
-                    model: this.defaultModel, 
-                    generationConfig: { maxOutputTokens: 1024 } 
-                }),
-            });
-
-            if (!planRes.ok) throw new Error('Failed to plan sections');
-            const planData = await planRes.json();
-            const planText = String(planData.text || '');
-            
-            let sections: string[] = [];
-            try {
-                const planMatch = planText.match(/\{[\s\S]*\}/);
-                if (planMatch) {
-                    const planParsed = JSON.parse(planMatch[0]);
-                    sections = planParsed.sections || [];
-                }
-            } catch (e) {
-                console.warn('Failed to parse section plan, using default sections');
-                sections = ['Introduction', 'Main Content', 'Conclusion'];
-            }
-
-            console.log(`📋 Planned sections:`, sections);
-
-            // Step 2: Use existing iterative approach for file collection context
-            onProgress?.('files', 'Analyzing repository files...');
-            // Note: We'll let each section generation request files as needed
-
-            // Step 3: Generate each section separately
-            const generatedSections: { title: string; content: string }[] = [];
-            
-            for (let i = 0; i < sections.length; i++) {
-                const sectionTitle = sections[i];
-                onProgress?.('generate', `Generating section ${i + 1}/${sections.length}: ${sectionTitle}`);
-                console.log(`📝 Generating section: ${sectionTitle}`);
-
-                const sectionPrompt = `${templatePrompt}
-
-**FULL DOCUMENT SECTIONS TO GENERATE:**
-${sections.map((s, idx) => `${idx + 1}. ${s}${idx < i ? ' ✅ (already generated)' : idx === i ? ' 👉 (generate this now)' : ' ⏳ (will generate later)'}`).join('\n')}
-
-**YOUR CURRENT TASK:**
-Generate ONLY the "${sectionTitle}" section of the document.
-
-**PREVIOUSLY GENERATED SECTIONS:**
-${generatedSections.length > 0 ? generatedSections.map(s => `[${s.title}]\n${s.content.substring(0, 500)}...`).join('\n\n') : 'None yet - this is the first section'}
-
-**IMPORTANT:**
-- Generate ONLY the "${sectionTitle}" section following the template format
-- DO NOT regenerate previous sections or generate future sections
-- Include proper HTML tags for this section (<h2>, <h3>, <p>, <ul>, <code>, etc.)
-- Follow the template's specific requirements for this section
-- Make it comprehensive and detailed
-- Respond with JSON: {"content": "HTML_CONTENT_FOR_THIS_SECTION_ONLY"}
-
-Respond with JSON only:`;
-
-                const sectionRes = await fetch(GENERATE_API, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        prompt: sectionPrompt, 
-                        model: this.defaultModel, 
-                        generationConfig: { maxOutputTokens: 8192 } 
-                    }),
-                });
-
-                if (!sectionRes.ok) {
-                    console.warn(`Failed to generate section: ${sectionTitle}, skipping...`);
-                    continue;
-                }
-
-                const sectionData = await sectionRes.json();
-                const sectionText = String(sectionData.text || '');
-                
-                try {
-                    const sectionMatch = sectionText.match(/\{[\s\S]*\}/);
-                    if (sectionMatch) {
-                        const sectionParsed = JSON.parse(sectionMatch[0]);
-                        const sectionContent = sectionParsed.content || '';
-                        generatedSections.push({ title: sectionTitle, content: sectionContent });
-                        console.log(`✅ Generated section: ${sectionTitle} (${sectionContent.length} chars)`);
-                    } else {
-                        console.warn(`No JSON found in section response for: ${sectionTitle}`);
-                        generatedSections.push({ title: sectionTitle, content: sectionText });
-                    }
-                } catch (e) {
-                    console.warn(`Failed to parse section: ${sectionTitle}`, e);
-                    generatedSections.push({ title: sectionTitle, content: sectionText });
-                }
-            }
-
-            // Step 4: Combine all sections into final document
-            onProgress?.('finalize', 'Combining sections into final document...');
-            console.log(`🔗 Combining ${generatedSections.length} sections...`);
-
-            const combinedContent = `<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${documentName}</title>
-</head>
-<body>
-    <h1>${documentName}</h1>
-    ${generatedSections.map(s => s.content).join('\n\n')}
-</body>
-</html>`;
-
-            onProgress?.('done', 'Document generation complete!');
-            console.log(`✅ Final document: ${combinedContent.length} characters`);
-            
-            return this.cleanHTMLContent(combinedContent);
 
         } catch (error) {
-            console.error('❌ Section generation error:', error);
+            console.error('❌ Generation error:', error);
             onProgress?.('error', error instanceof Error ? error.message : 'Failed');
             throw error;
         }
