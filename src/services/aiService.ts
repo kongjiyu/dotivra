@@ -280,6 +280,17 @@ Format: {"needFiles": true, "files": ["path/to/file1", "path/to/file2"], "reason
 - DO NOT add explanatory text like "Here is the document:" - just provide the JSON with HTML content
 - DO NOT deviate from the template's required format
 
+**CRITICAL - CREATE COMPREHENSIVE, DETAILED DOCUMENTATION:**
+- Make the document AS DETAILED AND COMPLETE AS POSSIBLE
+- Include ALL code examples, formulas, algorithms, and technical details you find
+- Document EVERY function, method, class, component with full explanations
+- Show actual code snippets with proper syntax highlighting using <code> and <pre> tags
+- Include implementation details, not just descriptions
+- Provide step-by-step instructions for complex processes
+- Add comprehensive examples for each feature
+- The more detailed and thorough, the better - aim for maximum completeness
+- A technical manual should be comprehensive enough for developers to understand and use the code
+
 **Start now - which files do you need? Respond with JSON only:**`;
 
             let iteration = 0;
@@ -335,10 +346,21 @@ Option 2 - Ready to generate the document?
 **REQUIREMENTS FOR THE DOCUMENT:**
 - Follow the template's HTML structure EXACTLY as specified
 - Include ALL required sections from the template
-- Use proper HTML tags as shown in the template (<html>, <body>, <h1>, <h2>, <h3>, <p>, <ul>, <li>, etc.)
+- Use proper HTML tags as shown in the template (<html>, <body>, <h1>, <h2>, <h3>, <p>, <ul>, <li>, <code>, <pre>, etc.)
 - DO NOT add explanatory text - just provide the JSON with HTML content
 - The content must be based on the repository files you've examined
 - Example format: {"needFiles": false, "content": "<html><body><h1>Project User Manual</h1>...</body></html>"}
+
+**MAKE THE DOCUMENT COMPREHENSIVE AND DETAILED:**
+- Extract and include ALL formulas, calculations, and algorithms from the code
+- Show complete code examples with proper formatting using <pre><code> tags
+- Document every function/method with parameters, return values, and examples
+- Include implementation details - HOW things work, not just WHAT they do
+- Provide detailed step-by-step instructions for complex operations
+- Add multiple examples for each feature to illustrate different use cases
+- Show actual code snippets from the repository with explanations
+- Make it thorough enough that another developer could understand and maintain the code
+- Aim for maximum detail and completeness - longer is better for technical documentation
 
 **Respond with JSON only:**`;
                     console.log('📋 Sending files to AI and asking for next step...');
