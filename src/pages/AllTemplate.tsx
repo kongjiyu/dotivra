@@ -160,16 +160,20 @@ const AllTemplate: React.FC = () => {
             'Authorization': `Bearer ${idToken}`
           },
           body: JSON.stringify({
-            projectName: newProjectName,
+            name: newProjectName,
             description: newProjectDescription || '',
-            githubRepo: selectedRepo || ''
+            githubLink: selectedRepo || '',
+            userId: user.uid
           })
         });
 
-        if (!createProjectRes.ok) throw new Error('Failed to create project');
+        if (!createProjectRes.ok) {
+          const errorData = await createProjectRes.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to create project');
+        }
         
         const newProject = await createProjectRes.json();
-        finalProjectId = newProject.projectId;
+        finalProjectId = newProject.project?.Project_Id || newProject.projectId;
       }
 
       if (!finalProjectId) {
