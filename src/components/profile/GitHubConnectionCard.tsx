@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../services/authService';
 import GitHubService, { type GitHubUser } from '../../services/gitHubService';
+import { showSuccess } from '@/utils/sweetAlert';
 
 interface GitHubConnectionCardProps {
   onConnectionChange?: (connected: boolean) => void;
@@ -123,7 +124,7 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
       
       if (validation.valid) {
         setError(null);
-        alert('GitHub connection test successful!');
+        showSuccess('Connection Test Successful!', 'Your GitHub connection is working properly.');
       } else {
         setError(validation.error || 'GitHub connection test failed');
       }

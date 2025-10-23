@@ -3,6 +3,7 @@ import { X, FolderPlus, Plus } from 'lucide-react';
 import { templates as allTemplates } from '../../utils/mockData';
 import { useAuth } from '../../context/AuthContext';
 import { githubRepoService, type GitHubRepository as ServiceGitHubRepository } from '../../services/githubRepoService';
+import { showWarning } from '@/utils/sweetAlert';
 import type { Project, Template as FullTemplate } from '../../types';
 
 interface Props {
@@ -93,11 +94,11 @@ const TemplateModal: React.FC<Props> = ({ id, onClose, onCreateDocument }) => {
   const handleNext = () => {
     if (step === 'project-selection') {
       if (projectOption === 'existing' && !selectedProjectId) {
-        alert('Please select a project');
+        showWarning('Project Required', 'Please select a project');
         return;
       }
       if (projectOption === 'new' && !newProjectName.trim()) {
-        alert('Please enter a project name');
+        showWarning('Project Name Required', 'Please enter a project name');
         return;
       }
       setStep('document-details');

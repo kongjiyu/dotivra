@@ -32,6 +32,25 @@ const formatDateOnly = (value: any): string => {
   });
 };
 
+/**
+ * Format GitHub repo URL to ensure it's a valid GitHub link
+ * Handles various input formats:
+ * - Full URL: https://github.com/user/repo
+ * - Short format: user/repo or user/repo.github.io
+ */
+const formatGitHubUrl = (repoUrl: string): string => {
+  if (!repoUrl) return '';
+  
+  // Already a full GitHub URL
+  if (repoUrl.startsWith('http://github.com/') || repoUrl.startsWith('https://github.com/')) {
+    return repoUrl;
+  }
+  
+  // If it doesn't start with http, assume it's a username/repo format
+  // Keep the repo name as-is (including .github.io if it's part of the actual repo name)
+  return `https://github.com/${repoUrl}`;
+};
+
 const getInitials = (text: string): string => {
   if (!text) return 'PR';
   const words = text.trim().split(/\s+/);
@@ -242,7 +261,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
                 <tr
                   key={project.id || `${project.ProjectName}-${index}`}
                   className="hover:bg-blue-50/40 cursor-pointer transition-colors"
-                  onClick={() => onProjectClick(String(project.id || project.Project_Id))}
+                  onClick={() => onProjectClick(String(project.Project_Id || project.id))}
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -265,13 +284,16 @@ const ProjectList: React.FC<ProjectListProps> = ({
                   <td className="px-6 py-4 text-gray-500">
                     {project.GitHubRepo ? (
                       <a
-                        href={project.GitHubRepo}
+                        href={formatGitHubUrl(project.GitHubRepo)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                        className="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {project.GitHubRepo.replace(/^https?:\/\/(www\.)?github\.com\//, '')}
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
                       </a>
                     ) : (
                       '—'
@@ -297,7 +319,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
           return (
             <button
               key={project.id || `${project.ProjectName}-${index}`}
-              onClick={() => onProjectClick(String(project.id || project.Project_Id))}
+              onClick={() => onProjectClick(String(project.Project_Id || project.id))}
               className="relative text-left bg-white border border-gray-200 rounded-2xl shadow-sm hover:border-blue-200 hover:shadow-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 flex flex-col"
             >
               <div className="h-32 bg-gray-50 border-b border-gray-100 flex items-center justify-center">

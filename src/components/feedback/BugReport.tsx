@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { Upload, X, AlertTriangle } from 'lucide-react';
+import { showWarning } from '@/utils/sweetAlert';
 
 interface BugReportData {
   title: string;
@@ -34,7 +35,7 @@ const BugReport: React.FC<BugReportProps> = ({ data, onChange }) => {
     if (file && file.type.startsWith('image/')) {
       onChange({ screenshot: file });
     } else {
-      alert('Please upload an image file');
+      showWarning('Invalid File', 'Please upload an image file');
     }
   };
 

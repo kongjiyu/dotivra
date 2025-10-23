@@ -1402,45 +1402,92 @@ app.get('/api/templates', async (req, res) => {
 });
 
 // Create new document
+// Create document endpoint - supports both old and new field naming conventions
 app.post('/api/documents', async (req, res) => {
   try {
-    const { title, content, projectId, userId, templateId, documentCategory } = req.body;
+    console.log('🔥 POST /api/documents received:', req.body);
     
-    if (!title || !projectId || !userId) {
-      return res.status(400).json({ error: 'Title, projectId, and userId are required' });
+    // Support both old (lowercase) and new (capital) field names for backwards compatibility
+    const { 
+      DocumentName, 
+      title,
+      DocumentType,
+      DocumentCategory,
+      documentCategory,
+      Project_Id,
+      projectId,
+      Template_Id,
+      templateId,
+      User_Id,
+      userId,
+      Content,
+      content,
+      IsDraft
+    } = req.body;
+    
+    // Use new field names with fallback to old names
+    const documentName = DocumentName || title;
+    const documentType = DocumentType || 'user-manual';
+    const category = DocumentCategory || documentCategory || 'General';
+    const projectIdValue = Project_Id || projectId;
+    const userIdValue = User_Id || userId;
+    const templateIdValue = Template_Id || templateId || null;
+    const contentValue = Content || content || '<p>Start writing your document...</p>';
+    const isDraft = IsDraft !== undefined ? IsDraft : true;
+    
+    // Validate required fields
+    if (!documentName || !projectIdValue || !userIdValue) {
+      console.log('❌ Document validation failed: missing required fields');
+      return res.status(400).json({ 
+        error: 'DocumentName, Project_Id, and User_Id are required',
+        received: { 
+          DocumentName: !!documentName,
+          Project_Id: !!projectIdValue,
+          User_Id: !!userIdValue
+        }
+      });
     }
+
+    console.log('✅ Document validation passed, creating document...');
     
     const docData = {
-      Title: title,
-      DocumentName: title, // Add DocumentName field for display
-      Content: content || '<p>Start writing your document...</p>',
-      ProjectId: projectId,
-      Project_Id: projectId, // Add Project_Id for compatibility
-      UserId: userId,
-      TemplateId: templateId || null,
-      DocumentCategory: documentCategory || 'General',
-      CreatedAt: admin.firestore.Timestamp.now(),
-      UpdatedAt: admin.firestore.Timestamp.now()
+      DocumentName: documentName,
+      DocumentType: documentType,
+      DocumentCategory: category,
+      Project_Id: projectIdValue,
+      Template_Id: templateIdValue,
+      User_Id: userIdValue,
+      Content: contentValue,
+      IsDraft: isDraft,
+      EditedBy: userIdValue,
+      Created_Time: admin.firestore.Timestamp.now(),
+      Updated_Time: admin.firestore.Timestamp.now(),
+      Hash: null
     };
+    
+    console.log('Creating document in Firestore:', docData);
     
     const docRef = await db.collection('Documents').add(docData);
     
+    console.log('✅ Document created with Firestore ID:', docRef.id);
+    
     const responseData = {
       id: docRef.id,
-      documentId: docRef.id, // Add documentId for consistency
       ...docData,
-      CreatedAt: docData.CreatedAt.toDate().toISOString(),
-      UpdatedAt: docData.UpdatedAt.toDate().toISOString()
+      Created_Time: docData.Created_Time.toDate().toISOString(),
+      Updated_Time: docData.Updated_Time.toDate().toISOString()
     };
     
     res.status(201).json({
       success: true,
-      documentId: docRef.id,
       document: responseData
     });
   } catch (error) {
     logger.error('Error creating document:', error);
-    res.status(500).json({ error: 'Failed to create document' });
+    res.status(500).json({ 
+      error: 'Failed to create document',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
