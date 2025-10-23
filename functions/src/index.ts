@@ -1402,6 +1402,7 @@ app.get('/api/templates', async (req, res) => {
 });
 
 // Create new document
+// Create document endpoint - supports both old and new field naming conventions
 app.post('/api/documents', async (req, res) => {
   try {
     console.log('🔥 POST /api/documents received:', req.body);
