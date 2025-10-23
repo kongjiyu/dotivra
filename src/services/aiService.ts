@@ -249,31 +249,38 @@ Generate a helpful response that leverages the repository knowledge:`;
 
             // Step 2: Initial AI request
             onProgress?.('analysis', 'AI analyzing repository...');
-            const initialPrompt = `You are creating a ${documentRole} document.
+            const initialPrompt = `${templatePrompt}
 
-**Template:** ${templatePrompt}
-**Document:** ${documentName}
-**Repository:** ${repositoryInfo.fullName}
-**Structure:**
+---
+
+**YOUR TASK:**
+Create a document titled "${documentName}" for the role: ${documentRole}
+
+**REPOSITORY INFORMATION:**
+- Repository: ${repositoryInfo.fullName}
+- Directory Structure:
 ${directoryTree}
-**README:**
+- README Preview:
 ${repoContext.readme?.substring(0, 1000) || 'None'}
 
-**CRITICAL INSTRUCTIONS:**
-1. FIRST: Respond with JSON listing files you need:
-   {"needFiles": true, "files": ["path1", "path2"], "reason": "why"}
-2. AFTER receiving files: Either request more OR generate the document.
+**WORKFLOW - FOLLOW THESE STEPS:**
 
-**WHEN GENERATING THE DOCUMENT:**
-- You MUST respond with VALID JSON containing the HTML content
-- Format: {"needFiles": false, "content": "<h1>Title</h1><p>Your HTML content here</p>"}
-- The "content" field MUST contain properly formatted HTML with tags like <h1>, <h2>, <p>, <ul>, <li>, <code>, etc.
-- DO NOT write descriptive text like "Based on the provided files..."
-- DO NOT write plain text - ONLY HTML tags with content inside them
-- Follow the template's HTML structure requirements exactly
-- Example of CORRECT format: {"needFiles": false, "content": "<h1>${documentName}</h1><h2>Overview</h2><p>This project is a...</p>"}
+**STEP 1 (Current Step):** Analyze the repository structure and README above. Then respond with JSON listing the specific files you need to examine to create the document according to the template requirements:
+Format: {"needFiles": true, "files": ["path/to/file1", "path/to/file2"], "reason": "brief explanation of why you need these files"}
 
-Start - which files do you need? JSON only:`;
+**STEP 2 (After receiving files):** You will receive the content of the files you requested. Review them and either:
+- Request MORE files if needed: {"needFiles": true, "files": ["path1", "path2"], "reason": "why"}
+- OR generate the final document: {"needFiles": false, "content": "YOUR_HTML_CONTENT"}
+
+**WHEN GENERATING THE FINAL DOCUMENT:**
+- STRICTLY FOLLOW the template format and structure provided at the top of this prompt
+- You MUST respond with VALID JSON: {"needFiles": false, "content": "HTML_CONTENT_HERE"}
+- The "content" field MUST be a string containing complete HTML as specified in the template
+- Follow ALL formatting requirements from the template (HTML tags, structure, sections, etc.)
+- DO NOT add explanatory text like "Here is the document:" - just provide the JSON with HTML content
+- DO NOT deviate from the template's required format
+
+**Start now - which files do you need? Respond with JSON only:**`;
 
             let iteration = 0;
             const maxIter = 10; // Increased from 5 to 10 iterations
@@ -305,30 +312,35 @@ Start - which files do you need? JSON only:`;
                     // Update progress with file count
                     onProgress?.('files', `Processing ${provided.length} files from repository...`);
                     
-                    prompt = `You previously requested these files. Here they are:
+                    prompt = `**REMINDER: Follow the template format provided in the initial prompt**
+
+You requested these files from the repository. Here they are:
 
 ${fileContents}
 
-**IMPORTANT NOTES:**
-- Files marked with ❌ NOT FOUND do not exist in the repository
-- Do NOT request files that were marked as NOT FOUND again
-- Work with the files that were successfully fetched (marked with ✅)
-- If you have enough information, generate the document now
+**CRITICAL INSTRUCTIONS:**
+- Files marked with ❌ NOT FOUND do not exist - DO NOT request them again
+- Work with successfully fetched files (marked with ✅)
+- You must create the document following the EXACT template format from the beginning of our conversation
+- The template specifies the required HTML structure, sections, and format
 
-**WHEN YOU GENERATE THE DOCUMENT:**
-- You MUST return VALID JSON with this exact structure: {"needFiles": false, "content": "YOUR_HTML_HERE"}
-- The "content" field MUST be a string containing HTML markup
-- Use proper HTML tags: <h1>, <h2>, <h3>, <p>, <ul>, <li>, <ol>, <code>, <pre>, <strong>, <em>, etc.
-- DO NOT write plain text or descriptions like "Based on the files..."
-- DO NOT write "Here is the HTML:" - just put the HTML directly in the content field
-- Example CORRECT: {"needFiles": false, "content": "<h1>User Manual</h1><h2>Installation</h2><p>To install this project...</p>"}
-- Example WRONG: {"needFiles": false, "content": "Based on the provided files, this is a web application..."} ❌
+**YOUR NEXT STEP:**
 
-Now respond with JSON:
-- If you need MORE files (that exist): {"needFiles": true, "files": ["path1", "path2"], "reason": "why"}
-- If you're ready to generate: {"needFiles": false, "content": "<h1>Title</h1><p>Your HTML content here</p>"}
+Option 1 - Need more files?
+{"needFiles": true, "files": ["path/to/file"], "reason": "why you need it"}
 
-Your JSON response:`;
+Option 2 - Ready to generate the document?
+{"needFiles": false, "content": "COMPLETE_HTML_CONTENT"}
+
+**REQUIREMENTS FOR THE DOCUMENT:**
+- Follow the template's HTML structure EXACTLY as specified
+- Include ALL required sections from the template
+- Use proper HTML tags as shown in the template (<html>, <body>, <h1>, <h2>, <h3>, <p>, <ul>, <li>, etc.)
+- DO NOT add explanatory text - just provide the JSON with HTML content
+- The content must be based on the repository files you've examined
+- Example format: {"needFiles": false, "content": "<html><body><h1>Project User Manual</h1>...</body></html>"}
+
+**Respond with JSON only:**`;
                     console.log('📋 Sending files to AI and asking for next step...');
                 }
 
