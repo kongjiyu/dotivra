@@ -3,14 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import Header from '../components/header/Header';
 import { useAuth } from '../context/AuthContext';
 import TemplateCard from '../components/allTemplate/TemplateCard';
-import TemplateModal from '../components/allTemplate/TemplateModal';
+import AddDocumentFromTemplate from '../components/modal/addDocumentFromTemplate';
 import AIGenerationProgressModal from '../components/modal/AIGenerationProgressModal';
 import { getUserDisplayInfo } from '../utils/user';
 import { FileText } from 'lucide-react';
-import type { LegacyTemplate } from '../types';
-import type { Template } from '../../firestoreService';
+import type { LegacyTemplate, Template } from '../types';
 import { useFeedback } from '../components/AppLayout';
 import { showError } from '@/utils/sweetAlert';
+import { aiService } from '../services/aiService';
+
+interface GenerationStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'in-progress' | 'completed' | 'error';
+  details?: string;
+}
 
 const AllTemplate: React.FC = () => {
   const { user, userProfile } = useAuth();
@@ -19,7 +26,7 @@ const AllTemplate: React.FC = () => {
   const { openFeedbackModal } = useFeedback();
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'developer' | 'user'>('all');
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +109,19 @@ const AllTemplate: React.FC = () => {
 
   // Handle template selection
   const handleTemplateSelect = (id: number) => {
-    setSelected(id);
+    // Find the actual template from the templates array
+    const template = templates[id];
+    if (template) {
+      // Convert to Template type that the modal expects
+      const fullTemplate: Template = {
+        Template_Id: template.Template_Id || String(id),
+        TemplateName: template.TemplateName || '',
+        Description: template.Description || template['Description '] || '',
+        TemplatePrompt: template.TemplatePrompt || '',
+        Category: template.Category || 'general'
+      };
+      setSelectedTemplate(fullTemplate);
+    }
   };
 
   // Handle document creation
@@ -422,14 +441,13 @@ const AllTemplate: React.FC = () => {
         )}
       </main>
 
-      {/* Template Modal */}
-      {selected !== null && (
-        <TemplateModal 
-          id={selected} 
-          onClose={() => setSelected(null)}
-          onCreateDocument={handleCreateDocument}
-        />
-      )}
+      {/* Template Modal - Using same modal as Dashboard for consistency */}
+      <AddDocumentFromTemplate
+        isOpen={selectedTemplate !== null}
+        template={selectedTemplate}
+        onClose={() => setSelectedTemplate(null)}
+        onCreateDocument={handleCreateDocument}
+      />
 
       {/* AI Generation Progress Modal */}
       <AIGenerationProgressModal
