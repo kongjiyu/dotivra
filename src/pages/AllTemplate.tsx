@@ -10,6 +10,7 @@ import { FileText } from 'lucide-react';
 import type { LegacyTemplate } from '../types';
 import type { Template } from '../../firestoreService';
 import { useFeedback } from '../components/AppLayout';
+import { showError } from '@/utils/sweetAlert';
 
 const AllTemplate: React.FC = () => {
   const { user, userProfile } = useAuth();
@@ -153,7 +154,7 @@ const AllTemplate: React.FC = () => {
       }
 
       if (!finalProjectId) {
-        alert('Project ID is required');
+        showError('Project Required', 'Project ID is required to create a document');
         return;
       }
 
@@ -319,7 +320,10 @@ const AllTemplate: React.FC = () => {
       });
     } catch (error) {
       console.error('Error creating document:', error);
-      alert(error instanceof Error ? error.message : 'Failed to create document');
+      showError(
+        'Failed to Create Document',
+        error instanceof Error ? error.message : 'Failed to create document'
+      );
       setIsGenerating(false);
     }
   };

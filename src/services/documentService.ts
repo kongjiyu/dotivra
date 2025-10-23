@@ -175,16 +175,23 @@ export const showNotification = async (message: string, type: 'success' | 'error
     const { showToast } = await import('@/utils/notifications');
     showToast(message, { type, duration: type === 'error' ? 6000 : 4000 });
   } catch (error) {
-    // Fallback to browser notification or alert if toast system fails
-    console.warn('Toast system not available, falling back to alert:', error);
+    // Fallback to SweetAlert2 if toast system fails
+    console.warn('Toast system not available, falling back to SweetAlert2:', error);
     
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification(`Dotivra - ${type}`, {
-        body: message,
-        icon: '/vite.svg'
-      });
-    } else {
-      alert(`${type.toUpperCase()}: ${message}`);
+    const { showSuccess, showError, showInfo, showWarning } = await import('@/utils/sweetAlert');
+    
+    switch (type) {
+      case 'success':
+        showSuccess('Success', message);
+        break;
+      case 'error':
+        showError('Error', message);
+        break;
+      case 'warning':
+        showWarning('Warning', message);
+        break;
+      default:
+        showInfo('Info', message);
     }
   }
 };

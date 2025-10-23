@@ -77,6 +77,7 @@
     "react-dom": "^19.1.1",
     "react-router-dom": "^7.8.2",
     "simple-spellchecker": "^1.0.2",
+    "sweetalert2": "^11.26.3",
     "tailwind-merge": "^3.3.1",
     "tailwindcss": "^4.1.12",
     "ws": "^8.18.3"

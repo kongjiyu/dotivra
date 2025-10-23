@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FolderOpen, Upload } from "lucide-react";
+import { showError } from "@/utils/sweetAlert";
 
 interface ImportModalProps {
     onImport: (content: string, title: string) => void;
@@ -33,7 +34,10 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
         const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
 
         if (!allowedExtensions.includes(fileExtension)) {
-            alert('Please select a Markdown (.md) or Mermaid diagram (.mmd, .mermaid) file');
+            showError(
+                'Invalid File Type',
+                'Please select a Markdown (.md) or Mermaid diagram (.mmd, .mermaid) file'
+            );
             return;
         }
 
@@ -82,7 +86,7 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
                     }
                 } catch (error) {
                     console.error('Error processing file:', error);
-                    alert('Failed to process file. Please try again.');
+                    showError('Processing Failed', 'Failed to process file. Please try again.');
                 } finally {
                     setIsImporting(false);
                 }
@@ -91,7 +95,7 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
             reader.readAsText(selectedFile);
         } catch (error) {
             console.error('Error reading file:', error);
-            alert('Failed to read file. Please try again.');
+            showError('Read Failed', 'Failed to read file. Please try again.');
             setIsImporting(false);
         }
     };

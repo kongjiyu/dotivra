@@ -5,6 +5,7 @@ import {
   GeneralFeedback, 
   FeedbackSubmit
 } from '../components/feedback';
+import { showSuccess, showError } from '@/utils/sweetAlert';
 import type { FeedbackData } from '../components/feedback';
 
 const FeedbackForm: React.FC = () => {
@@ -86,11 +87,14 @@ const FeedbackForm: React.FC = () => {
       sessionStorage.removeItem('feedbackReferrer');
       
       // Show success message and redirect
-      alert('Thank you for your feedback! We appreciate your input.');
+      await showSuccess(
+        'Thank You!',
+        'Thank you for your feedback! We appreciate your input.'
+      );
       navigate('/dashboard');
     } catch (error) {
       console.error('Failed to submit feedback:', error);
-      alert('Failed to submit feedback. Please try again.');
+      showError('Submission Failed', 'Failed to submit feedback. Please try again.');
     } finally {
       setIsSubmitting(false);
     }

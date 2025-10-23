@@ -10,6 +10,7 @@ import AIGenerationProgressModal from '@/components/modal/AIGenerationProgressMo
 import ConfirmDeleteDialog from '@/components/modal/ConfirmDeleteDialog';
 import { API_ENDPOINTS } from '../lib/apiConfig';
 import { aiService } from '../services/aiService';
+import { showSuccess, showError } from '@/utils/sweetAlert';
 import type { Document, Template, Project } from '../types';
 
 type GenerationStep = {
@@ -231,11 +232,22 @@ const ProjectOverview: React.FC = () => {
       
       // Close the dialog
       setDeleteDialogOpen(false);
+      
+      // Show success message with SweetAlert2
+      await showSuccess(
+        'Document Deleted!',
+        `"${documentToDelete.DocumentName}" has been deleted successfully.`
+      );
+      
       setDocumentToDelete(null);
     } catch (error) {
       console.error('❌ Error deleting document:', error);
-      // Keep the dialog open to show error state
-      alert(`Failed to delete document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      // Close the dialog and show error
+      setDeleteDialogOpen(false);
+      showError(
+        'Delete Failed',
+        `Failed to delete document: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
     } finally {
       setIsDeleting(false);
     }
@@ -422,7 +434,10 @@ const ProjectOverview: React.FC = () => {
     } catch (error) {
       console.error('❌ Error creating document:', error);
       setIsGenerating(false);
-      alert(`Failed to create document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showError(
+        'Failed to Create Document',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
     }
   };
 
@@ -482,7 +497,7 @@ const ProjectOverview: React.FC = () => {
         onClose={() => setEditedProjectModalOpen(false)}
         onSubmit={(updatedProject) => {
           console.log('Updated project:', updatedProject);
-          alert('Project updated! (This is just a demo)');
+          showSuccess('Project Updated!', 'Your project has been updated successfully.');
         }}
       />
 

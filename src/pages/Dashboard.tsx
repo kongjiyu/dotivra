@@ -12,6 +12,7 @@ import { getUserDisplayInfo } from '../utils/user';
 import { useAuth } from '../context/AuthContext';
 import { aiService } from '../services/aiService';
 import { useFeedback } from '../components/AppLayout';
+import { showSuccess, showError } from '@/utils/sweetAlert';
 
 interface GenerationStep {
   id: string;
@@ -275,7 +276,10 @@ const Dashboard: React.FC = () => {
         });
       } else {
         // Fallback to project view if no document ID
-        alert(`Document "${data.documentName}" created successfully!\n\nTemplate: ${data.template.TemplateName}\nRole: ${data.documentRole}\nCategory: ${documentCategory}`);
+        await showSuccess(
+          'Document Created!',
+          `"${data.documentName}" has been created successfully.`
+        );
         if (finalProjectId) {
           navigate(`/project/${finalProjectId}`);
         }
@@ -288,7 +292,10 @@ const Dashboard: React.FC = () => {
       setIsTemplateModalOpen(false);
       setSelectedTemplate(null);
       
-      alert(`Failed to create document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showError(
+        'Failed to Create Document',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
     }
   };
 
@@ -377,11 +384,17 @@ const Dashboard: React.FC = () => {
               navigate(`/project/${projectId}`);
             } else {
               console.error('❌ No project ID found in response:', result.project);
-              alert('Project created but navigation failed. Please refresh the page.');
+              showError(
+                'Navigation Failed',
+                'Project created but navigation failed. Please refresh the page.'
+              );
             }
           } catch (err) {
             console.error('❌ Dashboard: Error creating project:', err);
-            alert(`Failed to create project: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            showError(
+              'Failed to Create Project',
+              err instanceof Error ? err.message : 'Unknown error'
+            );
           }
         }}
       />

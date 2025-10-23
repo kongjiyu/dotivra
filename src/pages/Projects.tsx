@@ -9,6 +9,7 @@ import Header from '../components/header/Header';
 import { useAuth } from '../context/AuthContext';
 import { getUserDisplayInfo } from '../utils/user';
 import { useFeedback } from '../components/AppLayout';
+import { showError } from '@/utils/sweetAlert';
 
 const Projects: React.FC = () => {
   const navigate = useNavigate();
@@ -250,7 +251,10 @@ const Projects: React.FC = () => {
             navigate(`/project/${result.project.id}`);
           } catch (err) {
             console.error('❌ Error creating project:', err);
-            alert(`Failed to create project: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            showError(
+              'Failed to Create Project',
+              err instanceof Error ? err.message : 'Unknown error'
+            );
           }
         }}
       />
