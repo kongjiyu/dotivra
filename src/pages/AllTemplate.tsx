@@ -289,9 +289,9 @@ const AllTemplate: React.FC = () => {
           };
           
           try {
-            // Generate content using iterative AI method
-            console.log('🚀 Starting iterative AI generation...');
-            content = await aiService.generateDocumentFromTemplateAndRepoIterative(
+            // Generate content using section-by-section generation for better handling of long documents
+            console.log('🚀 Starting section-by-section AI generation...');
+            content = await aiService.generateDocumentInSections(
               user,
               template.TemplatePrompt || '',
               { owner, repo, fullName: repoFullName },

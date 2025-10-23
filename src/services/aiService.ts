@@ -274,22 +274,18 @@ Format: {"needFiles": true, "files": ["path/to/file1", "path/to/file2"], "reason
 
 **WHEN GENERATING THE FINAL DOCUMENT:**
 - STRICTLY FOLLOW the template format and structure provided at the top of this prompt
+- The template itself contains all requirements for code examples, validation logic, diagrams, etc.
 - You MUST respond with VALID JSON: {"needFiles": false, "content": "HTML_CONTENT_HERE"}
 - The "content" field MUST be a string containing complete HTML as specified in the template
 - Follow ALL formatting requirements from the template (HTML tags, structure, sections, etc.)
 - DO NOT add explanatory text like "Here is the document:" - just provide the JSON with HTML content
 - DO NOT deviate from the template's required format
 
-**CRITICAL - CREATE COMPREHENSIVE, DETAILED DOCUMENTATION:**
-- Make the document AS DETAILED AND COMPLETE AS POSSIBLE
-- Include ALL code examples, formulas, algorithms, and technical details you find
-- Document EVERY function, method, class, component with full explanations
-- Show actual code snippets with proper syntax highlighting using <code> and <pre> tags
-- Include implementation details, not just descriptions
-- Provide step-by-step instructions for complex processes
-- Add comprehensive examples for each feature
-- The more detailed and thorough, the better - aim for maximum completeness
-- A technical manual should be comprehensive enough for developers to understand and use the code
+**IMPORTANT - Handle Length Constraints:**
+- If the document is too long for one response, you can split it into parts
+- Generate the document section by section if needed
+- For very comprehensive documents, focus on completing major sections first
+- Use the full token limit (8192) to generate as much quality content as possible
 
 **Start now - which files do you need? Respond with JSON only:**`;
 
@@ -345,22 +341,12 @@ Option 2 - Ready to generate the document?
 
 **REQUIREMENTS FOR THE DOCUMENT:**
 - Follow the template's HTML structure EXACTLY as specified
+- The template itself defines all content requirements (code examples, validation logic, etc.)
 - Include ALL required sections from the template
 - Use proper HTML tags as shown in the template (<html>, <body>, <h1>, <h2>, <h3>, <p>, <ul>, <li>, <code>, <pre>, etc.)
 - DO NOT add explanatory text - just provide the JSON with HTML content
 - The content must be based on the repository files you've examined
 - Example format: {"needFiles": false, "content": "<html><body><h1>Project User Manual</h1>...</body></html>"}
-
-**MAKE THE DOCUMENT COMPREHENSIVE AND DETAILED:**
-- Extract and include ALL formulas, calculations, and algorithms from the code
-- Show complete code examples with proper formatting using <pre><code> tags
-- Document every function/method with parameters, return values, and examples
-- Include implementation details - HOW things work, not just WHAT they do
-- Provide detailed step-by-step instructions for complex operations
-- Add multiple examples for each feature to illustrate different use cases
-- Show actual code snippets from the repository with explanations
-- Make it thorough enough that another developer could understand and maintain the code
-- Aim for maximum detail and completeness - longer is better for technical documentation
 
 **Respond with JSON only:**`;
                     console.log('📋 Sending files to AI and asking for next step...');
@@ -445,6 +431,174 @@ Option 2 - Ready to generate the document?
 
         } catch (error) {
             console.error('❌ Iterative error:', error);
+            onProgress?.('error', error instanceof Error ? error.message : 'Failed');
+            throw error;
+        }
+    }
+
+    /**
+     * Generate document content in sections to handle token limits
+     * This method generates the document part by part, allowing for longer documents
+     */
+    async generateDocumentInSections(
+        user: User,
+        templatePrompt: string,
+        repositoryInfo: { owner: string; repo: string; fullName: string },
+        documentRole: string,
+        documentName: string,
+        onProgress?: (stage: string, message?: string) => void
+    ): Promise<string> {
+        try {
+            console.log('🔄 Starting section-by-section generation...');
+            onProgress?.('analyze', 'Analyzing repository structure...');
+
+            // Get repository context
+            const repoContext = await repositoryContextService.getRepositoryContext(
+                user,
+                repositoryInfo.owner,
+                repositoryInfo.repo
+            );
+            
+            if (!repoContext) {
+                throw new Error('Failed to fetch repository context');
+            }
+
+            const structure = repoContext.structure || [];
+
+            // Step 1: Ask AI what sections to generate based on template
+            onProgress?.('planning', 'Planning document sections...');
+            const planningPrompt = `${templatePrompt}
+
+**REPOSITORY CONTEXT:**
+${this.buildDirectoryTree(structure || [])}
+
+**YOUR TASK:**
+Analyze the template and repository to plan the document sections.
+Respond with JSON listing the major sections to generate:
+{"sections": ["Introduction", "Installation", "Usage Guide", "API Reference", "Troubleshooting"]}
+
+Focus on the main sections defined in the template. Keep it to 5-10 major sections.
+Respond with JSON only:`;
+
+            const planRes = await fetch(GENERATE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    prompt: planningPrompt, 
+                    model: this.defaultModel, 
+                    generationConfig: { maxOutputTokens: 1024 } 
+                }),
+            });
+
+            if (!planRes.ok) throw new Error('Failed to plan sections');
+            const planData = await planRes.json();
+            const planText = String(planData.text || '');
+            
+            let sections: string[] = [];
+            try {
+                const planMatch = planText.match(/\{[\s\S]*\}/);
+                if (planMatch) {
+                    const planParsed = JSON.parse(planMatch[0]);
+                    sections = planParsed.sections || [];
+                }
+            } catch (e) {
+                console.warn('Failed to parse section plan, using default sections');
+                sections = ['Introduction', 'Main Content', 'Conclusion'];
+            }
+
+            console.log(`📋 Planned sections:`, sections);
+
+            // Step 2: Use existing iterative approach for file collection context
+            onProgress?.('files', 'Analyzing repository files...');
+            // Note: We'll let each section generation request files as needed
+
+            // Step 3: Generate each section separately
+            const generatedSections: { title: string; content: string }[] = [];
+            
+            for (let i = 0; i < sections.length; i++) {
+                const sectionTitle = sections[i];
+                onProgress?.('generate', `Generating section ${i + 1}/${sections.length}: ${sectionTitle}`);
+                console.log(`📝 Generating section: ${sectionTitle}`);
+
+                const sectionPrompt = `${templatePrompt}
+
+**FULL DOCUMENT SECTIONS TO GENERATE:**
+${sections.map((s, idx) => `${idx + 1}. ${s}${idx < i ? ' ✅ (already generated)' : idx === i ? ' 👉 (generate this now)' : ' ⏳ (will generate later)'}`).join('\n')}
+
+**YOUR CURRENT TASK:**
+Generate ONLY the "${sectionTitle}" section of the document.
+
+**PREVIOUSLY GENERATED SECTIONS:**
+${generatedSections.length > 0 ? generatedSections.map(s => `[${s.title}]\n${s.content.substring(0, 500)}...`).join('\n\n') : 'None yet - this is the first section'}
+
+**IMPORTANT:**
+- Generate ONLY the "${sectionTitle}" section following the template format
+- DO NOT regenerate previous sections or generate future sections
+- Include proper HTML tags for this section (<h2>, <h3>, <p>, <ul>, <code>, etc.)
+- Follow the template's specific requirements for this section
+- Make it comprehensive and detailed
+- Respond with JSON: {"content": "HTML_CONTENT_FOR_THIS_SECTION_ONLY"}
+
+Respond with JSON only:`;
+
+                const sectionRes = await fetch(GENERATE_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        prompt: sectionPrompt, 
+                        model: this.defaultModel, 
+                        generationConfig: { maxOutputTokens: 8192 } 
+                    }),
+                });
+
+                if (!sectionRes.ok) {
+                    console.warn(`Failed to generate section: ${sectionTitle}, skipping...`);
+                    continue;
+                }
+
+                const sectionData = await sectionRes.json();
+                const sectionText = String(sectionData.text || '');
+                
+                try {
+                    const sectionMatch = sectionText.match(/\{[\s\S]*\}/);
+                    if (sectionMatch) {
+                        const sectionParsed = JSON.parse(sectionMatch[0]);
+                        const sectionContent = sectionParsed.content || '';
+                        generatedSections.push({ title: sectionTitle, content: sectionContent });
+                        console.log(`✅ Generated section: ${sectionTitle} (${sectionContent.length} chars)`);
+                    } else {
+                        console.warn(`No JSON found in section response for: ${sectionTitle}`);
+                        generatedSections.push({ title: sectionTitle, content: sectionText });
+                    }
+                } catch (e) {
+                    console.warn(`Failed to parse section: ${sectionTitle}`, e);
+                    generatedSections.push({ title: sectionTitle, content: sectionText });
+                }
+            }
+
+            // Step 4: Combine all sections into final document
+            onProgress?.('finalize', 'Combining sections into final document...');
+            console.log(`🔗 Combining ${generatedSections.length} sections...`);
+
+            const combinedContent = `<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${documentName}</title>
+</head>
+<body>
+    <h1>${documentName}</h1>
+    ${generatedSections.map(s => s.content).join('\n\n')}
+</body>
+</html>`;
+
+            onProgress?.('done', 'Document generation complete!');
+            console.log(`✅ Final document: ${combinedContent.length} characters`);
+            
+            return this.cleanHTMLContent(combinedContent);
+
+        } catch (error) {
+            console.error('❌ Section generation error:', error);
             onProgress?.('error', error instanceof Error ? error.message : 'Failed');
             throw error;
         }
