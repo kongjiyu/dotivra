@@ -7,6 +7,7 @@ import { useParams, useLocation } from "react-router-dom";
 import { API_ENDPOINTS } from "@/lib/apiConfig";
 import { fetchDocument } from "@/services/apiService";
 import { useAuth } from "@/context/AuthContext";
+import { useDocumentSync } from "@/hooks/useDocumentSync";
 
 import { EnhancedAIContentWriter } from '@/utils/enhancedAIContentWriter';
 import type { ContentPosition } from '@/utils/enhancedAIContentWriter';
@@ -41,7 +42,7 @@ export default function DocumentEditor() {
         onOpenChat,
         showToolbar,
     } = useDocument();
-    const documentContentRef = useRef<HTMLDivElement>(null);
+    const documentContainerRef = useRef<HTMLDivElement>(null);
     const latestContentRef = useRef<string>("");
     const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -62,6 +63,37 @@ export default function DocumentEditor() {
     // Loading state for document
     const [isLoadingDocument, setIsLoadingDocument] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+
+    // Ref to track current content and prevent unnecessary re-renders
+    const documentContentRef = useRef(documentContent);
+
+    // Update ref when documentContent changes
+    useEffect(() => {
+        documentContentRef.current = documentContent;
+    }, [documentContent]);
+
+    // WebSocket sync hook for editor content (separate channel from summary)
+    const { syncStatus, sendUpdate } = useDocumentSync({
+        documentId: documentId || '',
+        channel: 'content', // Use 'content' channel
+        onUpdate: (content) => {
+            // Received update from another client
+            // Only update if content is different to prevent re-render loops
+            if (content !== documentContentRef.current) {
+                setDocumentContent(content);
+                latestContentRef.current = content;
+
+                // Update editor content if editor is available
+                if (currentEditor && !currentEditor.isDestroyed) {
+                    const { from } = currentEditor.state.selection;
+                    currentEditor.commands.setContent(content);
+                    // Try to restore cursor position
+                    currentEditor.commands.focus();
+                    currentEditor.commands.setTextSelection(Math.min(from, currentEditor.state.doc.content.size));
+                }
+            }
+        },
+    });
 
     // Load document when documentId changes
     useEffect(() => {
@@ -96,7 +128,7 @@ export default function DocumentEditor() {
                     id: documentData.id,
                     contentLength: documentData.Content?.length || 0
                 });
-                
+
                 setDocumentId(documentId);
                 setDocumentTitle(documentData.DocumentName || documentData.Title || "Untitled Document");
                 const content = documentData.Content || "";
@@ -112,7 +144,7 @@ export default function DocumentEditor() {
                 const projectIdFromDoc = documentData.Project_Id || documentData.ProjectId;
                 if (projectIdFromDoc) {
                     setProjectId(projectIdFromDoc);
-                    
+
                     // Skip API call for mock projects
                     if (!projectIdFromDoc.startsWith('mock-')) {
                         try {
@@ -137,7 +169,7 @@ export default function DocumentEditor() {
                         }
                     }
                 }
-                
+
                 return; // Skip fetching from API since we have fresh data
             }
 
@@ -218,7 +250,10 @@ export default function DocumentEditor() {
     // Optimized onUpdate: avoid re-rendering via context on each keystroke
     const handleDocumentUpdateOptimized = useCallback((content: string) => {
         latestContentRef.current = content;
+        documentContentRef.current = content; // Update ref for comparison
 
+        // Send update via WebSocket with debouncing
+        // Channel is already set to 'content' in useDocumentSync options
         if (documentId) {
             if (autoSaveTimeoutRef.current) {
                 clearTimeout(autoSaveTimeoutRef.current);
@@ -251,7 +286,7 @@ export default function DocumentEditor() {
                 }
             }, 2000);
         }
-    }, [documentId, user?.uid]);
+    }, [documentId, sendUpdate]);
 
     // Cleanup pending autosave on unmount
     useEffect(() => {
@@ -552,9 +587,9 @@ export default function DocumentEditor() {
     const effectiveContent = documentContent || "";
 
     return (
-        <DocumentLayout showDocumentMenu={true}>
+        <DocumentLayout showDocumentMenu={true} syncStatus={syncStatus}>
             {/* Main Editor Area - Full Width */}
-            <div ref={documentContentRef} className="w-full h-full relative">
+            <div ref={documentContainerRef} className="w-full h-full relative">
                 <TipTap
                     initialContent={effectiveContent}
                     onUpdate={handleDocumentUpdateOptimized}

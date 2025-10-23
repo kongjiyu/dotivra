@@ -235,12 +235,14 @@ const Dashboard: React.FC = () => {
 
       // Prepare document data for API (matching Firebase Cloud Function format)
       const documentData = {
-        title: data.documentName.trim(),
-        content: documentContent,
-        projectId: finalProjectId,
-        userId: userId,
-        templateId: data.template.id || data.template.Template_Id || null,
-        documentCategory: documentCategory
+        DocumentName: data.documentName.trim(),
+        DocumentType: 'user-manual', // or another appropriate type based on template
+        DocumentCategory: documentCategory,
+        Content: documentContent,
+        Project_Id: finalProjectId,
+        User_Id: userId,
+        Template_Id: data.template.id || data.template.Template_Id || null,
+        IsDraft: false,
       };
 
       // Create the document

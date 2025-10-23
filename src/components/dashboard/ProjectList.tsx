@@ -4,6 +4,7 @@ import { Search, LayoutList, LayoutGrid } from 'lucide-react';
 import { API_ENDPOINTS } from '@/lib/apiConfig';
 import { useAuth } from '../../context/AuthContext';
 import type { Project } from '../../types';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface ProjectListProps {
   onProjectClick: (projectId: string) => void;
@@ -362,8 +363,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
                 type="button"
                 onClick={() => setViewMode('list')}
                 className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors ${viewMode === 'list'
-                    ? 'bg-blue-600 text-white shadow-inner'
-                    : 'text-gray-600 hover:bg-gray-50'
+                  ? 'bg-blue-600 text-white shadow-inner'
+                  : 'text-gray-600 hover:bg-gray-50'
                   }`}
               >
                 <LayoutList className="h-4 w-4" />
@@ -373,8 +374,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
                 type="button"
                 onClick={() => setViewMode('grid')}
                 className={`flex items-center gap-2 px-4 py-2 text-sm transition-colors ${viewMode === 'grid'
-                    ? 'bg-blue-600 text-white shadow-inner'
-                    : 'text-gray-600 hover:bg-gray-50'
+                  ? 'bg-blue-600 text-white shadow-inner'
+                  : 'text-gray-600 hover:bg-gray-50'
                   }`}
               >
                 <LayoutGrid className="h-4 w-4" />

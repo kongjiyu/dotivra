@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -91,60 +92,62 @@ export default function ProjectDocumentsDropdown({
                     Project Documents
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64 max-h-96 overflow-y-auto">
-                {loading && (
-                    <div className="p-4 text-center">
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mx-auto"></div>
-                        <p className="text-sm text-gray-500 mt-2">Loading documents...</p>
-                    </div>
-                )}
-
-                {error && (
-                    <div className="p-4 text-center">
-                        <AlertCircle className="w-5 h-5 text-red-500 mx-auto mb-2" />
-                        <p className="text-sm text-red-600">Failed to fetch documents</p>
-                    </div>
-                )}
-
-                {!loading && !error && !projectId && (
-                    <div className="p-4 text-center">
-                        <FileText className="w-5 h-5 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">No document associated with this project</p>
-                    </div>
-                )}
-
-                {!loading && !error && projectId && documents.length === 0 && (
-                    <div className="p-4 text-center">
-                        <FileText className="w-5 h-5 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">No other related document</p>
-                    </div>
-                )}
-
-                {!loading && !error && documents.length > 0 && (
-                    <>
-                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase">
-                            Project Documents
+            <DropdownMenuContent align="end" className="w-64 max-h-96">
+                <ScrollArea className="max-h-96">
+                    {loading && (
+                        <div className="p-4 text-center">
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600 mx-auto"></div>
+                            <p className="text-sm text-gray-500 mt-2">Loading documents...</p>
                         </div>
-                        <DropdownMenuSeparator />
-                        {documents.map((doc) => (
-                            <DropdownMenuItem
-                                key={doc.id}
-                                onClick={() => doc.id && handleDocumentClick(doc.id)}
-                                className="cursor-pointer flex items-start gap-2 p-3"
-                            >
-                                <FileText className="w-4 h-4 mt-0.5 text-blue-600 flex-shrink-0" />
-                                <div className="flex-1 min-w-0">
-                                    <div className="font-medium text-sm text-gray-900 truncate">
-                                        {doc.DocumentName}
+                    )}
+
+                    {error && (
+                        <div className="p-4 text-center">
+                            <AlertCircle className="w-5 h-5 text-red-500 mx-auto mb-2" />
+                            <p className="text-sm text-red-600">Failed to fetch documents</p>
+                        </div>
+                    )}
+
+                    {!loading && !error && !projectId && (
+                        <div className="p-4 text-center">
+                            <FileText className="w-5 h-5 text-gray-400 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500">No document associated with this project</p>
+                        </div>
+                    )}
+
+                    {!loading && !error && projectId && documents.length === 0 && (
+                        <div className="p-4 text-center">
+                            <FileText className="w-5 h-5 text-gray-400 mx-auto mb-2" />
+                            <p className="text-sm text-gray-500">No other related document</p>
+                        </div>
+                    )}
+
+                    {!loading && !error && documents.length > 0 && (
+                        <>
+                            <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase">
+                                Project Documents
+                            </div>
+                            <DropdownMenuSeparator />
+                            {documents.map((doc) => (
+                                <DropdownMenuItem
+                                    key={doc.id}
+                                    onClick={() => doc.id && handleDocumentClick(doc.id)}
+                                    className="cursor-pointer flex items-start gap-2 p-3"
+                                >
+                                    <FileText className="w-4 h-4 mt-0.5 text-blue-600 flex-shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                        <div className="font-medium text-sm text-gray-900 truncate">
+                                            {doc.DocumentName}
+                                        </div>
+                                        <div className="text-xs text-gray-500">
+                                            {doc.DocumentCategory}
+                                        </div>
                                     </div>
-                                    <div className="text-xs text-gray-500">
-                                        {doc.DocumentCategory}
-                                    </div>
-                                </div>
-                            </DropdownMenuItem>
-                        ))}
-                    </>
-                )}
+                                </DropdownMenuItem>
+                            ))}
+                        </>
+                    )}
+                </ScrollArea>
             </DropdownMenuContent>
         </DropdownMenu>
     );

@@ -39,6 +39,7 @@ export const API_ENDPOINTS = {
   // Documents  
   documents: () => buildApiUrl('api/documents'),
   document: (id: string) => buildApiUrl(`api/documents/${id}`),
+  deleteDocument: (id: string) => buildApiUrl(`api/documents/${id}`),
   projectDocuments: (projectId: string) => buildApiUrl(`api/documents/project/${projectId}`),
   documentHistory: (docId: string) => buildApiUrl(`api/document/editor/history/${docId}`, true), // Force localhost - not deployed to production yet
   

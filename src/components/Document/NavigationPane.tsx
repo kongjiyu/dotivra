@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, ChevronRight, ChevronDown } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 
@@ -194,10 +195,10 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
                 </h3>
             </div>
 
-            {/* Headings List with better scrollbar */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar px-3 py-3 bg-gray-50/50">
+            {/* Headings List with ScrollArea */}
+            <ScrollArea className="flex-1 px-3 py-3 bg-gray-50/50">
                 {renderHeadingTree()}
-            </div>
+            </ScrollArea>
 
         </div>
     );

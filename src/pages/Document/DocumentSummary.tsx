@@ -1,65 +1,103 @@
-﻿import { useEffect, useState } from "react";
+﻿import { useEffect, useState, useRef } from "react";
+import { useParams, useLocation } from "react-router-dom";
 import DocumentLayout from "./DocumentLayout";
 import TipTap from "@/components/document/TipTap";
 import { useDocument } from "@/context/DocumentContext";
 import { fetchDocument } from "@/services/apiService";
+import { useDocumentSync } from "@/hooks/useDocumentSync";
 
 export default function DocumentSummary() {
+    const { documentId: urlDocumentId } = useParams<{ documentId: string }>();
+    const location = useLocation();
     const {
         summaryContent,
         setSummaryContent,
         setCurrentEditor,
-        documentId
+        documentId: contextDocumentId,
+        setDocumentId,
+        showToolbar,
+        onOpenChat
     } = useDocument();
     const [, setIsLoadingSummary] = useState(false);
 
-    // Fetch summary from Firebase
+    // Ref to track current content and prevent unnecessary re-renders
+    const summaryContentRef = useRef(summaryContent);
+
+    // Use URL documentId if available, otherwise use context
+    const activeDocumentId = urlDocumentId || contextDocumentId;
+
+    // Update ref when summaryContent changes
+    useEffect(() => {
+        summaryContentRef.current = summaryContent;
+    }, [summaryContent]);
+
+    // Update context documentId if URL has one
+    useEffect(() => {
+        if (urlDocumentId && urlDocumentId !== contextDocumentId) {
+            setDocumentId(urlDocumentId);
+        }
+    }, [urlDocumentId, contextDocumentId, setDocumentId]);
+
+    // WebSocket sync hook for summary (separate channel from editor)
+    const { syncStatus, sendUpdate } = useDocumentSync({
+        documentId: activeDocumentId || '',
+        channel: 'summary', // Use 'summary' channel
+        onUpdate: (content) => {
+            // Received summary update from another client
+            // Only update if content is different to prevent re-render loops
+            if (content !== summaryContentRef.current) {
+                setSummaryContent(content);
+            }
+        },
+    });
+
+    // Load summary when documentId changes
     useEffect(() => {
         const loadSummary = async () => {
-            if (!documentId || summaryContent) {
-                return; // Skip if no document ID or summary already loaded
+            if (!activeDocumentId) {
+                return;
             }
 
+            // Check if we have document data passed through navigation state
+            const navigationState = location.state as { documentData?: any } | null;
+            if (navigationState?.documentData) {
+                const documentData = navigationState.documentData;
+                if (documentData.Summary) {
+                    setSummaryContent(documentData.Summary);
+                }
+                return;
+            }
+
+            // Otherwise fetch from Firebase
             setIsLoadingSummary(true);
             try {
-                const documentData = await fetchDocument(documentId);
+                const documentData = await fetchDocument(activeDocumentId);
                 if (documentData && documentData.Summary) {
                     setSummaryContent(documentData.Summary);
                 }
-                // If Summary is empty/undefined, remain empty (per user requirement)
             } catch (error) {
                 console.error('Error loading summary from Firebase:', error);
-                // Remain empty on error (per user requirement: "if unable to fetch remain empty")
             } finally {
                 setIsLoadingSummary(false);
             }
         };
 
         loadSummary();
-    }, [documentId, summaryContent, setSummaryContent]);
+    }, [activeDocumentId, location.state, setSummaryContent]);
 
     const handleSummaryUpdate = async (content: string) => {
-        setSummaryContent(content);
+        // Update the ref immediately for comparison purposes
+        // Note: We don't call setSummaryContent here because:
+        // 1. TipTap already has the content (user is typing)
+        // 2. Calling setSummaryContent would change initialContent prop
+        // 3. Which would trigger TipTap's useEffect and call setContent()
+        // 4. Which would interrupt the user's typing
+        summaryContentRef.current = content;
 
-        // Auto-save summary to Firebase
-        if (documentId) {
-            try {
-                const response = await fetch(`${import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001'}/api/documents/${documentId}`, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        Summary: content,
-                    }),
-                });
-
-                if (!response.ok) {
-                    console.error('Failed to save summary:', response.status, await response.text());
-                }
-            } catch (error) {
-                console.error('Error saving summary to Firebase:', error);
-            }
+        // Send update via WebSocket with debouncing
+        // Channel is already set to 'summary' in useDocumentSync options
+        if (activeDocumentId) {
+            sendUpdate(content);
         }
     };
 
@@ -68,13 +106,15 @@ export default function DocumentSummary() {
     };
 
     return (
-        <DocumentLayout showDocumentMenu={true}>
+        <DocumentLayout showDocumentMenu={true} syncStatus={syncStatus}>
 
             {/* Summary Editor */}
             <TipTap
                 initialContent={summaryContent || "Document summary will appear here..."}
                 onUpdate={handleSummaryUpdate}
                 onEditorReady={handleSummaryEditorReady}
+                onOpenChat={onOpenChat}
+                showToolbar={showToolbar}
                 className="min-h-[500px]"
             />
         </DocumentLayout>

@@ -5,7 +5,7 @@ import type { User } from 'firebase/auth';
 const GENERATE_API = '/api/gemini/generate';
 
 class AIService {
-    private defaultModel = 'gemini-2.0-flash';
+    private defaultModel = 'gemini-2.5-pro';
 
     async generateContent(prompt: string, context?: string): Promise<string> {
         try {
@@ -259,11 +259,19 @@ ${directoryTree}
 **README:**
 ${repoContext.readme?.substring(0, 1000) || 'None'}
 
-**Instructions:**
+**CRITICAL INSTRUCTIONS:**
 1. FIRST: Respond with JSON listing files you need:
    {"needFiles": true, "files": ["path1", "path2"], "reason": "why"}
-2. AFTER receiving files: Either request more OR generate:
-   {"needFiles": false, "content": "<h1>Title</h1><p>Content</p>"}
+2. AFTER receiving files: Either request more OR generate the document.
+
+**WHEN GENERATING THE DOCUMENT:**
+- You MUST respond with VALID JSON containing the HTML content
+- Format: {"needFiles": false, "content": "<h1>Title</h1><p>Your HTML content here</p>"}
+- The "content" field MUST contain properly formatted HTML with tags like <h1>, <h2>, <p>, <ul>, <li>, <code>, etc.
+- DO NOT write descriptive text like "Based on the provided files..."
+- DO NOT write plain text - ONLY HTML tags with content inside them
+- Follow the template's HTML structure requirements exactly
+- Example of CORRECT format: {"needFiles": false, "content": "<h1>${documentName}</h1><h2>Overview</h2><p>This project is a...</p>"}
 
 Start - which files do you need? JSON only:`;
 
@@ -307,9 +315,18 @@ ${fileContents}
 - Work with the files that were successfully fetched (marked with ✅)
 - If you have enough information, generate the document now
 
+**WHEN YOU GENERATE THE DOCUMENT:**
+- You MUST return VALID JSON with this exact structure: {"needFiles": false, "content": "YOUR_HTML_HERE"}
+- The "content" field MUST be a string containing HTML markup
+- Use proper HTML tags: <h1>, <h2>, <h3>, <p>, <ul>, <li>, <ol>, <code>, <pre>, <strong>, <em>, etc.
+- DO NOT write plain text or descriptions like "Based on the files..."
+- DO NOT write "Here is the HTML:" - just put the HTML directly in the content field
+- Example CORRECT: {"needFiles": false, "content": "<h1>User Manual</h1><h2>Installation</h2><p>To install this project...</p>"}
+- Example WRONG: {"needFiles": false, "content": "Based on the provided files, this is a web application..."} ❌
+
 Now respond with JSON:
 - If you need MORE files (that exist): {"needFiles": true, "files": ["path1", "path2"], "reason": "why"}
-- If you're ready to generate: {"needFiles": false, "content": "<h1>Title</h1><p>Content</p>"}
+- If you're ready to generate: {"needFiles": false, "content": "<h1>Title</h1><p>Your HTML content here</p>"}
 
 Your JSON response:`;
                     console.log('📋 Sending files to AI and asking for next step...');
@@ -319,7 +336,7 @@ Your JSON response:`;
                 const res = await fetch(GENERATE_API, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt, model: this.defaultModel, generationConfig: { maxOutputTokens: 2048 } }),
+                    body: JSON.stringify({ prompt, model: this.defaultModel, generationConfig: { maxOutputTokens: 8192 } }),
                 });
                 if (!res.ok) {
                     const err = await res.json().catch(() => ({}));
@@ -591,12 +608,31 @@ Now generate the complete ${documentName} document following these guidelines:`;
         html = html.replace(/<\/?html[^>]*>/gi, '');
         html = html.replace(/<\/?body[^>]*>/gi, '');
         
+        // Trim the content
+        html = html.trim();
+        
+        // SAFEGUARD: Check if content has NO HTML tags (plain text)
+        const hasHTMLTags = /<[a-z][\s\S]*>/i.test(html);
+        if (!hasHTMLTags && html.length > 0) {
+            console.warn('⚠️ AI returned plain text instead of HTML, wrapping in HTML structure');
+            // Convert plain text to HTML paragraphs
+            const paragraphs = html.split(/\n\n+/).map(para => {
+                const trimmed = para.trim();
+                if (!trimmed) return '';
+                // Preserve line breaks within paragraphs
+                const withBreaks = trimmed.replace(/\n/g, '<br>');
+                return `<p>${withBreaks}</p>`;
+            }).filter(p => p).join('\n');
+            
+            html = `<h1>Document</h1>\n${paragraphs}`;
+        }
+        
         // Ensure content starts with a heading
-        if (!html.trim().startsWith('<h1>')) {
+        if (!html.trim().match(/^<h[1-6]>/i)) {
             html = '<h1>Document</h1>\n' + html;
         }
         
-        return html.trim();
+        return html;
     }
 
     /**

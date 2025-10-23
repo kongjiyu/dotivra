@@ -147,6 +147,11 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         to?: number;
         startDepth?: number;
         endDepth?: number;
+        selectionType?: string;
+        selectedText?: string;
+        startNodeAttrs?: any;
+        endNodeAttrs?: any;
+        parentChain?: string[];
     } | null>(null);
     const dragStartPos = useRef<{ x: number; y: number; toolbarX: number; toolbarY: number } | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
@@ -174,91 +179,56 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         document.cookie = `toolbarOrientation=${newOrientation ? 'vertical' : 'horizontal'}; expires=${expires.toUTCString()}; path=/`;
     };
 
-    // Drag handlers for toolbar - Optimized with useCallback to prevent lag
+    // Drag handlers for toolbar - Optimized to match WordCount's efficiency
     const handleDragStart = useCallback((e: React.MouseEvent) => {
-        e.preventDefault();
-        const toolbar = containerRef.current;
-        if (!toolbar) return;
+        if (!containerRef.current) return;
 
-        try {
-            const rect = toolbar.getBoundingClientRect();
-
-            // Validate rect to prevent errors
-            if (rect.width <= 0 || rect.height <= 0) {
-                console.warn('Invalid toolbar dimensions during drag start');
-                return;
-            }
-
-            // CRITICAL: Always use getBoundingClientRect for accurate position
-            // This prevents blinking by using the actual rendered position
-            const currentX = rect.left;
-            const currentY = rect.top;
-
-            dragStartPos.current = {
-                x: e.clientX,
-                y: e.clientY,
-                toolbarX: currentX,
-                toolbarY: currentY
-            };
-
-            // Set position immediately to transition from static to fixed positioning
-            setToolbarPosition({ x: currentX, y: currentY });
-            setIsDragging(true);
-        } catch (error) {
-            console.error('Error starting toolbar drag:', error);
-            // Fallback: reset to default position
-            setToolbarPosition(null);
-        }
-    }, []); // Empty dependencies - no recreations
+        const rect = containerRef.current.getBoundingClientRect();
+        setIsDragging(true);
+        dragStartPos.current = {
+            x: e.clientX,
+            y: e.clientY,
+            toolbarX: rect.left,
+            toolbarY: rect.top,
+        };
+    }, []);
 
     const handleDragMove = useCallback((e: MouseEvent) => {
-        if (!dragStartPos.current) return;
+        if (!isDragging || !dragStartPos.current || !containerRef.current) return;
 
-        try {
-            // Calculate position immediately for instant response
-            const deltaX = e.clientX - dragStartPos.current.x;
-            const deltaY = e.clientY - dragStartPos.current.y;
-            let newX = dragStartPos.current.toolbarX + deltaX;
-            let newY = dragStartPos.current.toolbarY + deltaY;
+        const deltaX = e.clientX - dragStartPos.current.x;
+        const deltaY = e.clientY - dragStartPos.current.y;
+        let newX = dragStartPos.current.toolbarX + deltaX;
+        let newY = dragStartPos.current.toolbarY + deltaY;
 
-            // Get toolbar dimensions for boundary checking
-            const toolbar = containerRef.current;
-            if (toolbar) {
-                const toolbarRect = toolbar.getBoundingClientRect();
+        // Get toolbar dimensions for boundary checking
+        const toolbar = containerRef.current;
+        const toolbarRect = toolbar.getBoundingClientRect();
 
-                // Validate dimensions
-                if (toolbarRect.width <= 0 || toolbarRect.height <= 0) {
-                    return; // Skip this frame if dimensions are invalid
-                }
+        // Calculate boundaries accounting for NavigationPane and ChatSidebar
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
 
-                // Find the tiptap-container boundary
-                const tiptapContainer = document.querySelector('.tiptap-container');
-                if (tiptapContainer) {
-                    const containerRect = tiptapContainer.getBoundingClientRect();
+        // Left boundary (NavigationPane)
+        const navPaneWidth = showNavigationPane ? Math.max(viewportWidth * 0.15, 200) : 0;
+        const leftBoundary = navPaneWidth;
 
-                    // Validate container dimensions
-                    if (containerRect.width > 0 && containerRect.height > 0) {
-                        // Clamp position within tiptap-container boundaries
-                        newX = Math.max(containerRect.left, Math.min(newX, containerRect.right - toolbarRect.width));
-                        newY = Math.max(containerRect.top, Math.min(newY, containerRect.bottom - toolbarRect.height));
-                    }
-                }
-            }
+        // Right boundary (ChatSidebar)
+        const chatSidebarWidth = chatSidebarOpen ? 426 : 10;
+        const rightBoundary = viewportWidth - chatSidebarWidth - toolbarRect.width;
 
-            // Validate final position before setting
-            if (isFinite(newX) && isFinite(newY)) {
-                // Direct state update without requestAnimationFrame for zero lag
-                setToolbarPosition({ x: newX, y: newY });
-            }
-        } catch (error) {
-            console.error('Error during toolbar drag:', error);
-            // Stop dragging on error
-            setIsDragging(false);
-            dragStartPos.current = null;
-            // Fallback to default position
-            setToolbarPosition(null);
-        }
-    }, []);
+        // Top boundary (header area)
+        const topBoundary = 152;
+
+        // Bottom boundary
+        const bottomBoundary = viewportHeight - toolbarRect.height;
+
+        // Clamp position within calculated boundaries
+        newX = Math.max(leftBoundary, Math.min(newX, rightBoundary));
+        newY = Math.max(topBoundary, Math.min(newY, bottomBoundary));
+
+        setToolbarPosition({ x: newX, y: newY });
+    }, [isDragging, showNavigationPane, chatSidebarOpen]);
 
     const handleDragEnd = useCallback(() => {
         setIsDragging(false);
@@ -404,6 +374,9 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
     // Handle window resize to re-clamp toolbar position within new boundaries
     useEffect(() => {
+        // Don't run during active drag to prevent lag
+        if (isDragging) return;
+
         let resizeTimeout: NodeJS.Timeout;
 
         const handleResize = () => {
@@ -437,18 +410,19 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
         updateMaxWidth();
         window.addEventListener('resize', updateMaxWidth);
-        
+
         window.addEventListener('resize', handleResize);
         return () => {
             window.removeEventListener('resize', handleResize);
             window.removeEventListener('resize', updateMaxWidth);
             clearTimeout(resizeTimeout);
         };
-    }, [toolbarPosition, safeClampPosition]);
+    }, [toolbarPosition, safeClampPosition, isDragging, showNavigationPane, chatSidebarOpen]);
 
     // Check position when orientation changes and apply smart repositioning
     useEffect(() => {
-        if (isUpdatingPosition.current || !toolbarPosition) return;
+        // Don't run during active drag to prevent lag
+        if (isDragging || isUpdatingPosition.current || !toolbarPosition) return;
 
         isUpdatingPosition.current = true;
 
@@ -460,19 +434,23 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             isUpdatingPosition.current = false;
         }, 200);
 
-    }, [isVertical, getSmartPositionForOrientation]); // Only trigger on orientation change
+    }, [isVertical, getSmartPositionForOrientation, toolbarPosition, isDragging]); // Only trigger on orientation change
 
     // Force recalculation of default position when NavigationPane or ChatSidebar toggles
     useEffect(() => {
+        // Don't run during active drag to prevent lag
+        if (isDragging) return;
+
         if (!toolbarPosition) {
             // Trigger re-render to recalculate inline style
             setCurrentFontSize(prev => prev);
         }
-    }, [showNavigationPane, chatSidebarOpen, toolbarPosition]);
+    }, [showNavigationPane, chatSidebarOpen, toolbarPosition, isDragging]);
 
     // Recalculate toolbar position when NavigationPane or ChatSidebar toggles - instant adjustment
     useEffect(() => {
-        if (!containerRef.current) return;
+        // Don't run during active drag to prevent lag
+        if (isDragging || !containerRef.current) return;
 
         // Use requestAnimationFrame for immediate but smooth adjustment
         const recalculateFrame = requestAnimationFrame(() => {
@@ -517,7 +495,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         });
 
         return () => cancelAnimationFrame(recalculateFrame);
-    }, [showNavigationPane, chatSidebarOpen, toolbarPosition]);
+    }, [showNavigationPane, chatSidebarOpen, toolbarPosition, isDragging]);
 
     // Calculate dynamic maxIndentLevel based on window width
     // Wider screens can handle more indentation levels without content overflow
@@ -549,8 +527,18 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     const endNode = resolvedTo.parent;
 
                     if (startNode && endNode && startNode.type && endNode.type && (startNode.type !== endNode.type || resolvedFrom.depth !== resolvedTo.depth)) {
-                        // Cross-block selection detected
-                        setSelectionDebug({
+                        // Cross-block selection detected - gather detailed info
+                        const selectedText = state.doc.textBetween(from, to, ' ', ' ');
+                        const selectionType = state.selection.constructor.name;
+
+                        // Build parent chain for start node
+                        const parentChain: string[] = [];
+                        for (let d = resolvedFrom.depth; d >= 0; d--) {
+                            const ancestor = resolvedFrom.node(d);
+                            if (ancestor) parentChain.push(ancestor.type.name);
+                        }
+
+                        const debugInfo = {
                             active: true,
                             startType: startNode.type.name,
                             endType: endNode.type.name,
@@ -558,8 +546,16 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                             to,
                             startDepth: resolvedFrom.depth,
                             endDepth: resolvedTo.depth,
-                        });
-                        console.debug('[ToolBar] Cross-block selection detected:', { from, to, startType: startNode.type.name, endType: endNode.type.name, startDepth: resolvedFrom.depth, endDepth: resolvedTo.depth });
+                            selectionType,
+                            selectedText: selectedText.substring(0, 50) + (selectedText.length > 50 ? '...' : ''),
+                            startNodeAttrs: startNode.attrs,
+                            endNodeAttrs: endNode.attrs,
+                            parentChain,
+                        };
+
+                        setSelectionDebug(debugInfo);
+                        console.debug('[ToolBar] Cross-block selection detected:', debugInfo);
+                        console.debug('[ToolBar] Full selection text:', selectedText);
                     } else {
                         // Clear debug if single-block selection
                         if (selectionDebug && selectionDebug.active) setSelectionDebug(null);
@@ -824,15 +820,16 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         };
     }, [windowWidth, maxIndentLevel]); // Fixed: Added windowWidth and maxIndentLevel to dependencies
 
-    // Helper functions to determine section visibility based on calculated window width breakpoints  
+    // Helper functions to determine section visibility based on available toolbar width (drag area)
     // In vertical mode, show only essential options (up to font/color), wrap Lists/Indent/Align/Insert in More Options
     // Memoize these functions to prevent unnecessary recalculations
-    // Adjusted breakpoints for better responsive behavior
-    const shouldShowInsertOptions = useMemo(() => isVertical ? false : windowWidth >= 1400, [isVertical, windowWidth]);
-    const shouldShowIndent = useMemo(() => isVertical ? false : windowWidth >= 1200, [isVertical, windowWidth]);
-    const shouldShowClearFormatting = useMemo(() => isVertical ? false : windowWidth >= 1200, [isVertical, windowWidth]);
-    const shouldShowLists = useMemo(() => isVertical ? false : windowWidth >= 1000, [isVertical, windowWidth]);
-    const shouldShowTextAlign = useMemo(() => isVertical ? false : windowWidth >= 900, [isVertical, windowWidth]);
+    // Use toolbarMaxWidth (available drag area) instead of windowWidth for better responsive behavior
+    const availableWidth = toolbarMaxWidth || windowWidth;
+    const shouldShowInsertOptions = useMemo(() => isVertical ? false : availableWidth >= 1400, [isVertical, availableWidth]);
+    const shouldShowIndent = useMemo(() => isVertical ? false : availableWidth >= 1200, [isVertical, availableWidth]);
+    const shouldShowClearFormatting = useMemo(() => isVertical ? false : availableWidth >= 1200, [isVertical, availableWidth]);
+    const shouldShowLists = useMemo(() => isVertical ? false : availableWidth >= 1000, [isVertical, availableWidth]);
+    const shouldShowTextAlign = useMemo(() => isVertical ? false : availableWidth >= 900, [isVertical, availableWidth]);
     const shouldShowMoreOptions = useMemo(() =>
         isVertical ? true : (!shouldShowInsertOptions || !shouldShowTextAlign || !shouldShowClearFormatting || !shouldShowIndent || !shouldShowLists),
         [isVertical, shouldShowInsertOptions, shouldShowTextAlign, shouldShowClearFormatting, shouldShowIndent, shouldShowLists]
@@ -1059,7 +1056,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                 ref={containerRef}
                 className={`toolbar ${isVertical
                     ? 'flex-col items-center w-fit'
-                    : 'flex items-center overflow-x-auto'
+                    : 'flex items-center'
                     } gap-0 p-1.5 rounded-md border border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-lg`}
                 style={toolbarPosition ? {
                     position: 'fixed',
@@ -1119,17 +1116,27 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
                 {/* Selection debug overlay (visible when cross-block selection detected) */}
                 {selectionDebug && selectionDebug.active && (
-                    <div className="absolute -top-10 left-0 bg-red-50 text-red-700 px-2 py-1 rounded text-xs z-50 border border-red-100 shadow-sm">
-                        <strong>Selection debug:</strong>
-                        <div>from: {selectionDebug.from} ({selectionDebug.startType}@d{selectionDebug.startDepth})</div>
-                        <div>to: {selectionDebug.to} ({selectionDebug.endType}@d{selectionDebug.endDepth})</div>
+                    <div className="absolute -top-32 left-0 bg-red-50 text-red-700 px-3 py-2 rounded-lg text-xs z-50 border-2 border-red-200 shadow-lg max-w-md">
+                        <div className="font-bold text-sm mb-1 text-red-800">🔍 Cross-Block Selection Debug</div>
+                        <div className="space-y-1">
+                            <div><strong>Type:</strong> {selectionDebug.selectionType}</div>
+                            <div><strong>Range:</strong> {selectionDebug.from} → {selectionDebug.to} ({(selectionDebug.to ?? 0) - (selectionDebug.from ?? 0)} chars)</div>
+                            <div><strong>Start:</strong> {selectionDebug.startType} (depth: {selectionDebug.startDepth})</div>
+                            <div><strong>End:</strong> {selectionDebug.endType} (depth: {selectionDebug.endDepth})</div>
+                            {selectionDebug.selectedText && (
+                                <div><strong>Text:</strong> "{selectionDebug.selectedText}"</div>
+                            )}
+                            {selectionDebug.parentChain && selectionDebug.parentChain.length > 0 && (
+                                <div><strong>Chain:</strong> {selectionDebug.parentChain.join(' → ')}</div>
+                            )}
+                        </div>
                     </div>
                 )}
                 {/* Drag Handle and Orientation Toggle */}
                 <div className={`flex ${isVertical ? 'flex-col gap-1 items-center' : 'items-center gap-1'} flex-shrink-0`}>
-                    {/* Drag Handle - Enlarged for better grab area */}
+                    {/* Drag Handle - Enlarged for better grab area with padding */}
                     <div
-                        className={`flex items-center justify-center ${isVertical ? 'h-10 w-10' : 'h-10 w-10'} cursor-grab active:cursor-grabbing hover:bg-gray-100 rounded transition-colors flex-shrink-0`}
+                        className={`flex items-center justify-center ${isVertical ? 'h-10 w-10 py-2' : 'h-10 w-10 px-2'} cursor-grab active:cursor-grabbing hover:bg-gray-100 rounded transition-colors flex-shrink-0`}
                         onMouseDown={handleDragStart}
                         title="Drag to reposition toolbar"
                     >
