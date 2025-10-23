@@ -21,6 +21,9 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
+  // Check if user is using OAuth (Google/GitHub) - they don't have a password
+  const isOAuthUser = user.provider && user.provider !== 'email';
+
   const handleSaveChanges = () => {
     console.log('Save profile changes');
     setIsEditing(false);
@@ -91,7 +94,7 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
           </div>
         </div>
 
-        {/* Email Field */}
+        {/* Email Field - Always Disabled */}
         <div>
           <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
             Email Address
@@ -104,15 +107,13 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
               id="email"
               type="email"
               defaultValue={user.email}
-              disabled={!isEditing}
-              className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                !isEditing ? 'bg-gray-50 text-gray-600' : 'bg-white'
-              }`}
+              disabled={true}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
             />
           </div>
         </div>
 
-        {/* GitHub Username Field */}
+        {/* GitHub Username Field - Always Disabled */}
         <div>
           <label htmlFor="githubUsername" className="block text-sm font-medium text-gray-700 mb-2">
             GitHub Username
@@ -125,10 +126,8 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
               id="githubUsername"
               type="text"
               defaultValue={user.githubUsername}
-              disabled={!isEditing}
-              className={`w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                !isEditing ? 'bg-gray-50 text-gray-600' : 'bg-white'
-              }`}
+              disabled={true}
+              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
             />
           </div>
         </div>
@@ -138,25 +137,43 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
           <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
             Password
           </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Lock className="h-5 w-5 text-gray-400" />
+          {isOAuthUser ? (
+            <div>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Lock className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  id="password"
+                  type="text"
+                  value={`Managed by ${user.provider === 'google' ? 'Google' : user.provider === 'github' ? 'GitHub' : user.provider}`}
+                  disabled={true}
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                You signed in with {user.provider === 'google' ? 'Google' : user.provider === 'github' ? 'GitHub' : user.provider}. Your password is managed by your authentication provider.
+              </p>
             </div>
-            <input
-              id="password"
-              type={showPassword ? 'text' : 'password'}
-              defaultValue="••••••••"
-              disabled={!isEditing}
-              className={`w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
-                !isEditing ? 'bg-gray-50 text-gray-600' : 'bg-white'
-              }`}
-              placeholder={isEditing ? "Enter new password" : ""}
-            />
-            {isEditing && (
+          ) : (
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Lock className="h-5 w-5 text-gray-400" />
+              </div>
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                defaultValue="••••••••"
+                disabled={!isEditing}
+                className={`w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${
+                  !isEditing ? 'bg-gray-50 text-gray-600' : 'bg-white'
+                }`}
+                placeholder={isEditing ? "Enter new password" : ""}
+              />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center hover:bg-transparent"
               >
                 {showPassword ? (
                   <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
@@ -164,8 +181,8 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
                   <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
                 )}
               </button>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 

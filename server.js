@@ -253,7 +253,7 @@ app.get('/api/gemini/debug-firebase', async (req, res) => {
 app.post('/api/gemini/test-balancer', async (req, res) => {
   try {
     if (!geminiBalancer) return res.status(503).json({ error: 'Balancer not configured' });
-    const { count = 10, model = 'gemini-2.0-flash', dryRun = true } = req.body || {};
+    const { count = 10, model = 'gemini-2.5-pro', dryRun = true } = req.body || {};
     const n = Math.max(1, Math.min(Number(count) || 10, 200));
     const perKey = new Map();
     const results = [];
@@ -298,7 +298,7 @@ app.post('/api/gemini/generate', async (req, res) => {
     const {
       prompt,
       contents,
-      model = 'gemini-2.0-flash',
+      model = 'gemini-2.5-pro',
       tools,
       systemInstruction,
       generationConfig,
@@ -926,6 +926,33 @@ app.put('/api/documents/:documentId', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to update document',
+      details: error.message
+    });
+  }
+});
+
+// Delete document
+app.delete('/api/documents/:documentId', async (req, res) => {
+  try {
+    const documentId = req.params.documentId;
+    console.log('🗑️ DELETE /api/documents/' + documentId);
+    
+    // Delete the document from Firestore
+    const docRef = doc(firestore, 'Documents', documentId);
+    await deleteDoc(docRef);
+    
+    console.log('✅ Document deleted successfully:', documentId);
+    
+    res.json({
+      success: true,
+      message: 'Document deleted successfully',
+      documentId
+    });
+  } catch (error) {
+    console.error('❌ Error deleting document:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete document',
       details: error.message
     });
   }

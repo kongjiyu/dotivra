@@ -11,6 +11,7 @@ import type { Template } from '../types';
 import { getUserDisplayInfo } from '../utils/user';
 import { useAuth } from '../context/AuthContext';
 import { aiService } from '../services/aiService';
+import { useFeedback } from '../components/AppLayout';
 
 interface GenerationStep {
   id: string;
@@ -23,6 +24,7 @@ const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user, userProfile } = useAuth();
   const { name: displayName, initials } = getUserDisplayInfo(userProfile, user);
+  const { openFeedbackModal } = useFeedback();
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
@@ -233,12 +235,14 @@ const Dashboard: React.FC = () => {
 
       // Prepare document data for API (matching Firebase Cloud Function format)
       const documentData = {
-        title: data.documentName.trim(),
-        content: documentContent,
-        projectId: finalProjectId,
-        userId: userId,
-        templateId: data.template.id || data.template.Template_Id || null,
-        documentCategory: documentCategory
+        DocumentName: data.documentName.trim(),
+        DocumentType: 'user-manual', // or another appropriate type based on template
+        DocumentCategory: documentCategory,
+        Content: documentContent,
+        Project_Id: finalProjectId,
+        User_Id: userId,
+        Template_Id: data.template.id || data.template.Template_Id || null,
+        IsDraft: false,
       };
 
       // Create the document
@@ -310,6 +314,7 @@ const Dashboard: React.FC = () => {
       <Header
         userName={displayName}
         initials={initials}
+        onFeedbackClick={openFeedbackModal}
       />
 
       {/* Main Content */}

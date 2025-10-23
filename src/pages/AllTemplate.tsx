@@ -7,20 +7,15 @@ import TemplateModal from '../components/allTemplate/TemplateModal';
 import AIGenerationProgressModal from '../components/modal/AIGenerationProgressModal';
 import { getUserDisplayInfo } from '../utils/user';
 import { FileText } from 'lucide-react';
-import { aiService } from '../services/aiService';
-import type { LegacyTemplate, Template } from '../types';
-
-type GenerationStep = {
-  id: string;
-  label: string;
-  status: 'pending' | 'in-progress' | 'completed' | 'error';
-  details?: string;
-};
+import type { LegacyTemplate } from '../types';
+import type { Template } from '../../firestoreService';
+import { useFeedback } from '../components/AppLayout';
 
 const AllTemplate: React.FC = () => {
   const { user, userProfile } = useAuth();
   const navigate = useNavigate();
   const { name: displayName, initials } = getUserDisplayInfo(userProfile, user);
+  const { openFeedbackModal } = useFeedback();
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'developer' | 'user'>('all');
   const [selected, setSelected] = useState<number | null>(null);
@@ -288,7 +283,7 @@ const AllTemplate: React.FC = () => {
         documentCategory = 'Developer';
       }
 
-      // Create document with consistent field names
+      // Create document with consistent field names matching backend expectations
       const createDocRes = await fetch('/api/documents', {
         method: 'POST',
         headers: {
@@ -296,12 +291,14 @@ const AllTemplate: React.FC = () => {
           'Authorization': `Bearer ${idToken}`
         },
         body: JSON.stringify({
-          title: documentName,
-          content: content,
-          projectId: finalProjectId,
-          userId: userId,
-          templateId: template.Template_Id || template.id,
-          documentCategory: documentCategory
+          DocumentName: documentName,
+          DocumentType: 'user-manual', // or another appropriate type based on template
+          DocumentCategory: documentCategory,
+          Content: content,
+          Project_Id: finalProjectId,
+          User_Id: userId,
+          Template_Id: template.Template_Id || template.id,
+          IsDraft: false,
         })
       });
 
@@ -329,7 +326,7 @@ const AllTemplate: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header userName={displayName} initials={initials} />
+      <Header userName={displayName} initials={initials} onFeedbackClick={openFeedbackModal} />
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
         <div className="flex items-end justify-between gap-4 py-6">

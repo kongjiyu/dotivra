@@ -1,4 +1,33 @@
 {
-  "indexes": [],
+  "indexes": [
+    {
+      "collectionGroup": "Projects",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "User_Id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "Created_Time",
+          "order": "DESCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "DocumentHistory",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "Document_Id",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "Version",
+          "order": "DESCENDING"
+        }
+      ]
+    }
+  ],
   "fieldOverrides": []
 }

@@ -7,12 +7,426 @@ import cors from "cors";
 import helmet from "helmet";
 import {createAppAuth} from "@octokit/auth-app";
 import {Octokit} from "@octokit/rest";
+import crypto from "crypto";
 
 // Initialize Firebase Admin
 admin.initializeApp();
 const db = admin.firestore();
 
 setGlobalOptions({maxInstances: 10});
+
+// Gemini balancer initialization with Firebase Admin
+// Session storage for dashboard authentication
+const dashboardSessions = new Map(); // sessionId -> { createdAt, expiresAt }
+
+// Import Gemini SDK
+import {GoogleGenerativeAI} from "@google/generative-ai";
+
+// Helper: Clean expired sessions
+function cleanExpiredSessions() {
+  const now = Date.now();
+  for (const [sessionId, session] of dashboardSessions.entries()) {
+    if (now > (session as any).expiresAt) {
+      dashboardSessions.delete(sessionId);
+    }
+  }
+}
+
+// Helper: Verify session
+function verifySession(sessionId: string | undefined) {
+  if (!sessionId) return false;
+  const session = dashboardSessions.get(sessionId);
+  if (!session) return false;
+  if (Date.now() > (session as any).expiresAt) {
+    dashboardSessions.delete(sessionId);
+    return false;
+  }
+  return true;
+}
+
+// Gemini Balancer for Firebase Functions (Admin SDK compatible)
+interface KeyState {
+  key: string;
+  id: string;
+  cooldownUntil: number;
+  minuteWindowStart: number;
+  dayWindowStart: number;
+  rpmUsed: number;
+  rpdUsed: number;
+  tpmUsed: number;
+  lastUsedAt: number;
+  totalRequests: number;
+  totalTokens: number;
+}
+
+class GeminiBalancer {
+  private limits: { RPM: number; RPD: number; TPM: number };
+  private db: FirebaseFirestore.Firestore;
+  private state: { keys: KeyState[]; rrIndex: number; lastPersistAt: number };
+  private loadPromise: Promise<void>;
+  private saveTimeout: NodeJS.Timeout | null = null;
+
+  constructor(apiKeys: string[], firestore: FirebaseFirestore.Firestore) {
+    if (!apiKeys || !apiKeys.length) throw new Error("No GEMINI API keys configured");
+    
+    this.limits = {
+      RPM: Number(process.env.GEMINI_LIMIT_RPM || 5),
+      RPD: Number(process.env.GEMINI_LIMIT_RPD || 100),
+      TPM: Number(process.env.GEMINI_LIMIT_TPM || 125000),
+    };
+    
+    this.db = firestore;
+    this.state = {
+      keys: apiKeys.map((key) => ({
+        key,
+        id: crypto.createHash("sha256").update(String(key)).digest("hex"),
+        cooldownUntil: 0,
+        minuteWindowStart: 0,
+        dayWindowStart: 0,
+        rpmUsed: 0,
+        rpdUsed: 0,
+        tpmUsed: 0,
+        lastUsedAt: 0,
+        totalRequests: 0,
+        totalTokens: 0,
+      })),
+      rrIndex: 0,
+      lastPersistAt: 0,
+    };
+    
+    this.loadPromise = this.load();
+  }
+
+  private async load() {
+    try {
+      logger.info("📦 Loading Gemini usage data from Firebase...");
+      
+      for (const keyState of this.state.keys) {
+        const docRef = this.db.collection("gemini-metrics").doc(keyState.id);
+        const doc = await docRef.get();
+        
+        if (doc.exists) {
+          const data = doc.data();
+          if (data) {
+            Object.assign(keyState, {
+              cooldownUntil: data.cooldownTime?.toMillis?.() || 0,
+              minuteWindowStart: data.lastUsed?.toMillis?.() || 0,
+              dayWindowStart: data.lastUsed?.toMillis?.() || 0,
+              rpmUsed: data.RPM || 0,
+              rpdUsed: data.RPD || 0,
+              tpmUsed: data.TPM || 0,
+              lastUsedAt: data.lastUsed?.toMillis?.() || 0,
+              totalRequests: data.totalRequest || 0,
+              totalTokens: data.totalTokens || 0,
+            });
+            logger.info(`  ✅ Loaded key ${keyState.id.substring(0, 12)}: ${keyState.totalRequests} requests`);
+          }
+        } else {
+          await this.initializeKey(keyState);
+          logger.info(`  🆕 Initialized new key ${keyState.id.substring(0, 12)} in Firebase`);
+        }
+      }
+      
+      logger.info("✅ Gemini usage data loaded from Firebase");
+    } catch (error) {
+      logger.error("❌ Error loading Gemini data from Firebase:", error);
+    }
+  }
+
+  private async initializeKey(keyState: KeyState) {
+    try {
+      const docRef = this.db.collection("gemini-metrics").doc(keyState.id);
+      await docRef.set({
+        RPD: 0,
+        RPM: 0,
+        TPM: 0,
+        cooldownTime: admin.firestore.Timestamp.fromMillis(0),
+        lastUsed: admin.firestore.Timestamp.now(),
+        totalRequest: 0,
+        totalTokens: 0,
+        createdAt: admin.firestore.Timestamp.now(),
+        updatedAt: admin.firestore.Timestamp.now(),
+      });
+    } catch (error) {
+      logger.error(`❌ Error initializing key ${keyState.id.substring(0, 12)} in Firebase:`, error);
+    }
+  }
+
+  private async save() {
+    try {
+      logger.info("💾 Saving to Firebase...");
+      this.state.lastPersistAt = Date.now();
+      
+      const batch = this.db.batch();
+      
+      for (const k of this.state.keys) {
+        const docRef = this.db.collection("gemini-metrics").doc(k.id);
+        batch.set(docRef, {
+          RPD: k.rpdUsed,
+          RPM: k.rpmUsed,
+          TPM: k.tpmUsed,
+          cooldownTime: admin.firestore.Timestamp.fromMillis(k.cooldownUntil),
+          lastUsed: admin.firestore.Timestamp.fromMillis(k.lastUsedAt || Date.now()),
+          totalRequest: k.totalRequests,
+          totalTokens: k.totalTokens,
+          updatedAt: admin.firestore.Timestamp.now(),
+        }, { merge: true });
+      }
+      
+      await batch.commit();
+      logger.info("✅ All keys saved to Firebase");
+    } catch (error) {
+      logger.error("❌ GeminiBalancer persist error:", error);
+    }
+  }
+
+  private debouncedSave() {
+    if (this.saveTimeout) clearTimeout(this.saveTimeout);
+    this.saveTimeout = setTimeout(() => this.save(), 500);
+  }
+
+  private resetWindowsIfNeeded(k: KeyState) {
+    const now = Date.now();
+    const minuteStart = Math.floor(now / 60000) * 60000;
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const dayStartMs = dayStart.getTime();
+    
+    if (k.minuteWindowStart !== minuteStart) {
+      k.minuteWindowStart = minuteStart;
+      k.rpmUsed = 0;
+      k.tpmUsed = 0;
+    }
+    if (k.dayWindowStart !== dayStartMs) {
+      k.dayWindowStart = dayStartMs;
+      k.rpdUsed = 0;
+    }
+  }
+
+  private keyStatus(k: KeyState): string {
+    this.resetWindowsIfNeeded(k);
+    const now = Date.now();
+    if (k.cooldownUntil && now < k.cooldownUntil) return "cooldown";
+    if (k.rpmUsed >= this.limits.RPM) return "rpm-exhausted";
+    if (k.rpdUsed >= this.limits.RPD) return "rpd-exhausted";
+    if (k.tpmUsed >= this.limits.TPM) return "tpm-exhausted";
+    return "ok";
+  }
+
+  private pickKey(estimatedTokens: number): { key: KeyState } | null {
+    const n = this.state.keys.length;
+    for (let i = 0; i < n; i++) {
+      const idx = (this.state.rrIndex + i) % n;
+      const k = this.state.keys[idx];
+      this.resetWindowsIfNeeded(k);
+      const status = this.keyStatus(k);
+      if (status !== "ok") continue;
+      if (k.rpmUsed + 1 > this.limits.RPM) continue;
+      if (k.rpdUsed + 1 > this.limits.RPD) continue;
+      if (k.tpmUsed + estimatedTokens > this.limits.TPM) continue;
+      this.state.rrIndex = (idx + 1) % n;
+      return { key: k };
+    }
+    return null;
+  }
+
+  private markUsage(k: KeyState, usedTokens: number) {
+    logger.info(`📊 Marking usage for key ${k.id.substring(0, 12)}: ${usedTokens} tokens`);
+    this.resetWindowsIfNeeded(k);
+    k.rpmUsed += 1;
+    k.rpdUsed += 1;
+    k.tpmUsed += usedTokens;
+    k.totalRequests += 1;
+    k.totalTokens += usedTokens;
+    k.lastUsedAt = Date.now();
+    logger.info(`  📊 New totals: RPM=${k.rpmUsed}, RPD=${k.rpdUsed}, TPM=${k.tpmUsed}`);
+    this.debouncedSave();
+  }
+
+  private estimateTokens(contents: any[]): number {
+    try {
+      const text = (contents || [])
+        .map((c) => (typeof c === "string" ? c : JSON.stringify(c)))
+        .join(" ");
+      return Math.ceil((text || "").length / 4);
+    } catch {
+      return 100;
+    }
+  }
+
+  async generate(options: {
+    model: string;
+    contents: any[];
+    tools?: any;
+    systemInstruction?: any;
+    generationConfig?: any;
+    safetySettings?: any;
+    toolConfig?: any;
+  }): Promise<any> {
+    await this.loadPromise;
+    
+    const estimatedTokens = this.estimateTokens(options.contents);
+    const maxAttempts = this.state.keys.length;
+    let lastError: any;
+    
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const picked = this.pickKey(estimatedTokens);
+      if (!picked) {
+        const err: any = new Error("All API keys are rate-limited or exhausted.");
+        err.status = 429;
+        throw err;
+      }
+      
+      const keyState = picked.key;
+      try {
+        const client = new GoogleGenerativeAI(keyState.key);
+        const modelClient = client.getGenerativeModel({
+          model: options.model,
+          tools: options.tools,
+          systemInstruction: options.systemInstruction,
+          generationConfig: options.generationConfig,
+          safetySettings: options.safetySettings,
+        });
+        
+        const resp = await modelClient.generateContent({
+          contents: options.contents,
+          generationConfig: options.generationConfig,
+          safetySettings: options.safetySettings,
+          tools: options.tools,
+          systemInstruction: options.systemInstruction,
+        });
+        
+        const metadata: any = resp?.response?.usageMetadata || {};
+        const usedTokens = Number(metadata.totalTokenCount || 0) || estimatedTokens;
+        
+        this.markUsage(keyState, usedTokens);
+        
+        return {
+          text: resp?.response?.text?.() ?? null,
+          usage: metadata,
+          keyId: keyState.id,
+          keyIdShort: keyState.id.slice(0, 12),
+        };
+      } catch (e: any) {
+        lastError = e;
+        const msg = (e && (e.message || String(e))) || "";
+        const isRateLimit = e?.status === 429 || e?.status === 403 || /rate/i.test(msg);
+        
+        if (isRateLimit) {
+          const now = Date.now();
+          const minuteEnd = Math.floor(now / 60000) * 60000 + 60000;
+          keyState.cooldownUntil = minuteEnd;
+          this.debouncedSave();
+        }
+        
+        await new Promise((r) => setTimeout(r, 100));
+        continue;
+      }
+    }
+    
+    const err: any = new Error(lastError?.message || "Gemini request failed for all keys");
+    err.status = lastError?.status || 500;
+    throw err;
+  }
+
+  async getUsageFromFirebase() {
+    try {
+      logger.info("📖 Reading from Firebase collection: gemini-metrics");
+      const snapshot = await this.db.collection("gemini-metrics").get();
+      
+      logger.info(`📖 Found ${snapshot.size} documents in Firebase`);
+      
+      const keys: any[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        
+        const rpmUsed = data.RPM || 0;
+        const rpdUsed = data.RPD || 0;
+        const tpmUsed = data.TPM || 0;
+        
+        let status = "available";
+        if (rpmUsed >= this.limits.RPM) {
+          status = "rpm-limit-reached";
+        } else if (rpdUsed >= this.limits.RPD) {
+          status = "rpd-limit-reached";
+        } else if (tpmUsed >= this.limits.TPM) {
+          status = "tpm-limit-reached";
+        }
+        
+        keys.push({
+          id: doc.id,
+          idShort: doc.id.slice(0, 12),
+          RPD: rpdUsed,
+          RPM: rpmUsed,
+          TPM: tpmUsed,
+          status: status,
+          totalRequest: data.totalRequest || 0,
+          totalTokens: data.totalTokens || 0,
+          updatedAt: data.updatedAt || null,
+        });
+      });
+
+      logger.info(`✅ Retrieved ${keys.length} keys from Firebase`);
+      
+      return {
+        keys,
+        limits: this.limits,
+        lastSyncedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      logger.error("❌ Error reading from Firebase:", error);
+      throw error;
+    }
+  }
+
+  getConfig() {
+    return { limits: this.limits, keyCount: this.state.keys.length };
+  }
+}
+
+// Initialize Gemini balancer
+let geminiBalancer: GeminiBalancer | null = null;
+
+function initializeGeminiBalancer() {
+  try {
+    const raw = (process.env.GEMINI_API_KEYS || "").trim();
+    let keys: string[] = [];
+    
+    if (raw) {
+      if (raw.startsWith("[")) {
+        try {
+          const arr = JSON.parse(raw);
+          keys = Array.isArray(arr) ? arr.map((s) => String(s).trim()).filter(Boolean) : [];
+        } catch {
+          keys = raw.replace(/[\[\]\s"\']/g, "").split(",").map((s) => s.trim()).filter(Boolean);
+        }
+      } else {
+        const cleaned = raw.replace(/[\[\]\s"\']/g, "");
+        keys = cleaned.split(",").map((s) => s.trim()).filter(Boolean);
+      }
+    }
+    
+    // Fallback to single key if array parsing fails
+    if (keys.length === 0 && process.env.VITE_GEMINI_API_KEY) {
+      keys = [process.env.VITE_GEMINI_API_KEY];
+    }
+    
+    if (keys.length === 0) {
+      logger.warn("⚠️ No Gemini API keys configured");
+      return null;
+    }
+    
+    geminiBalancer = new GeminiBalancer(keys, db);
+    logger.info(`✅ Gemini balancer initialized with ${keys.length} keys`);
+    return geminiBalancer;
+  } catch (e) {
+    logger.warn("⚠️ Gemini balancer not initialized:", e);
+    return null;
+  }
+}
+
+// Initialize on startup
+geminiBalancer = initializeGeminiBalancer();
 
 // Create Express app
 const app = express();
@@ -51,6 +465,173 @@ const getGitHubAuth = () => {
 // Health check endpoint
 app.get("/api/health", (req, res) => {
   res.json({status: "ok", timestamp: new Date().toISOString()});
+});
+
+// ============================================================================
+// GEMINI AI ENDPOINTS
+// ============================================================================
+
+// Authenticate with passkey
+app.post('/api/gemini/auth', (req, res) => {
+  try {
+    const { passkey } = req.body;
+    const expectedPasskey = process.env.GEMINI_DASHBOARD_PASS;
+
+    if (!expectedPasskey) {
+      return res.status(500).json({ error: 'Dashboard passkey not configured' });
+    }
+
+    if (passkey !== expectedPasskey) {
+      return res.status(401).json({ error: 'Invalid passkey' });
+    }
+
+    // Create session with 10 minute expiration
+    const sessionId = crypto.randomBytes(32).toString('hex');
+    const now = Date.now();
+    const expiresAt = now + 10 * 60 * 1000; // 10 minutes
+
+    dashboardSessions.set(sessionId, {
+      createdAt: now,
+      expiresAt: expiresAt,
+    });
+
+    // Clean expired sessions
+    cleanExpiredSessions();
+
+    logger.info('Dashboard session created:', sessionId.slice(0, 12), '...');
+    
+    res.json({
+      sessionId,
+      expiresAt: new Date(expiresAt).toISOString(),
+    });
+  } catch (error) {
+    logger.error('Dashboard auth error:', error);
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+});
+
+// Generate via Gemini API (using balancer)
+app.post('/api/gemini/generate', async (req, res) => {
+  try {
+    logger.info('🔵 Gemini API Request received');
+    logger.info('  Request body keys:', Object.keys(req.body || {}));
+    
+    if (!geminiBalancer) {
+      logger.error('❌ Balancer not configured!');
+      return res.status(503).json({ error: 'Balancer not configured' });
+    }
+    
+    const {
+      prompt,
+      contents,
+      model = 'gemini-2.5-pro',
+      tools,
+      systemInstruction,
+      generationConfig,
+      safetySettings,
+      toolConfig,
+    } = req.body || {};
+
+    let effectiveContents = contents;
+    if (!effectiveContents && typeof prompt === 'string') {
+      effectiveContents = [{ role: 'user', parts: [{ text: String(prompt) }] }];
+      logger.info('  Converting prompt to contents format');
+    }
+    if (!effectiveContents) {
+      logger.error('❌ Missing prompt or contents');
+      return res.status(400).json({ error: 'Missing prompt or contents' });
+    }
+
+    logger.info('  Calling geminiBalancer.generate with model:', model);
+    const result = await geminiBalancer.generate({
+      model,
+      contents: effectiveContents,
+      tools,
+      systemInstruction,
+      generationConfig,
+      safetySettings,
+      toolConfig,
+    });
+
+    logger.info('✅ Gemini generation successful, response length:', result.text?.length || 0);
+    res.json({
+      ok: true,
+      text: result.text,
+      usage: result.usage,
+      key: { idShort: result.keyIdShort },
+      model,
+    });
+  } catch (error) {
+    logger.error('❌ Gemini generate error:', error);
+    logger.error('   Error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+    const status = (error as any)?.status || 500;
+    res.status(status).json({ 
+      ok: false, 
+      error: error instanceof Error ? error.message : 'Failed to generate' 
+    });
+  }
+});
+
+// Dashboard endpoint (requires authentication)
+app.get('/api/gemini/dashboard', async (req, res) => {
+  try {
+    // Check session
+    const sessionId = req.headers['x-session-id'] as string;
+    if (!verifySession(sessionId)) {
+      return res.status(401).json({ error: 'Unauthorized. Please authenticate.' });
+    }
+
+    if (!geminiBalancer) {
+      return res.status(503).json({ error: 'Balancer not configured' });
+    }
+
+    // Read directly from Firebase
+    logger.info('📊 Dashboard requested, reading from Firebase...');
+    const usage = await geminiBalancer.getUsageFromFirebase();
+    logger.info('📊 Dashboard data retrieved:', JSON.stringify(usage, null, 2));
+    res.json(usage);
+  } catch (error) {
+    logger.error('Gemini dashboard error:', error);
+    res.status(500).json({ error: 'Failed to get dashboard' });
+  }
+});
+
+// Verify session endpoint
+app.post('/api/gemini/verify-session', (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    const isValid = verifySession(sessionId);
+    
+    if (isValid) {
+      const session = dashboardSessions.get(sessionId) as any;
+      res.json({
+        valid: true,
+        expiresAt: new Date(session.expiresAt).toISOString(),
+      });
+    } else {
+      res.json({ valid: false });
+    }
+  } catch (error) {
+    logger.error('Session verification error:', error);
+    res.status(500).json({ error: 'Verification failed' });
+  }
+});
+
+// Logout endpoint
+app.post('/api/gemini/logout', (req, res) => {
+  try {
+    const { sessionId } = req.body;
+    if (sessionId) {
+      dashboardSessions.delete(sessionId);
+      logger.info('Dashboard session ended:', sessionId.slice(0, 12), '...');
+    }
+    res.json({ success: true });
+  } catch (error) {
+    logger.error('Logout error:', error);
+    res.status(500).json({ error: 'Logout failed' });
+  }
 });
 
 // ============================================================================
@@ -434,7 +1015,8 @@ app.get("/api/projects", async (req, res) => {
 app.get("/api/projects/:id", async (req, res) => {
   try {
     const projectId = req.params.id;
-    logger.info("GET /api/projects/" + projectId);
+    const requestingUserId = req.query.userId as string; // Get userId from query params
+    logger.info("GET /api/projects/" + projectId, { requestingUserId });
 
     // Query by Project_Id field
     const querySnapshot = await db.collection("Projects")
@@ -446,9 +1028,19 @@ app.get("/api/projects/:id", async (req, res) => {
     }
 
     const projectDoc = querySnapshot.docs[0];
+    const projectData = projectDoc.data();
+    
+    // Check if requesting user owns this project
+    if (requestingUserId && projectData.User_Id !== requestingUserId) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "You don't have permission to access this project"
+      });
+    }
+
     const project = {
-      ...projectDoc.data(),
-      Created_Time: projectDoc.data().Created_Time?.toDate?.()?.toISOString() ||
+      ...projectData,
+      Created_Time: projectData.Created_Time?.toDate?.()?.toISOString() ||
         new Date().toISOString(),
     };
 
@@ -500,6 +1092,7 @@ app.put("/api/projects/:id", async (req, res) => {
   try {
     const projectId = req.params.id;
     const updates = req.body;
+    const requestingUserId = req.query.userId as string; // Get userId from query params
 
     // Find document by Project_Id
     const querySnapshot = await db.collection("Projects")
@@ -511,6 +1104,16 @@ app.put("/api/projects/:id", async (req, res) => {
     }
 
     const docRef = querySnapshot.docs[0].ref;
+    const projectData = querySnapshot.docs[0].data();
+    
+    // Check if requesting user owns this project
+    if (requestingUserId && projectData.User_Id !== requestingUserId) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "You don't have permission to update this project"
+      });
+    }
+
     await docRef.update({
       ...updates,
       Updated_Time: admin.firestore.Timestamp.now(),
@@ -533,6 +1136,7 @@ app.put("/api/projects/:id", async (req, res) => {
 app.delete("/api/projects/:id", async (req, res) => {
   try {
     const projectId = req.params.id;
+    const requestingUserId = req.query.userId as string; // Get userId from query params
 
     // Find document by Project_Id
     const querySnapshot = await db.collection("Projects")
@@ -544,6 +1148,16 @@ app.delete("/api/projects/:id", async (req, res) => {
     }
 
     const docRef = querySnapshot.docs[0].ref;
+    const projectData = querySnapshot.docs[0].data();
+    
+    // Check if requesting user owns this project
+    if (requestingUserId && projectData.User_Id !== requestingUserId) {
+      return res.status(403).json({
+        error: "Forbidden",
+        message: "You don't have permission to delete this project"
+      });
+    }
+
     await docRef.delete();
 
     res.json({
@@ -707,6 +1321,38 @@ app.put('/api/documents/:documentId', async (req, res) => {
   }
 });
 
+// Delete document
+app.delete('/api/documents/:documentId', async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    logger.info('🗑️ DELETE /api/documents/' + documentId);
+    
+    const docRef = db.collection('Documents').doc(documentId);
+    const doc = await docRef.get();
+    
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    
+    await docRef.delete();
+    
+    logger.info('✅ Document deleted successfully:', documentId);
+    
+    res.json({
+      success: true,
+      message: 'Document deleted successfully',
+      documentId
+    });
+  } catch (error) {
+    logger.error('❌ Error deleting document:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete document',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
 // Get documents by project ID
 app.get('/api/documents/project/:projectId', async (req, res) => {
   try {
@@ -730,6 +1376,28 @@ app.get('/api/documents/project/:projectId', async (req, res) => {
   } catch (error) {
     logger.error('Error fetching project documents:', error);
     res.status(500).json({ error: 'Failed to fetch project documents' });
+  }
+});
+
+// Get all templates
+app.get('/api/templates', async (req, res) => {
+  try {
+    const templatesRef = db.collection('Templates');
+    const snapshot = await templatesRef.get();
+    
+    const templates = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    logger.info(`GET /api/templates - Returned ${templates.length} templates`);
+    res.json({ templates });
+  } catch (error) {
+    logger.error('GET /api/templates - Error:', error);
+    res.status(500).json({
+      error: 'Failed to fetch templates',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
@@ -776,5 +1444,19 @@ app.post('/api/documents', async (req, res) => {
   }
 });
 
-// Export the Express app as a Firebase Function
-export const api = onRequest(app);
+// Export the Express app as a Firebase Function with secrets
+export const api = onRequest(
+  {
+    secrets: [
+      'VITE_GEMINI_API_KEY',
+      'GEMINI_API_KEYS',
+      'GEMINI_DASHBOARD_PASS',
+      'GEMINI_LIMIT_RPM',
+      'GEMINI_LIMIT_RPD',
+      'GEMINI_LIMIT_TPM'
+    ],
+    memory: '1GiB',
+    timeoutSeconds: 540,
+  },
+  app
+);

@@ -1,32 +1,33 @@
 import React from 'react';
-import { FolderOpen, Home, Folder, FileText, Layout } from 'lucide-react';
+import { Home, Folder, Layout, MessageSquare } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../ui/dropdown-menu';
 import { useAuth } from '../../context/AuthContext';
 
 interface HeaderProps {
-  title?: string;
-  subtitle?: string;
   userName?: string;
   initials?: string;
   showProfile?: boolean;
   showNavigation?: boolean;
+  onFeedbackClick?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
-  title = 'Dotivra',
-  subtitle = 'Your documentation home base',
-  userName = 'John Doe',
+  userName,
   initials,
   showProfile = true,
   showNavigation = true,
+  onFeedbackClick,
 }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { signOut } = useAuth();
+  const { signOut, userProfile, user } = useAuth();
+
+  // Use provided userName or fallback to userProfile
+  const displayName = userName || userProfile?.displayName || userProfile?.email || 'User';
 
   const avatarLabel = (initials && initials.trim()) ||
-    userName
+    displayName
       .split(/\s+/)
       .filter(Boolean)
       .map((part) => part[0]?.toUpperCase())
@@ -34,10 +35,14 @@ const Header: React.FC<HeaderProps> = ({
       .slice(0, 2) ||
     'U';
 
+  // Get user's profile photo from Firebase Auth
+  const userPhotoURL = user?.photoURL || userProfile?.photoURL;
+
   const navItems = [
     { path: '/dashboard', label: 'Home', icon: Home },
     { path: '/projects', label: 'Projects', icon: Folder },
     { path: '/templates', label: 'Templates', icon: Layout },
+    { path: '/feedback', label: 'Feedback', icon: MessageSquare, action: onFeedbackClick },
   ];
 
   const isActiveRoute = (path: string) => {
@@ -49,7 +54,7 @@ const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
-      <div className="max-w-7xl mx-auto px-6 py-3">
+      <div className="max-w-7xl mx-auto px-6 py-2">
         <div className="flex items-center justify-between">
           {/* Logo and Title */}
           <div className="flex items-center gap-3 justify-start">
@@ -57,11 +62,7 @@ const Header: React.FC<HeaderProps> = ({
               onClick={() => navigate('/dashboard')}
               className="flex items-center gap-3 hover:opacity-80 transition-opacity"
             >
-              <FolderOpen className="h-6 w-6 text-blue-600" />
-              <div className="text-left">
-                <p className="text-lg font-semibold text-blue-600">{title}</p>
-                {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
-              </div>
+              <img src="/logo-banner.png" alt="Dotivra" className="h-14 w-auto" />
             </button>
           </div>
 
@@ -75,7 +76,13 @@ const Header: React.FC<HeaderProps> = ({
                 return (
                   <button
                     key={item.path}
-                    onClick={() => navigate(item.path)}
+                    onClick={() => {
+                      if (item.action) {
+                        item.action();
+                      } else {
+                        navigate(item.path);
+                      }
+                    }}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                       isActive
                         ? 'bg-blue-100 text-blue-700 shadow-sm'
@@ -99,9 +106,17 @@ const Header: React.FC<HeaderProps> = ({
                   aria-label="Open profile menu"
                   className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 hover:border-blue-500 hover:bg-blue-50 transition-colors"
                 >
-                  <span className="text-xs font-medium text-gray-700 hidden sm:block">{userName}</span>
-                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-semibold uppercase">
-                    {avatarLabel}
+                  <span className="text-xs font-medium text-gray-700 hidden sm:block">{displayName}</span>
+                  <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-semibold uppercase overflow-hidden">
+                    {userPhotoURL ? (
+                      <img 
+                        src={userPhotoURL} 
+                        alt={displayName}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      avatarLabel
+                    )}
                   </div>
                 </button>
               </DropdownMenuTrigger>
@@ -123,7 +138,13 @@ const Header: React.FC<HeaderProps> = ({
               return (
                 <button
                   key={item.path}
-                  onClick={() => navigate(item.path)}
+                  onClick={() => {
+                    if (item.action) {
+                      item.action();
+                    } else {
+                      navigate(item.path);
+                    }
+                  }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                     isActive
                       ? 'bg-blue-100 text-blue-700 shadow-sm'

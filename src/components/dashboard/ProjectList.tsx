@@ -14,21 +14,6 @@ interface ProjectListProps {
 
 type ViewMode = 'list' | 'grid';
 
-const statusOptions = [
-  { label: 'Active', badgeClass: 'bg-green-100 text-green-700' },
-  { label: 'Draft', badgeClass: 'bg-yellow-100 text-yellow-700' },
-  { label: 'Review', badgeClass: 'bg-blue-100 text-blue-700' },
-];
-
-const avatarColors = [
-  'bg-rose-400',
-  'bg-sky-400',
-  'bg-indigo-400',
-  'bg-amber-400',
-  'bg-emerald-400',
-  'bg-purple-400',
-];
-
 const parseDate = (value: any): Date | null => {
   if (!value) return null;
   // Handle Firestore Timestamp
@@ -238,33 +223,6 @@ const ProjectList: React.FC<ProjectListProps> = ({
     );
   };
 
-  const getStatusForIndex = (index: number) => statusOptions[index % statusOptions.length];
-
-  const renderTeamStack = (name: string, index: number) => {
-    const initials = getInitials(name);
-    const members = [0, 1, 2].map((offset) => ({
-      initials,
-      color: avatarColors[(index + offset) % avatarColors.length],
-    }));
-
-    return (
-      <div className="flex items-center -space-x-1">
-        {members.map((member, idx) => (
-          <div
-            key={`${member.initials}-${idx}`}
-            className={`w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-white text-xs font-medium ${member.color}`}
-            title={name}
-          >
-            {member.initials}
-          </div>
-        ))}
-        <div className="w-7 h-7 rounded-full border-2 border-white flex items-center justify-center text-gray-600 text-xs font-medium bg-gray-200">
-          +2
-        </div>
-      </div>
-    );
-  };
-
   const renderListView = () => (
     <div className="px-6 pb-6">
       <ScrollArea className="rounded-xl border border-gray-200 bg-white">
@@ -272,14 +230,13 @@ const ProjectList: React.FC<ProjectListProps> = ({
           <thead className="bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
             <tr>
               <th className="px-6 py-3">Project</th>
-              <th className="px-6 py-3">Status</th>
-              <th className="px-6 py-3">Team</th>
+              <th className="px-6 py-3">Created Time</th>
+              <th className="px-6 py-3">GitHub Repo</th>
               <th className="px-6 py-3">Last updated</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
             {filteredProjects.map((project, index) => {
-              const status = getStatusForIndex(index);
               const formattedDate = formatDateOnly(project.Created_Time);
 
               return (
@@ -303,15 +260,23 @@ const ProjectList: React.FC<ProjectListProps> = ({
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`inline-flex items-center px-3 py-1 text-xs font-medium rounded-full ${status.badgeClass}`}
-                    >
-                      {status.label}
-                    </span>
+                  <td className="px-6 py-4 text-gray-500">
+                    {formattedDate}
                   </td>
-                  <td className="px-6 py-4">
-                    {renderTeamStack(project.ProjectName, index)}
+                  <td className="px-6 py-4 text-gray-500">
+                    {project.GitHubRepo ? (
+                      <a
+                        href={project.GitHubRepo}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {project.GitHubRepo.replace(/^https?:\/\/(www\.)?github\.com\//, '')}
+                      </a>
+                    ) : (
+                      '—'
+                    )}
                   </td>
                   <td className="px-6 py-4 text-gray-500">
                     {formattedDate}
@@ -329,7 +294,6 @@ const ProjectList: React.FC<ProjectListProps> = ({
     <div className="px-6 py-8">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {filteredProjects.map((project, index) => {
-          const status = getStatusForIndex(index);
           const formattedDate = formatDateOnly(project.Created_Time);
 
           return (
@@ -338,13 +302,6 @@ const ProjectList: React.FC<ProjectListProps> = ({
               onClick={() => onProjectClick(String(project.id || project.Project_Id))}
               className="relative text-left bg-white border border-gray-200 rounded-2xl shadow-sm hover:border-blue-200 hover:shadow-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 flex flex-col"
             >
-              <div className="absolute top-4 right-4">
-                <span
-                  className={`inline-flex items-center px-3 py-1 text-xs font-medium rounded-full ${status.badgeClass}`}
-                >
-                  {status.label}
-                </span>
-              </div>
               <div className="h-32 bg-gray-50 border-b border-gray-100 flex items-center justify-center">
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-lg font-semibold shadow">
                   {getInitials(project.ProjectName)}
