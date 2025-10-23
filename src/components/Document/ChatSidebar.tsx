@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -11,6 +10,7 @@ import type { ContentPosition } from "@/utils/enhancedAIContentWriter";
 import { aiService } from "@/services/aiService";
 import { useAuth } from "@/context/AuthContext";
 import { marked } from "marked";
+import { documentAgentService } from "@/services/documentAgentService";
 
 export type ChatMessage = {
     id: string;
@@ -97,13 +97,13 @@ export default function ChatSidebar({
     // Add initial hello message when chat opens
     useEffect(() => {
         if (open && !externalMessages && internalMessages.length === 0) {
-            let content = 'Hello! I\'m your AI writing assistant. I can help you improve your document, create summaries, or answer questions about your content.\n\n**Special AI Operations:**\n• Type `add <content>` to add new content\n• Type `remove <content>` to mark content for removal\n• Type `edit <content>` to replace existing content\n\nThese operations will show highlighted changes in your document with accept/reject options.\n```test\n This is a code block \n```';
+            let content = 'Hello! I\'m your AI writing assistant powered by Gemini Pro 2.5 with advanced reasoning capabilities.\n\n**✍️ MCP-Powered Document Agent:**\nI work as an intelligent agent with precise tools to help you write, edit, and improve your documents.\n\n**🛠️ Available Tools:**\n• **Append** - Add content to the end of your document\n• **Insert** - Place content at any specific position\n• **Replace** - Improve existing text at any location\n• **Delete** - Remove unwanted content precisely\n• **Read** - Analyze your document for insights\n\n**🤖 Natural Language Commands:**\n• "Add a conclusion paragraph at the end"\n• "Insert a transition sentence after the introduction"\n• "Replace the third paragraph with something more engaging"\n• "Delete the repetitive sentences in the middle section"\n• "Improve the selected text to be more professional"\n\nI can determine exact positions in your document and make precise edits. Just tell me what you need!\n\n**💡 Quick Actions:**\n• Type `add <content>` to add new content with AI suggestions\n• Type `remove <content>` to mark content for removal\n• Type `edit <content>` to replace and improve existing text\n\nThese operations show highlighted changes with accept/reject options.';
 
             if (repositoryInfo) {
                 content += `\n\n**🚀 Repository Integration Active!**\n📂 Connected to: \`${repositoryInfo.owner}/${repositoryInfo.repo}\`\n\n**Repository Commands:**\n• "Analyze code in [filename]" - Explain specific files\n• "Improve the React components" - Code improvements\n• "Debug the authentication flow" - Find issues\n• "Explain how routing works" - Understand patterns\n• "Document the API endpoints" - Generate docs\n\nI have access to your repository structure, README, and key files to provide contextual assistance!`;
             }
 
-            content += '\n\nHow can I assist you today?';
+            content += '\n\nHow can I assist with your writing today?';
 
             const helloMsg: ChatMessage = {
                 id: 'hello-msg',
@@ -562,17 +562,86 @@ export default function ChatSidebar({
                         }
                     } else {
 
-                        // Regular chat response - don't add to document
-                        const aiResponse = await aiService.chatResponse(text, editor ? editor.getHTML() : '');
+                        // Check if this is an agent command (MCP-style tools)
+                        const isAgentCommand = text.toLowerCase().includes('append') ||
+                            text.toLowerCase().includes('insert') ||
+                            text.toLowerCase().includes('replace') ||
+                            text.toLowerCase().includes('delete') ||
+                            text.toLowerCase().includes('add to document') ||
+                            text.toLowerCase().includes('add a ') ||
+                            text.toLowerCase().includes('change the') ||
+                            text.toLowerCase().includes('remove the') ||
+                            text.toLowerCase().includes('improve the') ||
+                            text.toLowerCase().includes('make the') ||
+                            text.toLowerCase().includes('rewrite the') ||
+                            text.toLowerCase().includes('edit the') ||
+                            text.startsWith('/agent');
 
-                        const assistantMsg: ChatMessage = {
-                            id: crypto.randomUUID(),
-                            role: "assistant",
-                            content: aiResponse,
-                            timestamp: Date.now(),
-                        };
+                        if (isAgentCommand && editor) {
+                            // Show progress message
+                            const progressId = crypto.randomUUID();
+                            const progressMsg: ChatMessage = {
+                                id: progressId,
+                                role: "assistant",
+                                content: "🤔 Agent analyzing your request...",
+                                timestamp: Date.now(),
+                            };
+                            setInternalMessages(prev => [...prev, progressMsg]);
 
-                        setInternalMessages(prev => [...prev, assistantMsg]);
+                            // Use document agent with reasoning and progress updates
+                            const agentResponse = await documentAgentService.processPrompt(
+                                text,
+                                editor,
+                                (status) => {
+                                    // Update progress message
+                                    setInternalMessages(prev =>
+                                        prev.map(msg =>
+                                            msg.id === progressId
+                                                ? { ...msg, content: status }
+                                                : msg
+                                        )
+                                    );
+                                }
+                            );
+
+                            // Build final response message
+                            let agentMessage = `🤖 **Agent Reasoning:**\n${agentResponse.reasoning}\n\n`;
+
+                            if (agentResponse.actions && agentResponse.actions.length > 0) {
+                                agentMessage += `**Actions Taken:**\n`;
+                                agentResponse.actions.forEach((action, index) => {
+                                    const posInfo = typeof action.position === 'number'
+                                        ? `at position ${action.position}`
+                                        : action.position
+                                            ? `from ${action.position.from} to ${action.position.to}`
+                                            : '';
+                                    agentMessage += `${index + 1}. **${action.type}** ${posInfo}: ${action.reason || 'Processing...'}\n`;
+                                });
+                            } else {
+                                agentMessage += `No document modifications needed.`;
+                            }
+
+                            // Replace progress message with final result
+                            setInternalMessages(prev =>
+                                prev.map(msg =>
+                                    msg.id === progressId
+                                        ? { ...msg, content: agentMessage }
+                                        : msg
+                                )
+                            );
+                        } else {
+                            // Regular chat response - don't add to document
+                            const aiResponse = await aiService.chatResponse(text, editor ? editor.getHTML() : '');
+
+                            const assistantMsg: ChatMessage = {
+                                id: crypto.randomUUID(),
+                                role: "assistant",
+                                content: aiResponse,
+                                timestamp: Date.now(),
+                            };
+
+                            setInternalMessages(prev => [...prev, assistantMsg]);
+                        }
                     }
                 }
             } catch (error) {
@@ -594,157 +663,159 @@ export default function ChatSidebar({
     if (!open) return null;
 
     return (
-        <div className="h-full flex flex-col">
-            <Card className="h-full flex flex-col">
-                <CardHeader className="flex flex-row items-center justify-between pb-3">
-                    <CardTitle className="flex items-center">
-                        <Sparkles className="w-5 h-5 mr-2 text-purple-600" />
-                        AI Assistant
-                    </CardTitle>
-                    <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
-                        <X className="w-4 h-4" />
-                    </Button>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative">
-                    {/* Messages */}
-                    <div className="flex-1 overflow-hidden">
-                        <ScrollArea className="h-full px-4 py-3">
-                            <div ref={listRef} className="space-y-3 relative">
-                                {messages.map((m) => (
-                                    <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                                        <div className={`${m.role === "user" ? "max-w-[85%]" : "max-w-[95%]"} space-y-2`}>
-                                            <div
-                                                className={`${m.role === "user"
-                                                    ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
-                                                    : m.content.includes("✅")
-                                                        ? "bg-gradient-to-r from-green-50 to-emerald-50 text-green-800 border-2 border-green-200 shadow-sm"
-                                                        : m.content.includes("❌")
-                                                            ? "bg-gradient-to-r from-red-50 to-pink-50 text-red-800 border-2 border-red-200 shadow-sm"
-                                                            : m.content.includes("✨")
-                                                                ? "bg-gradient-to-r from-purple-50 to-blue-50 text-purple-800 border-2 border-purple-200 shadow-sm"
-                                                                : "bg-gray-100 text-gray-900 border border-gray-200"
-                                                    } rounded-lg px-3 py-2 text-[0.95rem] leading-relaxed ${m.role === "user" ? "whitespace-pre-wrap" : ""} break-words transition-all duration-200 hover:scale-[1.02]`}
-                                            >
-                                                {m.role === "user" ? (
-                                                    m.content
-                                                ) : (
-                                                    <div
-                                                        className="prose prose-sm max-w-none chat-markdown-content
-                                                        prose-headings:mt-2 prose-headings:mb-1 prose-headings:font-bold
-                                                        prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
-                                                        prose-p:my-1 prose-p:leading-relaxed
-                                                        prose-ul:my-1 prose-ul:pl-4 prose-ol:my-1 prose-ol:pl-4 
-                                                        prose-li:my-0.5
-                                                        prose-pre:bg-[#1e1e1e] prose-pre:text-gray-100 prose-pre:p-3 prose-pre:rounded-md 
-                                                        prose-pre:text-xs prose-pre:overflow-x-auto prose-pre:my-2 prose-pre:shadow-md
+        <div className="h-full flex flex-col bg-white">
+            {/* Header */}
+            <div className="flex flex-row items-center justify-between pb-3 px-4 pt-4 border-b border-gray-200">
+                <h2 className="text-lg font-semibold flex items-center">
+                    <Sparkles className="w-5 h-5 mr-2 text-purple-600" />
+                    AI Assistant
+                </h2>
+                <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
+                    <X className="w-4 h-4" />
+                </Button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 flex flex-col p-0 overflow-hidden relative">
+                {/* Messages */}
+                <div className="flex-1 overflow-hidden">
+                    <ScrollArea className="h-full px-5 py-2">
+                        <div ref={listRef} className="space-y-4 relative">
+                            {messages.map((m) => (
+                                <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                                    <div className={`${m.role === "user" ? "max-w-[80%]" : "max-w-full"} space-y-2`}>
+                                        <div
+                                            className={`${m.role === "user"
+                                                ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
+                                                : m.content.includes("✅")
+                                                    ? "bg-gradient-to-r from-green-50 to-emerald-50 text-green-800 border-2 border-green-200 shadow-sm"
+                                                    : m.content.includes("❌")
+                                                        ? "bg-gradient-to-r from-red-50 to-pink-50 text-red-800 border-2 border-red-200 shadow-sm"
+                                                        : m.content.includes("✨")
+                                                            ? "bg-gradient-to-r from-purple-50 to-blue-50 text-purple-800 border-2 border-purple-200 shadow-sm"
+                                                            : "bg-white text-gray-900 border-2 border-gray-200"
+                                                } rounded-lg px-4 py-3 text-[0.95rem] leading-[1.6] ${m.role === "user" ? "whitespace-pre-wrap" : ""} break-words transition-all duration-200 hover:shadow-md`}
+                                        >
+                                            {m.role === "user" ? (
+                                                m.content
+                                            ) : (
+                                                <div
+                                                    className="prose prose-sm max-w-none chat-markdown-content
+                                                        prose-headings:mt-3 prose-headings:mb-2 prose-headings:font-semibold
+                                                        prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
+                                                        prose-p:my-2 prose-p:leading-relaxed prose-p:text-[0.95rem]
+                                                        prose-ul:my-2 prose-ul:pl-5 prose-ol:my-2 prose-ol:pl-5 
+                                                        prose-li:my-1 prose-li:leading-relaxed
+                                                        prose-pre:bg-[#1e1e1e] prose-pre:text-gray-100 prose-pre:p-4 prose-pre:rounded-md 
+                                                        prose-pre:text-sm prose-pre:overflow-x-auto prose-pre:my-3 prose-pre:shadow-lg
+                                                        prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
                                                         prose-strong:font-semibold prose-strong:text-gray-900
                                                         prose-a:text-blue-600 prose-a:underline hover:prose-a:text-blue-700
-                                                        prose-blockquote:border-l-4 prose-blockquote:border-gray-300 prose-blockquote:pl-4 prose-blockquote:italic
-                                                        prose-hr:border-gray-300 prose-hr:my-3
-                                                        prose-table:border-collapse prose-table:w-full
+                                                        prose-blockquote:border-l-4 prose-blockquote:border-gray-300 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:my-3
+                                                        prose-hr:border-gray-300 prose-hr:my-4
+                                                        prose-table:border-collapse prose-table:w-full prose-table:my-3
                                                         prose-th:border prose-th:border-gray-300 prose-th:bg-gray-50 prose-th:p-2
                                                         prose-td:border prose-td:border-gray-300 prose-td:p-2"
-                                                        dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
-                                                    />
-                                                )}
-                                            </div>
+                                                    dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
+                                                />
+                                            )}
                                         </div>
                                     </div>
-                                ))}
-                                {messages.length === 0 && (
-                                    <div className="text-sm text-gray-500">Ask for a summary, rewrite a section, or request suggestions.</div>
-                                )}
+                                </div>
+                            ))}
+                            {messages.length === 0 && (
+                                <div className="text-sm text-gray-500 text-center py-8">Ask for a summary, rewrite a section, or request suggestions.</div>
+                            )}
 
-                                {/* Scroll anchor */}
-                                <div ref={messagesEndRef} />
+                            {/* Scroll anchor */}
+                            <div ref={messagesEndRef} />
 
-                                {/* Loading indicator */}
-                                {isGenerating && (
-                                    <div className="flex justify-start">
-                                        <div className="bg-gradient-to-r from-purple-50 to-blue-50 text-gray-900 border-2 border-purple-200 rounded-lg px-4 py-3 max-w-[85%] text-[0.95rem] leading-relaxed">
-                                            <div className="flex items-center space-x-3">
-                                                <div className="flex space-x-1">
-                                                    <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
-                                                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                                                    <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                                                </div>
-                                                <span className="text-sm font-medium text-purple-700">
-                                                    AI is thinking...
-                                                </span>
+                            {/* Loading indicator */}
+                            {isGenerating && (
+                                <div className="flex justify-start">
+                                    <div className="bg-gradient-to-r from-purple-50 to-blue-50 text-gray-900 border-2 border-purple-200 rounded-lg px-4 py-3 max-w-[85%] text-[0.95rem] leading-relaxed">
+                                        <div className="flex items-center space-x-3">
+                                            <div className="flex space-x-1">
+                                                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce"></div>
+                                                <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                                                <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                                             </div>
+                                            <span className="text-sm font-medium text-purple-700">
+                                                AI is thinking...
+                                            </span>
                                         </div>
                                     </div>
-                                )}
-                            </div>
-                        </ScrollArea>
-                    </div>
-
-                    {/* Floating Quick Suggestions - positioned just above the composer */}
-                    {(suggestions?.length ?? 0) > 0 && input.length === 0 && !messages.some(m => m.role === 'user') && (
-                        <div className="px-3 pb-2">
-                            <div className="flex flex-wrap justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                {(suggestions ?? (repositoryInfo ? [
-                                    "*add",
-                                    "*remove",
-                                    "*edit",
-                                    "Analyze repository",
-                                    "Explain codebase",
-                                ] : [
-                                    "*add",
-                                    "*remove",
-                                    "*edit",
-                                    "Improve content",
-                                    "Add summary",
-                                ])).slice(0, 5).map((s, idx) => (
-                                    <Button
-                                        key={`${idx}-${s.slice(0, 12)}`}
-                                        variant="outline"
-                                        size="sm"
-                                        className="text-xs h-8 px-3 border-2 border-purple-200 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:border-purple-300 bg-white/95 backdrop-blur transition-all duration-200 hover:scale-105 hover:shadow-md"
-                                        onClick={() => {
-                                            setInput(s);
-                                            setTimeout(() => handleSend(), 0);
-                                        }}
-                                    >
-                                        {s}
-                                    </Button>
-                                ))}
-                            </div>
+                                </div>
+                            )}
                         </div>
-                    )}
+                    </ScrollArea>
+                </div>
 
-
-                    {/* Composer */}
-                    <div className="p-3 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-                        <div className="flex items-center gap-2">
-                            <Input
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                placeholder={isGenerating ? "AI is generating..." : "Type your request..."}
-                                disabled={isGenerating}
-                                className="flex-1 border-2 focus:border-purple-300 focus:ring-purple-200 transition-all duration-200"
-                                onKeyDown={(e) => {
-                                    if (e.key === "Enter" && !e.shiftKey && !isGenerating) {
-                                        e.preventDefault();
-                                        handleSend();
-                                    }
-                                }}
-                            />
-                            <Button
-                                onClick={handleSend}
-                                disabled={isGenerating || !input.trim()}
-                                className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:bg-gray-300 shadow-lg transition-all duration-200 hover:scale-105"
-                            >
-                                {isGenerating ? (
-                                    <Wand2 className="w-4 h-4 animate-spin" />
-                                ) : (
-                                    <SendHorizonal className="w-4 h-4" />
-                                )}
-                            </Button>
+                {/* Floating Quick Suggestions - positioned just above the composer */}
+                {(suggestions?.length ?? 0) > 0 && input.length === 0 && !messages.some(m => m.role === 'user') && (
+                    <div className="px-3 pb-2">
+                        <div className="flex flex-wrap justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            {(suggestions ?? (repositoryInfo ? [
+                                "*add",
+                                "*remove",
+                                "*edit",
+                                "Analyze repository",
+                                "Explain codebase",
+                            ] : [
+                                "*add",
+                                "*remove",
+                                "*edit",
+                                "Improve content",
+                                "Add summary",
+                            ])).slice(0, 5).map((s, idx) => (
+                                <Button
+                                    key={`${idx}-${s.slice(0, 12)}`}
+                                    variant="outline"
+                                    size="sm"
+                                    className="text-xs h-8 px-3 border-2 border-purple-200 hover:bg-gradient-to-r hover:from-purple-50 hover:to-blue-50 hover:border-purple-300 bg-white/95 backdrop-blur transition-all duration-200 hover:scale-105 hover:shadow-md"
+                                    onClick={() => {
+                                        setInput(s);
+                                        setTimeout(() => handleSend(), 0);
+                                    }}
+                                >
+                                    {s}
+                                </Button>
+                            ))}
                         </div>
                     </div>
-                </CardContent>
-            </Card>
+                )}
+
+
+                {/* Composer */}
+                <div className="p-3 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-white">
+                    <div className="flex items-center gap-2">
+                        <Input
+                            value={input}
+                            onChange={(e) => setInput(e.target.value)}
+                            placeholder={isGenerating ? "AI is generating..." : "Type your request..."}
+                            disabled={isGenerating}
+                            className="flex-1 border-2 focus:border-purple-300 focus:ring-purple-200 transition-all duration-200"
+                            onKeyDown={(e) => {
+                                if (e.key === "Enter" && !e.shiftKey && !isGenerating) {
+                                    e.preventDefault();
+                                    handleSend();
+                                }
+                            }}
+                        />
+                        <Button
+                            onClick={handleSend}
+                            disabled={isGenerating || !input.trim()}
+                            className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:bg-gray-300 shadow-lg transition-all duration-200 hover:scale-105"
+                        >
+                            {isGenerating ? (
+                                <Wand2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <SendHorizonal className="w-4 h-4" />
+                            )}
+                        </Button>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 }

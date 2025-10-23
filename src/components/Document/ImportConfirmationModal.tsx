@@ -70,6 +70,9 @@ export default function ImportConfirmationModal({
                     </button>
                 </div>
 
+                {/* Divider */}
+                <div className="border-t border-gray-200"></div>
+
                 <div className="flex justify-end pt-2">
                     <Button variant="outline" onClick={onClose}>
                         Cancel

@@ -4,6 +4,8 @@ import { Input } from "@/components/ui/input";
 import {
     History,
     Cloud,
+    CloudUpload,
+    CloudOff,
     FileText,
     FolderOpen,
     Dock,
@@ -18,15 +20,18 @@ import SimpleShare from "@/components/document/SimpleShare";
 import ProjectDocumentsDropdown from "@/components/document/ProjectDocumentsDropdown";
 import { useDocument } from "@/context/DocumentContext";
 import { updateToolPreference } from "@/utils/documentToolsPreferences";
+import { FirestoreService } from "../../../firestoreService";
 
 interface DocumentLayoutProps {
     children: ReactNode;
     showDocumentMenu?: boolean;
+    syncStatus?: 'synced' | 'syncing' | 'error';
 }
 
 export default function DocumentLayout({
     children,
-    showDocumentMenu = true
+    showDocumentMenu = true,
+    syncStatus = 'synced'
 }: DocumentLayoutProps) {
     const {
         documentTitle,
@@ -61,12 +66,25 @@ export default function DocumentLayout({
                 !path.includes('/history'));
     };
 
-    // Close chat sidebar when navigating away from editor/summary pages
-    useEffect(() => {
-        if (!shouldShowChatBot() && chatSidebarOpen) {
-            setChatSidebarOpen(false);
-        }
-    }, [location.pathname, chatSidebarOpen, setChatSidebarOpen]);
+    // Helper function to check if we should show sync status
+    const shouldShowSyncStatus = () => {
+        const path = location.pathname;
+        return path.includes('/document/editor') ||
+            path.includes('/document/summary') ||
+            (path.includes('/document/') &&
+                !path.includes('/project') &&
+                !path.includes('/history'));
+    };
+
+    // Helper function to check if title editing is allowed (only on editor/summary tabs)
+    const shouldAllowTitleEdit = () => {
+        const path = location.pathname;
+        return path.includes('/document/editor') || path.includes('/document/summary');
+    };
+
+    // Note: Chat sidebar state now persists across tab navigation
+    // Users can manually close/open the chat sidebar as needed
+    // (Removed auto-close when navigating away from editor/summary pages)
 
     // Helper function to determine if a tab is active based on current location
     const isTabActive = (tabName: string) => {
@@ -123,7 +141,11 @@ export default function DocumentLayout({
                 }
                 break;
             case 'summary':
-                navigate(`${basePath}/summary`);
+                if (documentId) {
+                    navigate(`${basePath}/summary/${documentId}`);
+                } else {
+                    navigate(`${basePath}/summary`);
+                }
                 break;
             case 'history':
                 navigate(`${basePath}/history`);
@@ -137,8 +159,20 @@ export default function DocumentLayout({
         }
     };
 
-    const handleTitleChange = (newTitle: string) => {
+    const handleTitleChange = async (newTitle: string) => {
         setDocumentTitle(newTitle);
+
+        // Save title to Firebase if we have a documentId
+        if (documentId) {
+            try {
+                await FirestoreService.updateDocument(documentId, {
+                    DocumentName: newTitle,
+                    Updated_Time: new Date()
+                });
+            } catch (error) {
+                console.error('Error updating document title:', error);
+            }
+        }
     };
 
     const handleAIGenerate = () => {
@@ -210,7 +244,7 @@ export default function DocumentLayout({
                             </Button>
 
                             {/* Editable Document Title */}
-                            {isEditingTitle ? (
+                            {isEditingTitle && shouldAllowTitleEdit() ? (
                                 <Input
                                     value={documentTitle}
                                     onChange={(e) => handleTitleChange(e.target.value)}
@@ -225,18 +259,37 @@ export default function DocumentLayout({
                                 />
                             ) : (
                                 <h1
-                                    className="!text-xl !font-semibold text-gray-900 cursor-pointer hover:text-gray-700 transition-colors max-w-xl truncate"
-                                    onClick={() => setIsEditingTitle(true)}
-                                    title="Click to edit title"
+                                    className={`!text-xl !font-semibold text-gray-900 max-w-xl truncate ${shouldAllowTitleEdit() ? 'cursor-pointer hover:text-gray-700 transition-colors' : 'cursor-default'
+                                        }`}
+                                    onClick={() => shouldAllowTitleEdit() && setIsEditingTitle(true)}
+                                    title={shouldAllowTitleEdit() ? "Click to edit title" : documentTitle}
                                 >
                                     {documentTitle}
                                 </h1>
                             )}
 
-                            <div className="flex items-center gap-1 text-sm text-gray-500">
-                                <Cloud className="w-4 h-4 text-green-600" />
-                                <span>Synced</span>
-                            </div>
+                            {shouldShowSyncStatus() && (
+                                <div className="flex items-center gap-1 text-sm text-gray-500">
+                                    {syncStatus === 'syncing' && (
+                                        <>
+                                            <CloudUpload className="w-4 h-4 text-blue-600 animate-pulse" />
+                                            <span>Syncing...</span>
+                                        </>
+                                    )}
+                                    {syncStatus === 'synced' && (
+                                        <>
+                                            <Cloud className="w-4 h-4 text-green-600" />
+                                            <span>Synced</span>
+                                        </>
+                                    )}
+                                    {syncStatus === 'error' && (
+                                        <>
+                                            <CloudOff className="w-4 h-4 text-red-600" />
+                                            <span>Error</span>
+                                        </>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -323,8 +376,8 @@ export default function DocumentLayout({
                 <div
                     className={
                         showDocumentMenu
-                            ? "fixed left-0 right-0 bottom-0 top-[152px] flex"
-                            : "fixed left-0 right-0 bottom-0 top-[100px] flex"
+                            ? "fixed left-0 right-0 bottom-0 top-[142px] flex"
+                            : "fixed left-0 right-0 bottom-0 top-[90px] flex"
                     }
                 >
                     {/* Navigation Pane Column - 15% width - Conditionally Rendered */}
@@ -385,8 +438,8 @@ export default function DocumentLayout({
                     {/* ChatSidebar Column - Same level as Document Editor - Conditionally Rendered */}
                     {/* Only show ChatSidebar on editor/summary pages when open */}
                     {chatSidebarOpen && shouldShowChatBot() && (
-                        <div className="w-[20rem] border-l border-gray-200 bg-white flex-shrink-0 relative">
-                            <div className="h-full p-4">
+                        <div className="w-[27%] border-l border-gray-200 bg-white flex-shrink-0 relative">
+                            <div className="h-full">
                                 <ChatSidebar
                                     open={chatSidebarOpen}
                                     onClose={() => {

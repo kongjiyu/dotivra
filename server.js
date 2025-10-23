@@ -1157,12 +1157,16 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
+// Create HTTP server for WebSocket upgrade support
+const server = http.createServer(app);
+
 // Start server
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 GitHub Server running on port ${PORT}`);
   console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL}`);
   console.log(`🔑 GitHub App ID: ${process.env.GITHUB_APP_ID}`);
   console.log(`🔥 Firebase Project: ${process.env.VITE_FIREBASE_PROJECT_ID}`);
+  console.log(`🔌 WebSocket server ready for connections`);
 });
 
 /* ------------------ Utility ------------------ */
@@ -1610,21 +1614,402 @@ function extractMetaContent(html, regex) {
   return match ? match[1].trim() : null;
 }
 
+/* ------------------ Document Agent with Gemini Pro 2.5 ------------------ */
+app.post('/api/document-agent/chat', async (req, res) => {
+  try {
+    const { prompt, context } = req.body;
+
+    if (!prompt || !context) {
+      return res.status(400).json({ error: 'Prompt and context are required' });
+    }
+
+    if (!geminiBalancer) {
+      return res.status(503).json({ error: 'Gemini service not available' });
+    }
+
+    // Build system instruction for the agent
+    const systemInstruction = `You are an intelligent document editing assistant acting as an MCP (Model Context Protocol) server. You help users write, edit, and improve their documents (articles, essays, reports, stories, etc.).
+
+IMPORTANT: You work with the USER'S DOCUMENT CONTENT, not code repositories or technical files.
+
+Available Tools (you can use multiple tools in one response):
+
+1. **append** - Add new content to the end of the document
+   Parameters: { type: "append", content: "text to append", reason: "why" }
+
+2. **insert** - Insert content at a specific character position
+   Parameters: { type: "insert", position: number, content: "text to insert", reason: "why" }
+   Example: { type: "insert", position: 150, content: "New paragraph here.", reason: "Adding context" }
+
+3. **replace** - Replace text in a specific range with new content
+   Parameters: { type: "replace", position: {from: number, to: number}, content: "new text", reason: "why" }
+   Example: { type: "replace", position: {from: 100, to: 150}, content: "improved text", reason: "Making it clearer" }
+
+4. **delete** - Remove text in a specific range
+   Parameters: { type: "delete", position: {from: number, to: number}, reason: "why" }
+   Example: { type: "delete", position: {from: 200, to: 250}, reason: "Removing redundant content" }
+
+5. **read** - Read and analyze without making changes
+   Parameters: { type: "read", reason: "what you're analyzing" }
+
+Context provided:
+- documentContent: The full text of the user's document
+- selectedText: Text the user has highlighted (if any)
+- selectionRange: {from: number, to: number} - Character positions of highlighted text
+- documentLength: Total character count
+- cursorPosition: Current cursor location (character position)
+
+Your workflow:
+1. Analyze the user's request in the context of their document
+2. Determine which tool(s) to use and where to apply them
+3. Calculate exact character positions for edits
+4. Provide clear reasoning for your decisions
+5. Return structured JSON with your reasoning and planned tool calls
+
+Response format (JSON only):
+{
+  "reasoning": "Explain your analysis and what you plan to do to improve their writing",
+  "actions": [
+    {
+      "type": "append|insert|replace|delete|read",
+      "content": "actual text content (for append/insert/replace)",
+      "position": number OR {from: number, to: number},
+      "reason": "why this specific change improves their document"
+    }
+  ]
+}
+
+Guidelines:
+- You are helping with WRITING and CONTENT, not code
+- Use character positions precisely - count from start of document
+- For selected text, use the provided selectionRange positions
+- Match the user's writing style, tone, and voice
+- Be creative for creative writing; be professional for formal writing
+- You can use multiple tools in sequence (e.g., delete redundant text, then insert improved version)
+- Explain your reasoning clearly so users understand your edits
+- If editing selected text, use the 'replace' tool with the selectionRange
+- Character positions are zero-indexed (0 = start of document)`;
+
+    // Build the prompt with context
+    const fullPrompt = `Document context:
+- Full content: ${context.documentContent || '(empty document)'}
+- Selected text: ${context.selectedText || '(no selection)'}
+- Selection range: ${context.selectionRange ? `${context.selectionRange.from} to ${context.selectionRange.to}` : '(no selection)'}
+- Document length: ${context.documentLength} characters
+- Cursor at: ${context.cursorPosition}
+
+User request: ${prompt}
+
+Analyze the request and determine what actions to take. Respond with JSON only.`;
+
+    // Call Gemini API with reasoning
+    const result = await geminiBalancer.generateText(fullPrompt, {
+      systemInstruction,
+      temperature: 0.7,
+      topP: 0.95,
+      topK: 40,
+      maxOutputTokens: 2048,
+    });
+
+    // Parse the response
+    let agentResponse;
+    try {
+      // Try to extract JSON from the response
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        agentResponse = JSON.parse(jsonMatch[0]);
+      } else {
+        // If no JSON found, create a default response
+        agentResponse = {
+          reasoning: result,
+          actions: []
+        };
+      }
+    } catch (parseError) {
+      console.error('Error parsing agent response:', parseError);
+      agentResponse = {
+        reasoning: result,
+        actions: [],
+        rawResponse: result
+      };
+    }
+
+    res.json(agentResponse);
+  } catch (error) {
+    console.error('Document agent error:', error);
+    res.status(500).json({ 
+      error: 'Agent processing failed',
+      details: error.message 
+    });
+  }
+});
+
 /* ------------------ WebSocket ------------------ */
 const wss = new WebSocketServer({ noServer: true });
 
+// Store document rooms: documentId -> Set<WebSocket>
+const documentRooms = new Map();
+
 wss.on("connection", (ws) => {
   console.log("Client connected ✅");
+  let currentDocumentId = null;
 
-  ws.on("message", (msg) => {
-    console.log("Received:", msg.toString());
+  ws.on("message", async (msg) => {
+    try {
+      const data = JSON.parse(msg.toString());
+      console.log("Received:", data.type, data.documentId);
+
+      switch (data.type) {
+        case 'join':
+          // Join document room
+          currentDocumentId = data.documentId;
+          if (!documentRooms.has(currentDocumentId)) {
+            documentRooms.set(currentDocumentId, new Set());
+          }
+          documentRooms.get(currentDocumentId).add(ws);
+          console.log(`📄 Client joined document: ${currentDocumentId}`);
+          ws.send(JSON.stringify({ type: 'joined', documentId: currentDocumentId }));
+          break;
+
+        case 'sync_request':
+          // Client requesting current document state (for reconnection)
+          try {
+            const syncDocId = data.documentId;
+            const syncChannel = data.channel; // 'content' or 'summary'
+            const docRef = doc(firestore, 'Documents', syncDocId);
+            const docSnap = await getDoc(docRef);
+            
+            if (docSnap.exists()) {
+              const docData = docSnap.data();
+              
+              // Ensure Summary field exists, add if missing
+              if (!docData.Summary) {
+                await updateDoc(docRef, { Summary: '' });
+                console.log(`➕ Added missing Summary field to document: ${syncDocId}`);
+              }
+              
+              // Send appropriate content based on channel
+              let content = '';
+              if (syncChannel === 'summary') {
+                content = docData.Summary || '';
+              } else {
+                content = docData.Content || '';
+              }
+              
+              ws.send(JSON.stringify({
+                type: 'sync_response',
+                documentId: syncDocId,
+                content: content,
+                version: docData.version || 0,
+                channel: syncChannel,
+              }));
+              console.log(`🔄 Sync response sent for document: ${syncDocId}, channel: ${syncChannel}, version: ${docData.version || 0}`);
+            } else {
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Document not found',
+                documentId: syncDocId
+              }));
+            }
+          } catch (error) {
+            console.error('Error handling sync_request:', error);
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Failed to sync document',
+              documentId: data.documentId
+            }));
+          }
+          break;
+
+        case 'edit':
+          // OT protocol: Handle edit with version checking
+          const { documentId: editDocId, content: editContent, baseVersion, seq, channel: editChannel } = data;
+          const editIsSummary = editChannel === 'summary';
+          
+          console.log(`📝 Processing edit. DocId: ${editDocId}, Seq: ${seq}, BaseVersion: ${baseVersion}, Channel: ${editChannel}`);
+          
+          try {
+            const docRef = doc(firestore, 'Documents', editDocId);
+            const docSnap = await getDoc(docRef);
+            
+            if (!docSnap.exists()) {
+              console.error(`❌ Document not found: ${editDocId}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Document not found',
+                documentId: editDocId
+              }));
+              break;
+            }
+            
+            const docData = docSnap.data();
+            const currentVersion = docData.version || 0;
+            
+            // Ensure Summary field exists if we're editing summary
+            if (editIsSummary && !docData.Summary) {
+              await updateDoc(docRef, { Summary: '' });
+              console.log(`➕ Added missing Summary field to document: ${editDocId}`);
+            }
+            
+            console.log(`📊 Current document version: ${currentVersion}, Incoming baseVersion: ${baseVersion}`);
+            
+            // Check if baseVersion matches current version
+            if (baseVersion !== currentVersion) {
+              // Reject stale edit
+              console.log(`⚠️ Rejecting stale edit. Base: ${baseVersion}, Current: ${currentVersion}`);
+              ws.send(JSON.stringify({
+                type: 'reject',
+                documentId: editDocId,
+                seq,
+                currentVersion,
+                reason: 'stale_base_version'
+              }));
+              break;
+            }
+            
+            // Version matches, apply edit
+            const newVersion = currentVersion + 1;
+            const updateData = {
+              Updated_Time: Timestamp.now(),
+              version: newVersion
+            };
+            
+            if (editIsSummary) {
+              updateData.Summary = editContent;
+              console.log(`💾 Updating Summary field (channel: ${editChannel})`);
+            } else {
+              updateData.Content = editContent;
+              console.log(`💾 Updating Content field (channel: ${editChannel})`);
+            }
+            
+            console.log(`🔄 Saving to Firestore...`);
+            await updateDoc(docRef, updateData);
+            console.log(`💾 Firestore updated successfully`);
+            
+            // Send acknowledgment to sender
+            const ackMessage = {
+              type: 'ack',
+              documentId: editDocId,
+              seq,
+              newVersion,
+              channel: editChannel // Include channel in response
+            };
+            console.log(`📤 Sending ACK:`, ackMessage);
+            ws.send(JSON.stringify(ackMessage));
+            
+            console.log(`✅ Edit applied. Seq: ${seq}, New version: ${newVersion}, Channel: ${editChannel}`);
+            
+            // Broadcast to other clients in the same document room (same channel only)
+            if (documentRooms.has(editDocId)) {
+              const clients = documentRooms.get(editDocId);
+              clients.forEach(client => {
+                if (client !== ws && client.readyState === client.OPEN) {
+                  client.send(JSON.stringify({
+                    type: 'update',
+                    documentId: editDocId,
+                    content: editContent,
+                    version: newVersion,
+                    channel: editChannel // Include channel so clients know which field updated
+                  }));
+                }
+              });
+            }
+          } catch (error) {
+            console.error('Error handling edit:', error);
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Failed to save edit',
+              documentId: editDocId,
+              seq
+            }));
+          }
+          break;
+
+        case 'update':
+          // Legacy: Save document update and broadcast to other clients (for backward compatibility)
+          const { documentId, content, isSummary } = data;
+          
+          try {
+            // Save to Firestore
+            const docRef = doc(firestore, 'Documents', documentId);
+            const docSnap = await getDoc(docRef);
+            const currentVersion = docSnap.exists() ? (docSnap.data().version || 0) : 0;
+            const newVersion = currentVersion + 1;
+            
+            const updateData = {
+              Updated_Time: Timestamp.now(),
+              version: newVersion
+            };
+            
+            if (isSummary) {
+              updateData.Summary = content;
+            } else {
+              updateData.Content = content;
+            }
+            
+            await updateDoc(docRef, updateData);
+            
+            // Send acknowledgment to sender
+            ws.send(JSON.stringify({ 
+              type: 'synced', 
+              documentId 
+            }));
+            
+            // Broadcast to other clients in the same document room
+            if (documentRooms.has(documentId)) {
+              const clients = documentRooms.get(documentId);
+              clients.forEach(client => {
+                if (client !== ws && client.readyState === client.OPEN) {
+                  client.send(JSON.stringify({
+                    type: 'update',
+                    documentId,
+                    content,
+                    version: newVersion,
+                    isSummary
+                  }));
+                }
+              });
+            }
+            
+            console.log(`💾 Document ${documentId} saved and synced (legacy mode)`);
+          } catch (error) {
+            console.error('Error saving document:', error);
+            ws.send(JSON.stringify({ 
+              type: 'error', 
+              message: 'Failed to save document',
+              documentId
+            }));
+          }
+          break;
+
+        default:
+          console.log("Unknown message type:", data.type);
+      }
+    } catch (error) {
+      console.error('Error processing WebSocket message:', error);
+      ws.send(JSON.stringify({ 
+        type: 'error', 
+        message: 'Invalid message format' 
+      }));
+    }
   });
 
-  ws.send(JSON.stringify({ status: "connected" }));
+  ws.on('close', () => {
+    // Remove client from document room
+    if (currentDocumentId && documentRooms.has(currentDocumentId)) {
+      documentRooms.get(currentDocumentId).delete(ws);
+      if (documentRooms.get(currentDocumentId).size === 0) {
+        documentRooms.delete(currentDocumentId);
+      }
+      console.log(`📄 Client left document: ${currentDocumentId}`);
+    }
+    console.log("Client disconnected ❌");
+  });
+
+  ws.send(JSON.stringify({ type: "connected" }));
 });
 
-const server = http.createServer(app);
-
+// Handle WebSocket upgrade requests
 server.on("upgrade", (req, socket, head) => {
   wss.handleUpgrade(req, socket, head, (ws) => {
     wss.emit("connection", ws, req);

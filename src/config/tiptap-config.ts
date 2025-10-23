@@ -25,6 +25,7 @@ import Heading from "@/lib/extensions/Heading";
 import Mermaid from "@/lib/extensions/Mermaid";
 import { CodeBlockWithHighlight } from "@/lib/extensions/CodeBlockWithHighlight";
 import { BackspaceBehaviorFix } from "@/lib/extensions/BackspaceBehaviorFix";
+import MarkdownLinkPaste from "@/lib/extensions/MarkdownLinkPaste";
 
 // TipTap Editor Configuration
 export const getTipTapExtensions = () => [
@@ -83,6 +84,8 @@ export const getTipTapExtensions = () => [
         },
         validate: (href: string) => /^https?:\/\//.test(href) || /^mailto:/.test(href) || /^tel:/.test(href),
     }),
+    // Markdown link paste extension - converts [text](url) to HTML links
+    MarkdownLinkPaste,
     // Horizontal rule (divider)
     HorizontalRule.configure({
         HTMLAttributes: {

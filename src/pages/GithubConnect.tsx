@@ -2,14 +2,15 @@ import { useState, useEffect } from 'react';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
-import { 
-  Github, 
-  ExternalLink, 
-  FileText, 
-  Folder, 
-  Loader2, 
-  AlertCircle, 
-  CheckCircle, 
+import { ScrollArea } from '../components/ui/scroll-area';
+import {
+  Github,
+  ExternalLink,
+  FileText,
+  Folder,
+  Loader2,
+  AlertCircle,
+  CheckCircle,
   Copy,
   Download,
   Search,
@@ -49,7 +50,7 @@ export default function GithubConnect() {
       setFilteredRepos(repositories);
     } else {
       const term = searchTerm.toLowerCase();
-      setFilteredRepos(repositories.filter(repo => 
+      setFilteredRepos(repositories.filter(repo =>
         repo.name.toLowerCase().includes(term) ||
         repo.description?.toLowerCase().includes(term) ||
         repo.language?.toLowerCase().includes(term)
@@ -88,18 +89,18 @@ export default function GithubConnect() {
       try {
         // Exchange code for token
         const token = await githubOAuthService.exchangeCodeForToken(code, state);
-        
+
         // Get GitHub user info
         const githubUserInfo = await githubOAuthService.getGitHubUser(token.access_token);
-        
+
         // Store token and user info
         await githubOAuthService.storeUserGitHubToken(user, token, githubUserInfo);
-        
+
         // Update UI state
         setIsConnected(true);
         setGithubUser(githubUserInfo);
         await loadRepositories();
-        
+
         // Clean up URL
         window.history.replaceState({}, '', window.location.pathname);
       } catch (error) {
@@ -114,7 +115,7 @@ export default function GithubConnect() {
   const handleConnectGitHub = () => {
     setConnecting(true);
     setError(null);
-    
+
     try {
       const authUrl = githubOAuthService.getAuthorizationUrl();
       window.location.href = authUrl;
@@ -155,12 +156,12 @@ export default function GithubConnect() {
     setLoading(true);
     try {
       const contents = await githubRepoService.getRepositoryContents(
-        user, 
-        repo.owner.login, 
-        repo.name, 
+        user,
+        repo.owner.login,
+        repo.name,
         path
       );
-      
+
       // Filter to show only supported files
       const filteredContents = githubRepoService.filterSupportedFiles(contents);
       setRepoContents(filteredContents);
@@ -204,7 +205,7 @@ export default function GithubConnect() {
 
   const handleGoBack = async () => {
     if (!selectedRepo || pathHistory.length === 0) return;
-    
+
     const previousPath = pathHistory[pathHistory.length - 1];
     setPathHistory(pathHistory.slice(0, -1));
     await loadRepoContents(selectedRepo, previousPath);
@@ -356,56 +357,57 @@ export default function GithubConnect() {
                         <Loader2 className="h-6 w-6 animate-spin" />
                       </div>
                     ) : (
-                      <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {filteredRepos.map((repo) => (
-                          <div
-                            key={repo.id}
-                            className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                              selectedRepo?.id === repo.id
-                                ? 'border-blue-500 bg-blue-50'
-                                : 'border-gray-200 hover:border-gray-300'
-                            }`}
-                            onClick={() => handleSelectRepo(repo)}
-                          >
-                            <div className="flex items-start justify-between">
-                              <div className="flex-1 min-w-0">
-                                <h3 className="text-sm font-medium text-gray-900 truncate">
-                                  {repo.name}
-                                </h3>
-                                {repo.description && (
-                                  <p className="text-xs text-gray-500 mt-1 line-clamp-2">
-                                    {repo.description}
-                                  </p>
-                                )}
-                                <div className="flex items-center gap-2 mt-2">
-                                  {repo.language && (
-                                    <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                                      {repo.language}
-                                    </span>
+                      <ScrollArea className="max-h-96">
+                        <div className="space-y-2">
+                          {filteredRepos.map((repo) => (
+                            <div
+                              key={repo.id}
+                              className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedRepo?.id === repo.id
+                                  ? 'border-blue-500 bg-blue-50'
+                                  : 'border-gray-200 hover:border-gray-300'
+                                }`}
+                              onClick={() => handleSelectRepo(repo)}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="text-sm font-medium text-gray-900 truncate">
+                                    {repo.name}
+                                  </h3>
+                                  {repo.description && (
+                                    <p className="text-xs text-gray-500 mt-1 line-clamp-2">
+                                      {repo.description}
+                                    </p>
                                   )}
-                                  {repo.private && (
-                                    <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
-                                      Private
-                                    </span>
-                                  )}
+                                  <div className="flex items-center gap-2 mt-2">
+                                    {repo.language && (
+                                      <span className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                                        {repo.language}
+                                      </span>
+                                    )}
+                                    {repo.private && (
+                                      <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded">
+                                        Private
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
+                                <ExternalLink
+                                  className="h-4 w-4 text-gray-400 ml-2 flex-shrink-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    window.open(repo.html_url, '_blank');
+                                  }}
+                                />
                               </div>
-                              <ExternalLink
-                                className="h-4 w-4 text-gray-400 ml-2 flex-shrink-0"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  window.open(repo.html_url, '_blank');
-                                }}
-                              />
                             </div>
-                          </div>
-                        ))}
-                        {filteredRepos.length === 0 && searchTerm && (
-                          <div className="text-center py-4 text-gray-500">
-                            <p>No repositories found matching "{searchTerm}"</p>
-                          </div>
-                        )}
-                      </div>
+                          ))}
+                          {filteredRepos.length === 0 && searchTerm && (
+                            <div className="text-center py-4 text-gray-500">
+                              <p>No repositories found matching "{searchTerm}"</p>
+                            </div>
+                          )}
+                        </div>
+                      </ScrollArea>
                     )}
                   </CardContent>
                 </Card>
@@ -441,34 +443,36 @@ export default function GithubConnect() {
                           <Loader2 className="h-6 w-6 animate-spin" />
                         </div>
                       ) : (
-                        <div className="space-y-1 max-h-96 overflow-y-auto">
-                          {repoContents.map((item, index) => (
-                            <div
-                              key={index}
-                              className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 cursor-pointer"
-                              onClick={() => handleSelectItem(item)}
-                            >
-                              {item.type === 'dir' ? (
-                                <Folder className="h-4 w-4 text-blue-500" />
-                              ) : (
-                                <FileText className="h-4 w-4 text-gray-500" />
-                              )}
-                              <span className="text-sm text-gray-700 truncate flex-1">
-                                {item.name}
-                              </span>
-                              {item.type === 'file' && item.size && (
-                                <span className="text-xs text-gray-400">
-                                  {formatFileSize(item.size)}
+                        <ScrollArea className="max-h-96">
+                          <div className="space-y-1">
+                            {repoContents.map((item, index) => (
+                              <div
+                                key={index}
+                                className="flex items-center gap-2 p-2 rounded hover:bg-gray-50 cursor-pointer"
+                                onClick={() => handleSelectItem(item)}
+                              >
+                                {item.type === 'dir' ? (
+                                  <Folder className="h-4 w-4 text-blue-500" />
+                                ) : (
+                                  <FileText className="h-4 w-4 text-gray-500" />
+                                )}
+                                <span className="text-sm text-gray-700 truncate flex-1">
+                                  {item.name}
                                 </span>
-                              )}
-                            </div>
-                          ))}
-                          {repoContents.length === 0 && (
-                            <div className="text-center py-4 text-gray-500">
-                              <p>No supported files found in this directory</p>
-                            </div>
-                          )}
-                        </div>
+                                {item.type === 'file' && item.size && (
+                                  <span className="text-xs text-gray-400">
+                                    {formatFileSize(item.size)}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            {repoContents.length === 0 && (
+                              <div className="text-center py-4 text-gray-500">
+                                <p>No supported files found in this directory</p>
+                              </div>
+                            )}
+                          </div>
+                        </ScrollArea>
                       )}
                     </CardContent>
                   </Card>
@@ -515,10 +519,12 @@ export default function GithubConnect() {
                       </div>
                     </CardHeader>
                     <CardContent>
-                      <div className="bg-gray-50 rounded-lg p-4 max-h-96 overflow-auto">
-                        <pre className="text-sm text-gray-700 whitespace-pre-wrap">
-                          {selectedFile.content}
-                        </pre>
+                      <div className="bg-gray-50 rounded-lg p-4 max-h-96">
+                        <ScrollArea className="max-h-96">
+                          <pre className="text-sm text-gray-700 whitespace-pre-wrap">
+                            {selectedFile.content}
+                          </pre>
+                        </ScrollArea>
                       </div>
                     </CardContent>
                   </Card>

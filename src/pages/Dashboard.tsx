@@ -318,7 +318,7 @@ const Dashboard: React.FC = () => {
       />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-6 space-y-8">
+      <main className="max-w-7xl mx-auto px-6 py-6 space-y-7">
         <TemplateGrid 
           onTemplateClick={handleTemplateClick}
           onExploreAll={handleExploreAll}
