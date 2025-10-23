@@ -21,11 +21,9 @@ const formatGitHubUrl = (repoUrl: string): string => {
     return repoUrl;
   }
   
-  // Remove .github.io suffix if present and convert to GitHub repo URL
-  const cleanRepo = repoUrl.replace(/\.github\.io$/, '');
-  
   // If it doesn't start with http, assume it's a username/repo format
-  return `https://github.com/${cleanRepo}`;
+  // Keep the repo name as-is (including .github.io if it's part of the actual repo name)
+  return `https://github.com/${repoUrl}`;
 };
 
 /**
@@ -36,9 +34,6 @@ const formatGitHubDisplayText = (repoUrl: string): string => {
   
   // Remove protocol and www
   let display = repoUrl.replace(/^https?:\/\/(www\.)?/, '');
-  
-  // Remove .github.io suffix
-  display = display.replace(/\.github\.io$/, '');
   
   // For github.com URLs, just show username/repo
   if (display.startsWith('github.com/')) {
