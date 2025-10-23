@@ -524,7 +524,7 @@ app.post('/api/gemini/generate', async (req, res) => {
     const {
       prompt,
       contents,
-      model = 'gemini-2.0-flash-exp',
+      model = 'gemini-2.5-pro',
       tools,
       systemInstruction,
       generationConfig,
@@ -1318,6 +1318,38 @@ app.put('/api/documents/:documentId', async (req, res) => {
   } catch (error) {
     logger.error('Error updating document:', error);
     res.status(500).json({ error: 'Failed to update document' });
+  }
+});
+
+// Delete document
+app.delete('/api/documents/:documentId', async (req, res) => {
+  try {
+    const { documentId } = req.params;
+    logger.info('🗑️ DELETE /api/documents/' + documentId);
+    
+    const docRef = db.collection('Documents').doc(documentId);
+    const doc = await docRef.get();
+    
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    
+    await docRef.delete();
+    
+    logger.info('✅ Document deleted successfully:', documentId);
+    
+    res.json({
+      success: true,
+      message: 'Document deleted successfully',
+      documentId
+    });
+  } catch (error) {
+    logger.error('❌ Error deleting document:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete document',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 

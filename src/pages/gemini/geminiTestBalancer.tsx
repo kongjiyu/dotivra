@@ -3,7 +3,7 @@ import geminiBalanceService from '@/services/geminiBalance';
 
 export default function GeminiTestBalancer() {
     const [count, setCount] = useState(12);
-    const [model, setModel] = useState('gemini-2.0-flash');
+    const [model, setModel] = useState('gemini-2.5-pro');
     const [dryRun, setDryRun] = useState(true);
     const [running, setRunning] = useState(false);
     const [result, setResult] = useState<any>(null);

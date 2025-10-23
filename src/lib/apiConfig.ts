@@ -36,6 +36,7 @@ export const API_ENDPOINTS = {
   // Documents  
   documents: () => buildApiUrl('api/documents'),
   document: (id: string) => buildApiUrl(`api/documents/${id}`),
+  deleteDocument: (id: string) => buildApiUrl(`api/documents/${id}`),
   projectDocuments: (projectId: string) => buildApiUrl(`api/documents/project/${projectId}`),
   
   // Templates

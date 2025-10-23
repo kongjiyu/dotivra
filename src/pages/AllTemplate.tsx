@@ -283,7 +283,7 @@ const AllTemplate: React.FC = () => {
         documentCategory = 'Developer';
       }
 
-      // Create document with consistent field names
+      // Create document with consistent field names matching backend expectations
       const createDocRes = await fetch('/api/documents', {
         method: 'POST',
         headers: {
@@ -291,12 +291,14 @@ const AllTemplate: React.FC = () => {
           'Authorization': `Bearer ${idToken}`
         },
         body: JSON.stringify({
-          title: documentName,
-          content: content,
-          projectId: finalProjectId,
-          userId: userId,
-          templateId: template.Template_Id || template.id,
-          documentCategory: documentCategory
+          DocumentName: documentName,
+          DocumentType: 'user-manual', // or another appropriate type based on template
+          DocumentCategory: documentCategory,
+          Content: content,
+          Project_Id: finalProjectId,
+          User_Id: userId,
+          Template_Id: template.Template_Id || template.id,
+          IsDraft: false,
         })
       });
 

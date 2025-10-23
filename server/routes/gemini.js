@@ -74,7 +74,7 @@ export function createGeminiRoutes(options = {}) {
         const {
           prompt,
           contents,
-          model = 'gemini-2.0-flash-exp',
+          model = 'gemini-2.5-pro',
           tools,
           systemInstruction,
           generationConfig,

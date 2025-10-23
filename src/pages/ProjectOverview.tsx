@@ -188,8 +188,45 @@ const ProjectOverview: React.FC = () => {
     navigate(`/document/${document.id}`);
   };
 
-  const handleDeleteDocument = (document: Document) => {
-    alert(`Delete "${document.DocumentName}"? (This is just a demo)`);
+  const handleDeleteDocument = async (document: Document) => {
+    if (!document.id) {
+      console.error('❌ Document ID is missing');
+      alert('Cannot delete document: Document ID is missing');
+      return;
+    }
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete "${document.DocumentName}"? This action cannot be undone.`
+    );
+    
+    if (!confirmDelete) {
+      return;
+    }
+
+    try {
+      console.log('🗑️ Deleting document:', document.id);
+      
+      const response = await fetch(API_ENDPOINTS.deleteDocument(document.id), {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete document');
+      }
+
+      const result = await response.json();
+      console.log('✅ Document deleted successfully:', result);
+
+      // Update the documents list by removing the deleted document
+      setDocuments(prevDocs => prevDocs.filter(doc => doc.id !== document.id));
+      
+      // Show success message
+      alert(`Document "${document.DocumentName}" has been deleted successfully.`);
+    } catch (error) {
+      console.error('❌ Error deleting document:', error);
+      alert(`Failed to delete document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   };
 
   const handleCreateDocument = async ({
@@ -333,12 +370,14 @@ const ProjectOverview: React.FC = () => {
 
       // Create document data matching API expectations
       const documentData = {
-        title: name,
-        content: documentContent,
-        projectId: projectId,
-        userId: userId,
-        templateId: template.id || template.Template_Id,
-        documentCategory: documentCategory,
+        DocumentName: name,
+        DocumentType: 'user-manual', // or another appropriate type
+        DocumentCategory: documentCategory,
+        Project_Id: projectId,
+        User_Id: userId,
+        Template_Id: template.id || template.Template_Id,
+        Content: documentContent, // Capital C to match backend expectation
+        IsDraft: false,
       };
 
       const response = await fetch(API_ENDPOINTS.documents(), {
