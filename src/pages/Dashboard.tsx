@@ -310,7 +310,7 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 text-gray-800 flex flex-col">
       <Header
         userName={displayName}
         initials={initials}
@@ -318,18 +318,20 @@ const Dashboard: React.FC = () => {
       />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-6 space-y-7">
+      <main className="max-w-7xl mx-auto px-6 py-6 w-full flex-1 flex flex-col gap-6">
         <TemplateGrid 
           onTemplateClick={handleTemplateClick}
           onExploreAll={handleExploreAll}
           onAddProject={handleNewProject}
         />
 
-        <ProjectList 
-          onProjectClick={handleProjectClick}
-          onViewAllProjects={handleViewAllProjects}
-          onNewProject={handleNewProject}
-        />
+        <div className="flex-1 flex flex-col min-h-0">
+          <ProjectList 
+            onProjectClick={handleProjectClick}
+            onViewAllProjects={handleViewAllProjects}
+            onNewProject={handleNewProject}
+          />
+        </div>
       </main>
 
       {/* AddProjectModal with GitHub Integration */}

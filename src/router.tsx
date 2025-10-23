@@ -63,6 +63,10 @@ const router = createBrowserRouter([
     errorElement: <ErrorPage />,
     children: [
       {
+        path: "/",
+        element: <Login />,
+      },
+      {
         path: "/dashboard",
         element: <ProtectedRoute><Dashboard /></ProtectedRoute>,
       },
@@ -95,7 +99,7 @@ const router = createBrowserRouter([
         element: <ProtectedDocumentWrapper><DocumentProject /></ProtectedDocumentWrapper>,
       },
       {
-        path: "/document/history",
+        path: "/document/history/:documentId",
         element: <ProtectedDocumentWrapper><DocumentHistory /></ProtectedDocumentWrapper>,
       },
       // Redirect old /editor path to new document editor
@@ -131,13 +135,13 @@ const router = createBrowserRouter([
         path: "/gemini/test-balancer",
         element: <ProtectedRoute><GeminiTestBalancer /></ProtectedRoute>,
       },
+      // Catch-all route for 404s
+      {
+        path: "*",
+        element: <ErrorPage />
+      }
     ],
   },
-  // Catch-all route for 404s
-  {
-    path: "*",
-    element: <ErrorPage />
-  }
 ]);
 
 

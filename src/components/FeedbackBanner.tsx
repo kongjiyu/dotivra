@@ -77,7 +77,7 @@ const FeedbackBanner: React.FC<FeedbackBannerProps> = ({ onOpenFeedback }) => {
             onClick={handleOpenFeedback}
             className="px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-md hover:bg-blue-700 transition-colors"
           >
-            Give Feedback
+            <div className="text-white">Give Feedback</div>
           </button>
           <button
             onClick={handleClose}

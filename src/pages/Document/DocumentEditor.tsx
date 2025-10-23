@@ -105,8 +105,23 @@ export default function DocumentEditor() {
                 return;
             }
 
-            // Check if we have document data passed through navigation state (from document creation)
-            const navigationState = location.state as { documentData?: any } | null;
+            // Check if we have document data passed through navigation state (from document creation or version restore)
+            const navigationState = location.state as { documentData?: any, skipFetch?: boolean } | null;
+            
+            // If skipFetch flag is set, use existing content from context (e.g., from version restore)
+            if (navigationState?.skipFetch) {
+                console.log('📄 Skipping document fetch - using content from context (restored version)');
+                setDocumentId(documentId);
+                
+                // Clear any pending autosave and sync the ref with context content
+                if (autoSaveTimeoutRef.current) {
+                    clearTimeout(autoSaveTimeoutRef.current);
+                }
+                latestContentRef.current = documentContent || "";
+                
+                return;
+            }
+            
             if (navigationState?.documentData) {
                 const documentData = navigationState.documentData;
                 console.log('📄 Using document data from navigation state:', {
@@ -116,8 +131,15 @@ export default function DocumentEditor() {
 
                 setDocumentId(documentId);
                 setDocumentTitle(documentData.DocumentName || documentData.Title || "Untitled Document");
-                setDocumentContent(documentData.Content || "");
-
+                const content = documentData.Content || "";
+                setDocumentContent(content);
+                
+                // Clear any pending autosave and sync the ref with loaded content
+                if (autoSaveTimeoutRef.current) {
+                    clearTimeout(autoSaveTimeoutRef.current);
+                }
+                latestContentRef.current = content;
+                
                 // Load project info if available
                 const projectIdFromDoc = documentData.Project_Id || documentData.ProjectId;
                 if (projectIdFromDoc) {
@@ -163,6 +185,12 @@ export default function DocumentEditor() {
                     setDocumentTitle(documentData.DocumentName || "Untitled Document");
                     const content = documentData.Content || "";
 
+                    // Clear any pending autosave and sync the ref with loaded content
+                    if (autoSaveTimeoutRef.current) {
+                        clearTimeout(autoSaveTimeoutRef.current);
+                    }
+                    latestContentRef.current = content;
+                    
                     setDocumentContent(content); // Use exact content from DB, empty if empty
 
                     // Load project information if document has a project ID
@@ -227,7 +255,36 @@ export default function DocumentEditor() {
         // Send update via WebSocket with debouncing
         // Channel is already set to 'content' in useDocumentSync options
         if (documentId) {
-            sendUpdate(content);
+            if (autoSaveTimeoutRef.current) {
+                clearTimeout(autoSaveTimeoutRef.current);
+            }
+            autoSaveTimeoutRef.current = setTimeout(async () => {
+                try {
+                    setIsSaving(true);
+                    const contentToSave = latestContentRef.current;
+                    const response = await fetch(API_ENDPOINTS.document(documentId), {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            Content: contentToSave,
+                            EditedBy: user?.uid || 'anonymous',
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        console.error('❌ Failed to auto-save document:', response.status, await response.text());
+                    }
+
+                    // DO NOT update context here - it causes TipTap to re-apply content and overwrite user edits
+                    // The latestContentRef already tracks the current content
+                } catch (error) {
+                    console.error('❌ Auto-save error:', error);
+                } finally {
+                    setIsSaving(false);
+                }
+            }, 2000);
         }
     }, [documentId, sendUpdate]);
 

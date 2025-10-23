@@ -244,8 +244,8 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
                 <Loader2 className="w-4 h-4 animate-spin mx-auto" />
               ) : (
                 <>
-                  <Github className="w-4 h-4 inline mr-2" />
-                  Connect GitHub Account
+                  <Github className="text-white w-4 h-4 inline-block mr-2" />
+                  <span className="text-white">Connect GitHub Account</span>
                 </>
               )}
             </button>

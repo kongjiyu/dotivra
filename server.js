@@ -44,7 +44,12 @@ app.use(helmet({
 
 // CORS configuration
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: [
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'https://dotivra.firebaseapp.com',
+    process.env.FRONTEND_URL
+  ].filter(Boolean),
   credentials: true,
 }));
 
@@ -1252,13 +1257,32 @@ app.delete("/api/document/:docId", async (req, res) => {
 app.get("/api/document/editor/history/:docId", async (req, res) => {
   try {
     const { docId } = req.params;
-    const historyRef = firestore.collection("DocumentHistory");
-    const snapshot = await historyRef.where("DocID", "==", docId).orderBy("Version", "desc").get();
+    console.log('📜 Fetching version history for document:', docId);
+    
+    const historyRef = collection(firestore, "DocumentHistory");
+    
+    // DEBUG: Get ALL documents in the collection to see what's there
+    const allSnapshot = await getDocs(historyRef);
+    console.log('🔍 Total documents in DocumentHistory collection:', allSnapshot.docs.length);
+    allSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      console.log('  📄 Doc ID:', doc.id);
+      console.log('     Document_Id:', data.Document_Id);
+      console.log('     Version:', data.Version);
+      console.log('     Content preview:', (data.Content || '').substring(0, 50));
+    });
+    
+    // Now try the filtered query
+    const q = query(historyRef, where("Document_Id", "==", docId), orderBy("Version", "desc"));
+    const snapshot = await getDocs(q);
 
+    console.log('📊 Found', snapshot.docs.length, 'versions matching docId:', docId);
     const versions = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
     res.json({ versions });
   } catch (err) {
-    res.status(500).json({ error: "SERVER_ERROR" });
+    console.error('❌ Error fetching version history:', err.message);
+    console.error('Full error:', err);
+    res.status(500).json({ error: "SERVER_ERROR", details: err.message });
   }
 });
 
