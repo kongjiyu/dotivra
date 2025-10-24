@@ -3,8 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { FileText, Plus, Download, ExternalLink, Clock, User, FolderOpen, Copy } from "lucide-react";
 import { useDocument } from "@/context/DocumentContext";
-import SimpleShare from "@/components/document/SimpleShare";
-import ImportModal from "@/components/document/ImportModal";
+import SimpleShare from "@/components/Document/SimpleShare";
+import ImportModal from "@/components/Document/ImportModal";
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect, useCallback } from "react";
 import { fetchDocumentWithProject } from "@/services/apiService";

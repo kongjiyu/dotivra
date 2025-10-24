@@ -12,7 +12,7 @@ export default function DocumentHistory() {
     const { documentContent, setDocumentContent, documentId: contextDocId } = useDocument();
     const { user } = useAuth();
     const [isRestoring, setIsRestoring] = useState(false);
-    
+
     // Use URL documentId first, fallback to context
     const documentId = urlDocId || contextDocId;
 
@@ -46,7 +46,7 @@ export default function DocumentHistory() {
 
             // Update context with restored content
             setDocumentContent(content);
-            
+
             // Navigate back to editor with skipFetch flag to prevent overwriting
             navigate(`/document/${documentId}`, {
                 state: { skipFetch: true }

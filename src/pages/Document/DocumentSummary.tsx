@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState, useRef } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import DocumentLayout from "./DocumentLayout";
-import TipTap from "@/components/document/TipTap";
+import TipTap from "@/components/Document/TipTap";
 import { useDocument } from "@/context/DocumentContext";
 import { fetchDocument } from "@/services/apiService";
 import { useDocumentSync } from "@/hooks/useDocumentSync";
