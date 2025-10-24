@@ -45,6 +45,19 @@ const Header: React.FC<HeaderProps> = ({
     { path: '/feedback', label: 'Feedback', icon: MessageSquare, action: onFeedbackClick },
   ];
 
+  const handleNavigation = (item: typeof navItems[0]) => {
+    if (item.action) {
+      // If there's an action (like opening modal), execute it
+      item.action();
+    } else if (item.path === '/feedback') {
+      // When navigating to feedback form, pass current page
+      navigate(item.path, { state: { fromPage: location.pathname } });
+    } else {
+      // Regular navigation
+      navigate(item.path);
+    }
+  };
+
   const isActiveRoute = (path: string) => {
     if (path === '/dashboard') {
       return location.pathname === '/dashboard' || location.pathname === '/';
@@ -76,13 +89,7 @@ const Header: React.FC<HeaderProps> = ({
                 return (
                   <button
                     key={item.path}
-                    onClick={() => {
-                      if (item.action) {
-                        item.action();
-                      } else {
-                        navigate(item.path);
-                      }
-                    }}
+                    onClick={() => handleNavigation(item)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                       isActive
                         ? 'bg-blue-100 text-blue-700 shadow-sm'
@@ -138,13 +145,7 @@ const Header: React.FC<HeaderProps> = ({
               return (
                 <button
                   key={item.path}
-                  onClick={() => {
-                    if (item.action) {
-                      item.action();
-                    } else {
-                      navigate(item.path);
-                    }
-                  }}
+                  onClick={() => handleNavigation(item)}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
                     isActive
                       ? 'bg-blue-100 text-blue-700 shadow-sm'

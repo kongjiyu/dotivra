@@ -13,11 +13,11 @@ import {
     AlignJustify
 } from "lucide-react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
-import DocumentMenu from "@/components/document/DocumentMenu";
-import NavigationPane from "@/components/document/NavigationPane";
-import ChatSidebar from "@/components/document/ChatSidebar";
-import SimpleShare from "@/components/document/SimpleShare";
-import ProjectDocumentsDropdown from "@/components/document/ProjectDocumentsDropdown";
+import DocumentMenu from "@/components/Document/DocumentMenu";
+import NavigationPane from "@/components/Document/NavigationPane";
+import ChatSidebar from "@/components/Document/ChatSidebar";
+import SimpleShare from "@/components/Document/SimpleShare";
+import ProjectDocumentsDropdown from "@/components/Document/ProjectDocumentsDropdown";
 import { useDocument } from "@/context/DocumentContext";
 import { updateToolPreference } from "@/utils/documentToolsPreferences";
 import { FirestoreService } from "../../../firestoreService";
@@ -25,7 +25,7 @@ import { FirestoreService } from "../../../firestoreService";
 interface DocumentLayoutProps {
     children: ReactNode;
     showDocumentMenu?: boolean;
-    syncStatus?: 'synced' | 'syncing' | 'error';
+    syncStatus?: 'synced' | 'syncing' | 'pending' | 'error';
 }
 
 export default function DocumentLayout({
@@ -148,7 +148,11 @@ export default function DocumentLayout({
                 }
                 break;
             case 'history':
-                navigate(`${basePath}/history`);
+                if (documentId) {
+                    navigate(`${basePath}/history/${documentId}`);
+                } else {
+                    navigate(`${basePath}/history`);
+                }
                 break;
             default:
                 if (documentId) {
@@ -270,6 +274,12 @@ export default function DocumentLayout({
 
                             {shouldShowSyncStatus() && (
                                 <div className="flex items-center gap-1 text-sm text-gray-500">
+                                    {syncStatus === 'pending' && (
+                                        <>
+                                            <CloudUpload className="w-4 h-4 text-yellow-600" />
+                                            <span className="text-yellow-600">Saving in 2s...</span>
+                                        </>
+                                    )}
                                     {syncStatus === 'syncing' && (
                                         <>
                                             <CloudUpload className="w-4 h-4 text-blue-600 animate-pulse" />
@@ -431,7 +441,7 @@ export default function DocumentLayout({
                     )}
 
                     {/* Document Editor Column - Adjusts width based on NavigationPane and ChatSidebar */}
-                    <div className="flex-1 overflow-auto custom-scrollbar bg-white p-4">
+                    <div className="flex-1 overflow-auto custom-scrollbar bg-white pl-4">
                         {children}
                     </div>
 

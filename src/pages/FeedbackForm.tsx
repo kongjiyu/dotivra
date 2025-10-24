@@ -1,20 +1,56 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { 
   FeedbackHeader, 
   GeneralFeedback, 
   FeedbackSubmit
 } from '../components/feedback';
+import { showSuccess, showError } from '@/utils/sweetAlert';
 import type { FeedbackData } from '../components/feedback';
 
 const FeedbackForm: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Get the referring page from navigation state or session storage
+  const getReferringPage = () => {
+    // Priority 1: Check navigation state (when user clicks feedback from a page)
+    if (location.state?.fromPage) {
+      return location.state.fromPage;
+    }
+    
+    // Priority 2: Check sessionStorage (persisted across refreshes)
+    const storedPage = sessionStorage.getItem('feedbackReferrer');
+    if (storedPage && storedPage !== '/feedback') {
+      return storedPage;
+    }
+    
+    // Priority 3: Default to empty (user can manually select)
+    return '';
+  };
+
   const [feedbackData, setFeedbackData] = useState<FeedbackData>({
     email: '',
-    comment: ''
+    comment: '',
+    pageLink: getReferringPage()
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<FeedbackData>>({});
+
+  // Store the current page path when component mounts (except if already on feedback)
+  useEffect(() => {
+    // Get the previous path from document.referrer or navigation state
+    const referrer = document.referrer;
+    const currentPath = window.location.pathname;
+    
+    // Only store if we're coming from within the app and not already on feedback
+    if (referrer && referrer.includes(window.location.origin) && currentPath === '/feedback') {
+      const referrerPath = new URL(referrer).pathname;
+      if (referrerPath !== '/feedback') {
+        sessionStorage.setItem('feedbackReferrer', referrerPath);
+      }
+    }
+  }, []);
 
   const validateForm = () => {
     const newErrors: Partial<FeedbackData> = {};
@@ -47,12 +83,18 @@ const FeedbackForm: React.FC = () => {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 2000));
       
+      // Clear the stored referrer after successful submission
+      sessionStorage.removeItem('feedbackReferrer');
+      
       // Show success message and redirect
-      alert('Thank you for your feedback! We appreciate your input.');
+      await showSuccess(
+        'Thank You!',
+        'Thank you for your feedback! We appreciate your input.'
+      );
       navigate('/dashboard');
     } catch (error) {
       console.error('Failed to submit feedback:', error);
-      alert('Failed to submit feedback. Please try again.');
+      showError('Submission Failed', 'Failed to submit feedback. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -75,6 +117,18 @@ const FeedbackForm: React.FC = () => {
 
         {/* Form Content */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+          {/* Show info banner if page was auto-detected */}
+          {feedbackData.pageLink && (
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <span className="font-medium">Feedback for:</span> {feedbackData.pageLink}
+              </p>
+              <p className="text-xs text-blue-600 mt-1">
+                You can change this or leave it blank if your feedback is general.
+              </p>
+            </div>
+          )}
+
           <form onSubmit={handleSubmit}>
             <GeneralFeedback
               data={feedbackData}

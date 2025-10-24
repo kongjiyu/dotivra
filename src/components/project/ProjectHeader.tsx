@@ -10,6 +10,39 @@ interface ProjectHeaderProps {
   onEditProject?: () => void;
 }
 
+/**
+ * Format GitHub repo URL to ensure it's a valid GitHub link
+ */
+const formatGitHubUrl = (repoUrl: string): string => {
+  if (!repoUrl) return '';
+  
+  // Already a full GitHub URL
+  if (repoUrl.startsWith('http://github.com/') || repoUrl.startsWith('https://github.com/')) {
+    return repoUrl;
+  }
+  
+  // If it doesn't start with http, assume it's a username/repo format
+  // Keep the repo name as-is (including .github.io if it's part of the actual repo name)
+  return `https://github.com/${repoUrl}`;
+};
+
+/**
+ * Get display text for GitHub repo link
+ */
+const formatGitHubDisplayText = (repoUrl: string): string => {
+  if (!repoUrl) return '';
+  
+  // Remove protocol and www
+  let display = repoUrl.replace(/^https?:\/\/(www\.)?/, '');
+  
+  // For github.com URLs, just show username/repo
+  if (display.startsWith('github.com/')) {
+    display = display.replace('github.com/', '');
+  }
+  
+  return display;
+};
+
 const ProjectHeader: React.FC<ProjectHeaderProps> = ({
   project,
   onBackToDashboard: _onBackToDashboard,
@@ -50,13 +83,13 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
           <div className="flex items-center gap-3 shrink-0">
             {project.GitHubRepo && (
               <a
-                href={project.GitHubRepo}
+                href={formatGitHubUrl(project.GitHubRepo)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                <span className="max-w-[200px] truncate">{project.GitHubRepo.replace(/^https?:\/\/(www\.)?/, '').split('/').slice(0, 2).join('/')}</span>
+                <span className="max-w-[200px] truncate">{formatGitHubDisplayText(project.GitHubRepo)}</span>
               </a>
             )}
 

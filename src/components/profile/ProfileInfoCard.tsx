@@ -193,8 +193,8 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
             onClick={handleSaveChanges}
             className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            <Save className="h-4 w-4 mr-2" />
-            Save Changes
+            <Save className="text-white h-4 w-4 mr-2" />
+            <div className="text-white">Save Changes</div>
           </button>
         </div>
       )}

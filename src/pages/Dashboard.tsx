@@ -12,6 +12,7 @@ import { getUserDisplayInfo } from '../utils/user';
 import { useAuth } from '../context/AuthContext';
 import { aiService } from '../services/aiService';
 import { useFeedback } from '../components/AppLayout';
+import { showSuccess, showError } from '@/utils/sweetAlert';
 
 interface GenerationStep {
   id: string;
@@ -275,7 +276,10 @@ const Dashboard: React.FC = () => {
         });
       } else {
         // Fallback to project view if no document ID
-        alert(`Document "${data.documentName}" created successfully!\n\nTemplate: ${data.template.TemplateName}\nRole: ${data.documentRole}\nCategory: ${documentCategory}`);
+        await showSuccess(
+          'Document Created!',
+          `"${data.documentName}" has been created successfully.`
+        );
         if (finalProjectId) {
           navigate(`/project/${finalProjectId}`);
         }
@@ -288,7 +292,10 @@ const Dashboard: React.FC = () => {
       setIsTemplateModalOpen(false);
       setSelectedTemplate(null);
       
-      alert(`Failed to create document: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showError(
+        'Failed to Create Document',
+        error instanceof Error ? error.message : 'Unknown error'
+      );
     }
   };
 
@@ -310,7 +317,7 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
+    <div className="min-h-screen bg-gray-50 text-gray-800 flex flex-col">
       <Header
         userName={displayName}
         initials={initials}
@@ -318,18 +325,20 @@ const Dashboard: React.FC = () => {
       />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-6 space-y-7">
+      <main className="max-w-7xl mx-auto px-6 py-6 w-full flex-1 flex flex-col gap-6">
         <TemplateGrid 
           onTemplateClick={handleTemplateClick}
           onExploreAll={handleExploreAll}
           onAddProject={handleNewProject}
         />
 
-        <ProjectList 
-          onProjectClick={handleProjectClick}
-          onViewAllProjects={handleViewAllProjects}
-          onNewProject={handleNewProject}
-        />
+        <div className="flex-1 flex flex-col min-h-0">
+          <ProjectList 
+            onProjectClick={handleProjectClick}
+            onViewAllProjects={handleViewAllProjects}
+            onNewProject={handleNewProject}
+          />
+        </div>
       </main>
 
       {/* AddProjectModal with GitHub Integration */}
@@ -375,11 +384,17 @@ const Dashboard: React.FC = () => {
               navigate(`/project/${projectId}`);
             } else {
               console.error('❌ No project ID found in response:', result.project);
-              alert('Project created but navigation failed. Please refresh the page.');
+              showError(
+                'Navigation Failed',
+                'Project created but navigation failed. Please refresh the page.'
+              );
             }
           } catch (err) {
             console.error('❌ Dashboard: Error creating project:', err);
-            alert(`Failed to create project: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            showError(
+              'Failed to Create Project',
+              err instanceof Error ? err.message : 'Unknown error'
+            );
           }
         }}
       />

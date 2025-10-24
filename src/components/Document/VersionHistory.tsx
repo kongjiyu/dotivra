@@ -1,16 +1,9 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-    Clock,
-    User,
-    RotateCcw,
-    Eye,
-    GitBranch,
-    Calendar
-} from "lucide-react";
+import { API_ENDPOINTS } from "@/lib/apiConfig";
+import { GitBranch, FileText } from "lucide-react";
+import VersionCard from "./VersionHistory/VersionCard";
+import ContentSection from "./VersionHistory/ContentSection";
 
 interface VersionEntry {
     id: string;
@@ -18,77 +11,100 @@ interface VersionEntry {
     action: string;
     content: string;
     contentLength: number;
+    version?: string;
     changes?: {
         added: number;
         removed: number;
     };
 }
 
+// Firebase DocumentHistory structure
+interface FirebaseVersionEntry {
+    id: string;
+    Document_Id: string;
+    Content: string;
+    Version: string;
+    Edited_Time: any; // Firebase Timestamp
+}
+
 interface VersionHistoryProps {
+    documentId?: string;
     currentContent: string;
     onRestoreVersion?: (content: string) => void;
     onPreviewVersion?: (content: string) => void;
 }
 
 export default function VersionHistory({
-    currentContent,
+    documentId,
     onRestoreVersion,
-    onPreviewVersion,
 }: VersionHistoryProps) {
     const [versions, setVersions] = useState<VersionEntry[]>([]);
-    const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
+    const [selectedVersion, setSelectedVersion] = useState<VersionEntry | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
-    // Track content changes and create version entries
+    // Fetch version history from Firebase
     useEffect(() => {
-        if (currentContent) {
-            const lastVersion = versions[0];
-            const contentLength = currentContent.length;
-
-            // Only create a new version if content has actually changed
-            if (!lastVersion || lastVersion.content !== currentContent) {
-                const newVersion: VersionEntry = {
-                    id: crypto.randomUUID(),
-                    timestamp: Date.now(),
-                    action: lastVersion ? "Edit" : "Created",
-                    content: currentContent,
-                    contentLength,
-                    changes: lastVersion ? {
-                        added: Math.max(0, contentLength - lastVersion.contentLength),
-                        removed: Math.max(0, lastVersion.contentLength - contentLength),
-                    } : undefined,
-                };
-
-                setVersions(prev => [newVersion, ...prev].slice(0, 50)); // Keep last 50 versions
+        const fetchVersionHistory = async () => {
+            if (!documentId) {
+                console.warn('No documentId provided to VersionHistory');
+                setLoading(false);
+                return;
             }
-        }
-    }, [currentContent, versions]);
 
-    const formatTime = (timestamp: number) => {
-        const date = new Date(timestamp);
-        const now = new Date();
-        const diffMs = now.getTime() - timestamp;
-        const diffMins = Math.floor(diffMs / (1000 * 60));
-        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+            try {
+                setLoading(true);
+                setError(null);
+                
+                console.log('📜 Fetching version history for document:', documentId);
+                const response = await fetch(API_ENDPOINTS.documentHistory(documentId));
+                
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch version history: ${response.status}`);
+                }
 
-        if (diffMins < 1) return "Just now";
-        if (diffMins < 60) return `${diffMins} min ago`;
-        if (diffHours < 24) return `${diffHours} hr ago`;
-        if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+                const data = await response.json();
+                console.log('📋 Version history received:', data);
 
-        return date.toLocaleDateString();
-    };
+                if (data.versions && Array.isArray(data.versions)) {
+                    // Convert Firebase versions to VersionEntry format
+                    const formattedVersions: VersionEntry[] = data.versions.map((v: FirebaseVersionEntry, index: number) => {
+                        const timestamp = v.Edited_Time?.toDate?.() || 
+                                        (v.Edited_Time?._seconds ? new Date(v.Edited_Time._seconds * 1000) : new Date());
+                        
+                        const contentLength = v.Content?.length || 0;
+                        const prevVersion = data.versions[index + 1];
+                        const prevContentLength = prevVersion?.Content?.length || 0;
 
-    const getActionColor = (action: string) => {
-        switch (action) {
-            case "Created":
-                return "bg-green-100 text-green-800 border-green-200";
-            case "Edit":
-                return "bg-blue-100 text-blue-800 border-blue-200";
-            default:
-                return "bg-gray-100 text-gray-800 border-gray-200";
-        }
-    };
+                        return {
+                            id: v.id,
+                            timestamp: timestamp.getTime(),
+                            action: index === data.versions.length - 1 ? "Created" : "Edit",
+                            content: v.Content || "",
+                            contentLength,
+                            version: v.Version,
+                            changes: index < data.versions.length - 1 ? {
+                                added: Math.max(0, contentLength - prevContentLength),
+                                removed: Math.max(0, prevContentLength - contentLength),
+                            } : undefined,
+                        };
+                    });
+
+                    setVersions(formattedVersions);
+                    // Don't auto-select on load - let user click to view
+                } else {
+                    setVersions([]);
+                }
+            } catch (err) {
+                console.error('❌ Error fetching version history:', err);
+                setError(err instanceof Error ? err.message : 'Failed to load version history');
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchVersionHistory();
+    }, [documentId]);
 
     const handleRestore = (version: VersionEntry) => {
         if (onRestoreVersion) {
@@ -96,112 +112,71 @@ export default function VersionHistory({
         }
     };
 
-    const handlePreview = (version: VersionEntry) => {
-        setSelectedVersion(version.id);
-        if (onPreviewVersion) {
-            onPreviewVersion(version.content);
+    const handleCardClick = (version: VersionEntry) => {
+        // Toggle selection: if already selected, deselect; otherwise select
+        if (selectedVersion?.id === version.id) {
+            setSelectedVersion(null);
+        } else {
+            setSelectedVersion(version);
         }
     };
 
     return (
-        <Card className="h-full">
-            <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                    <Clock className="w-5 h-5" />
-                    History
-                </CardTitle>
-                
-            </CardHeader>
-            <CardContent className="p-0">
-                <ScrollArea className="h-[600px]">
-                    <div className="space-y-2 p-4">
-                        {versions.length === 0 ? (
-                            <div className="text-center py-8 text-gray-500">
-                                <GitBranch className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                                <p>No version history yet</p>
-                                <p className="text-sm">Start editing to track changes</p>
+        <div className="h-full flex">
+            <div className={`transition-all duration-300 ${
+                selectedVersion ? 'flex-[3]' : 'flex-1'
+            } bg-white ${selectedVersion ? 'border-r border-gray-200' : ''}`}>
+                {selectedVersion ? (
+                    <ContentSection version={selectedVersion} />
+                ) : (
+                    <div className="h-full flex items-center justify-center text-gray-400">
+                        <div className="text-center">
+                            <FileText className="w-20 h-20 mx-auto mb-4 opacity-20" />
+                            <p className="text-lg">Select a version to view its content</p>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Version List */}
+            <div className={`transition-all duration-300 ${
+                selectedVersion ? 'flex-[2]' : 'flex-1'
+            } bg-gray-50`}>
+                <ScrollArea className="h-full">
+                    <div className="p-6">
+                        {loading ? (
+                            <div className="text-center py-12">
+                                <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+                                <p className="mt-4 text-gray-600">Loading versions...</p>
+                            </div>
+                        ) : error ? (
+                            <div className="text-center py-12 text-red-600">
+                                <p className="font-medium">Failed to load history</p>
+                                <p className="text-sm mt-1">{error}</p>
+                            </div>
+                        ) : versions.length === 0 ? (
+                            <div className="text-center py-16 text-gray-500">
+                                <GitBranch className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                                <p className="text-lg font-medium">No versions yet</p>
+                                <p className="text-sm mt-2">Versions will appear here as you edit</p>
                             </div>
                         ) : (
-                            versions.map((version, index) => (
-                                <div
-                                    key={version.id}
-                                    className={`border rounded-lg p-4 transition-all ${selectedVersion === version.id
-                                            ? 'border-blue-300 bg-blue-50'
-                                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                                        }`}
-                                >
-                                    <div className="flex items-start justify-between mb-2">
-                                        <div className="flex items-center gap-2">
-                                            <Badge
-                                                variant="outline"
-                                                className={getActionColor(version.action)}
-                                            >
-                                                {version.action}
-                                            </Badge>
-                                            {index === 0 && (
-                                                <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">
-                                                    Current
-                                                </Badge>
-                                            )}
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => handlePreview(version)}
-                                                className="h-7 px-2"
-                                            >
-                                                <Eye className="w-3 h-3 mr-1" />
-                                                Preview
-                                            </Button>
-                                            {index > 0 && (
-                                                <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleRestore(version)}
-                                                    className="h-7 px-2"
-                                                >
-                                                    <RotateCcw className="w-3 h-3 mr-1" />
-                                                    Restore
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
-                                        <div className="flex items-center gap-1">
-                                            <Calendar className="w-3 h-3" />
-                                            {formatTime(version.timestamp)}
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <User className="w-3 h-3" />
-                                            You
-                                        </div>
-                                        <div>
-                                            {version.contentLength.toLocaleString()} characters
-                                        </div>
-                                    </div>
-
-                                    {version.changes && (
-                                        <div className="flex items-center gap-4 text-xs">
-                                            {version.changes.added > 0 && (
-                                                <span className="text-green-600">
-                                                    +{version.changes.added} added
-                                                </span>
-                                            )}
-                                            {version.changes.removed > 0 && (
-                                                <span className="text-red-600">
-                                                    -{version.changes.removed} removed
-                                                </span>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            ))
+                            <div>
+                                {versions.map((version, index) => (
+                                    <VersionCard
+                                        key={version.id}
+                                        version={version}
+                                        index={index}
+                                        isSelected={selectedVersion?.id === version.id}
+                                        onSelect={() => handleCardClick(version)}
+                                        onRestore={() => handleRestore(version)}
+                                    />
+                                ))}
+                            </div>
                         )}
                     </div>
                 </ScrollArea>
-            </CardContent>
-        </Card>
+            </div>
+        </div>
     );
 }

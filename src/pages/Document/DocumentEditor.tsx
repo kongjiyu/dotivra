@@ -105,8 +105,23 @@ export default function DocumentEditor() {
                 return;
             }
 
-            // Check if we have document data passed through navigation state (from document creation)
-            const navigationState = location.state as { documentData?: any } | null;
+            // Check if we have document data passed through navigation state (from document creation or version restore)
+            const navigationState = location.state as { documentData?: any, skipFetch?: boolean } | null;
+            
+            // If skipFetch flag is set, use existing content from context (e.g., from version restore)
+            if (navigationState?.skipFetch) {
+                console.log('📄 Skipping document fetch - using content from context (restored version)');
+                setDocumentId(documentId);
+                
+                // Clear any pending autosave and sync the ref with context content
+                if (autoSaveTimeoutRef.current) {
+                    clearTimeout(autoSaveTimeoutRef.current);
+                }
+                latestContentRef.current = documentContent || "";
+                
+                return;
+            }
+            
             if (navigationState?.documentData) {
                 const documentData = navigationState.documentData;
                 console.log('📄 Using document data from navigation state:', {
@@ -116,8 +131,15 @@ export default function DocumentEditor() {
 
                 setDocumentId(documentId);
                 setDocumentTitle(documentData.DocumentName || documentData.Title || "Untitled Document");
-                setDocumentContent(documentData.Content || "");
-
+                const content = documentData.Content || "";
+                setDocumentContent(content);
+                
+                // Clear any pending autosave and sync the ref with loaded content
+                if (autoSaveTimeoutRef.current) {
+                    clearTimeout(autoSaveTimeoutRef.current);
+                }
+                latestContentRef.current = content;
+                
                 // Load project info if available
                 const projectIdFromDoc = documentData.Project_Id || documentData.ProjectId;
                 if (projectIdFromDoc) {
@@ -163,6 +185,12 @@ export default function DocumentEditor() {
                     setDocumentTitle(documentData.DocumentName || "Untitled Document");
                     const content = documentData.Content || "";
 
+                    // Clear any pending autosave and sync the ref with loaded content
+                    if (autoSaveTimeoutRef.current) {
+                        clearTimeout(autoSaveTimeoutRef.current);
+                    }
+                    latestContentRef.current = content;
+                    
                     setDocumentContent(content); // Use exact content from DB, empty if empty
 
                     // Load project information if document has a project ID
@@ -213,21 +241,34 @@ export default function DocumentEditor() {
                 setDocumentTitle("Document Load Error");
             } finally {
                 setIsLoadingDocument(false);
+                // Allow sendUpdate after initial load completes
+                setTimeout(() => {
+                    isInitialLoadingRef.current = false;
+                }, 1000);
             }
         };
 
         loadDocument();
     }, [documentId]); // Remove state setters from dependencies to prevent infinite loop
 
+    // Track if we're in the initial loading phase
+    const isInitialLoadingRef = useRef(true);
+
     // Optimized onUpdate: avoid re-rendering via context on each keystroke
     const handleDocumentUpdateOptimized = useCallback((content: string) => {
         latestContentRef.current = content;
-        documentContentRef.current = content; // Update ref for comparison
+        documentContentRef.current = content;
 
-        // Send update via WebSocket with debouncing
-        // Channel is already set to 'content' in useDocumentSync options
+        // Skip sendUpdate during initial load
+        if (isInitialLoadingRef.current) {
+            return;
+        }
+
+        // Use useDocumentSync hook to save with Firestore real-time sync
         if (documentId) {
             sendUpdate(content);
+            setIsSaving(true);
+            setTimeout(() => setIsSaving(false), 1000);
         }
     }, [documentId, sendUpdate]);
 
@@ -239,6 +280,20 @@ export default function DocumentEditor() {
             }
         };
     }, []);
+
+    // Warn user before leaving if there are unsaved changes
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (syncStatus === 'pending' || syncStatus === 'syncing') {
+                e.preventDefault();
+                e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+                return e.returnValue;
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [syncStatus]);
 
     const handleDocumentUpdate = useCallback((content: string) => {
         latestContentRef.current = content;

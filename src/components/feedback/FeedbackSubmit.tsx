@@ -18,7 +18,7 @@ const FeedbackSubmit: React.FC<FeedbackSubmitProps> = ({ isSubmitting, onSubmit 
           {isSubmitting ? (
             <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent" />
           ) : (
-            <Send className="h-4 w-4" />
+            <Send className="text-white h-4 w-4" />
           )}
           <span>{isSubmitting ? 'Submitting...' : 'Submit Feedback'}</span>
         </button>

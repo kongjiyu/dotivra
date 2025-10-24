@@ -3,13 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import Header from '../components/header/Header';
 import { useAuth } from '../context/AuthContext';
 import TemplateCard from '../components/allTemplate/TemplateCard';
-import TemplateModal from '../components/allTemplate/TemplateModal';
+import AddDocumentFromTemplate from '../components/modal/addDocumentFromTemplate';
 import AIGenerationProgressModal from '../components/modal/AIGenerationProgressModal';
 import { getUserDisplayInfo } from '../utils/user';
 import { FileText } from 'lucide-react';
-import type { LegacyTemplate } from '../types';
-import type { Template } from '../../firestoreService';
+import type { LegacyTemplate, Template } from '../types';
 import { useFeedback } from '../components/AppLayout';
+import { showError } from '@/utils/sweetAlert';
+import { aiService } from '../services/aiService';
+
+interface GenerationStep {
+  id: string;
+  label: string;
+  status: 'pending' | 'in-progress' | 'completed' | 'error';
+  details?: string;
+}
 
 const AllTemplate: React.FC = () => {
   const { user, userProfile } = useAuth();
@@ -18,7 +26,7 @@ const AllTemplate: React.FC = () => {
   const { openFeedbackModal } = useFeedback();
   const [query, setQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'all' | 'developer' | 'user'>('all');
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,7 +109,19 @@ const AllTemplate: React.FC = () => {
 
   // Handle template selection
   const handleTemplateSelect = (id: number) => {
-    setSelected(id);
+    // Find the actual template from the templates array
+    const template = templates[id];
+    if (template) {
+      // Convert to Template type that the modal expects
+      const fullTemplate: Template = {
+        Template_Id: template.Template_Id || String(id),
+        TemplateName: template.TemplateName || '',
+        Description: template.Description || template['Description '] || '',
+        TemplatePrompt: template.TemplatePrompt || '',
+        Category: template.Category || 'general'
+      };
+      setSelectedTemplate(fullTemplate);
+    }
   };
 
   // Handle document creation
@@ -140,29 +160,55 @@ const AllTemplate: React.FC = () => {
             'Authorization': `Bearer ${idToken}`
           },
           body: JSON.stringify({
-            projectName: newProjectName,
+            name: newProjectName,
             description: newProjectDescription || '',
-            githubRepo: selectedRepo || ''
+            githubLink: selectedRepo || '',
+            userId: user.uid
           })
         });
 
-        if (!createProjectRes.ok) throw new Error('Failed to create project');
+        if (!createProjectRes.ok) {
+          const errorData = await createProjectRes.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to create project');
+        }
         
         const newProject = await createProjectRes.json();
-        finalProjectId = newProject.projectId;
+        finalProjectId = newProject.project?.Project_Id || newProject.projectId;
       }
 
       if (!finalProjectId) {
-        alert('Project ID is required');
+        showError('Project Required', 'Project ID is required to create a document');
         return;
       }
 
-      // Try AI generation if GitHub repo is available
+      // Determine repository URL - either from modal selection or from existing project
+      let repositoryUrl = selectedRepo;
+      
+      // If using existing project and no repo selected in modal, fetch project's GitHub repo
+      if (!repositoryUrl && finalProjectId && projectId) {
+        try {
+          console.log('🔍 Fetching GitHub repo for existing project:', finalProjectId);
+          const projectResponse = await fetch(`/api/projects/${finalProjectId}`, {
+            headers: {
+              'Authorization': `Bearer ${idToken}`
+            }
+          });
+          if (projectResponse.ok) {
+            const projectData = await projectResponse.json();
+            const project = projectData.success ? projectData.project : projectData;
+            repositoryUrl = project.GitHubRepo || project.githubLink || null;
+            console.log('📦 Found repository for existing project:', repositoryUrl);
+          }
+        } catch (error) {
+          console.warn('⚠️ Could not fetch project GitHub repo:', error);
+        }
+      }
+
+      // Generate AI content if GitHub repository is available
       let content = template.TemplatePrompt || '';
-      const repositoryUrl = selectedRepo;
 
       if (repositoryUrl && user) {
-        const repoMatch = repositoryUrl.match(/github\.com\/([^\/]+)\/([^\/\s]+)/);
+        const repoMatch = repositoryUrl.match(/(?:https?:\/\/github\.com\/)?([^\/]+)\/([^\/\s]+)/);
         
         if (repoMatch) {
           const [, owner, repo] = repoMatch;
@@ -243,8 +289,9 @@ const AllTemplate: React.FC = () => {
           };
           
           try {
-            // Generate content using iterative AI method
-            content = await aiService.generateDocumentFromTemplateAndRepoIterative(
+            // Generate content using section-by-section generation for better handling of long documents
+            console.log('🚀 Starting section-by-section AI generation...');
+            content = await aiService.generateDocumentInSections(
               user,
               template.TemplatePrompt || '',
               { owner, repo, fullName: repoFullName },
@@ -252,12 +299,16 @@ const AllTemplate: React.FC = () => {
               documentName,
               handleProgress
             );
+            console.log('✅ AI generation completed, content length:', content.length);
+            console.log('📄 Generated content preview:', content.substring(0, 300));
             
             // Finalize
             handleProgress('done', 'Document ready!');
             await new Promise(resolve => setTimeout(resolve, 500));
+            
+            console.log('✅ All steps completed, proceeding to create document');
           } catch (aiError) {
-            console.error('AI generation failed, using template:', aiError);
+            console.error('❌ AI generation failed:', aiError);
             
             // Update steps to show error
             setGenerationSteps(prev => prev.map(step => 
@@ -269,6 +320,12 @@ const AllTemplate: React.FC = () => {
             // Wait a bit to show error
             await new Promise(resolve => setTimeout(resolve, 1500));
           }
+        } else {
+          console.warn('⚠️ Could not parse repository URL:', repositoryUrl);
+        }
+      } else {
+        if (!repositoryUrl) {
+          console.log('ℹ️ No repository URL available, using template prompt as content');
         }
       }
 
@@ -319,7 +376,10 @@ const AllTemplate: React.FC = () => {
       });
     } catch (error) {
       console.error('Error creating document:', error);
-      alert(error instanceof Error ? error.message : 'Failed to create document');
+      showError(
+        'Failed to Create Document',
+        error instanceof Error ? error.message : 'Failed to create document'
+      );
       setIsGenerating(false);
     }
   };
@@ -418,14 +478,13 @@ const AllTemplate: React.FC = () => {
         )}
       </main>
 
-      {/* Template Modal */}
-      {selected !== null && (
-        <TemplateModal 
-          id={selected} 
-          onClose={() => setSelected(null)}
-          onCreateDocument={handleCreateDocument}
-        />
-      )}
+      {/* Template Modal - Using same modal as Dashboard for consistency */}
+      <AddDocumentFromTemplate
+        isOpen={selectedTemplate !== null}
+        template={selectedTemplate}
+        onClose={() => setSelectedTemplate(null)}
+        onCreateDocument={handleCreateDocument}
+      />
 
       {/* AI Generation Progress Modal */}
       <AIGenerationProgressModal

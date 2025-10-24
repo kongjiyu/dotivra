@@ -249,31 +249,101 @@ Generate a helpful response that leverages the repository knowledge:`;
 
             // Step 2: Initial AI request
             onProgress?.('analysis', 'AI analyzing repository...');
-            const initialPrompt = `You are creating a ${documentRole} document.
+            const initialPrompt = `${templatePrompt}
 
-**Template:** ${templatePrompt}
-**Document:** ${documentName}
-**Repository:** ${repositoryInfo.fullName}
-**Structure:**
+---
+
+**EDITOR FORMATTING GUIDELINES:**
+
+You are generating content for a TipTap rich text editor. Follow these HTML formatting rules:
+
+**Headings:** Use <h1> to <h5> (H6 not supported)
+- <h1>Main Title</h1>
+- <h2>Section</h2>
+- <h3>Subsection</h3>
+
+**Text Formatting:**
+- <strong>Bold</strong>
+- <em>Italic</em>
+- <u>Underline</u>
+- <mark>Highlight</mark>
+- <s>Strikethrough</s>
+
+**Lists:**
+- Unordered: <ul><li>Item</li></ul>
+- Ordered: <ol><li>Step</li></ol>
+- Nested lists supported
+
+**Code Blocks:** (NO inline <code> tags - only code blocks!)
+<pre><code class="language-javascript" data-language="javascript">
+function example() {
+  return "Use language-specific code blocks";
+}
+</code></pre>
+
+**Supported Languages:** javascript, typescript, python, java, cpp, c, csharp, html, css, json, yaml, bash, sql, go, rust, php, ruby, swift, kotlin, markdown, mermaid, plaintext
+
+**Mermaid Diagrams:** (Use as code blocks, not separate elements)
+<pre><code class="language-mermaid" data-language="mermaid">
+graph TD
+    A[Start] --> B[Process]
+    B --> C[End]
+</code></pre>
+
+**Tables:**
+<table>
+  <thead><tr><th>Header</th></tr></thead>
+  <tbody><tr><td>Data</td></tr></tbody>
+</table>
+
+**Links:** <a href="url">text</a>
+
+**Blockquotes:** <blockquote><p>Quote text</p></blockquote>
+
+**IMPORTANT:**
+- Use semantic HTML tags
+- NO inline <code> tags (use code blocks instead)
+- NO <h6> headings (use <h5> for smallest heading)
+- Include proper whitespace and structure
+- Use language-specific syntax for code blocks
+
+---
+
+**YOUR TASK:**
+Create a document titled "${documentName}" for the role: ${documentRole}
+
+**REPOSITORY INFORMATION:**
+- Repository: ${repositoryInfo.fullName}
+- Directory Structure:
 ${directoryTree}
-**README:**
+- README Preview:
 ${repoContext.readme?.substring(0, 1000) || 'None'}
 
-**CRITICAL INSTRUCTIONS:**
-1. FIRST: Respond with JSON listing files you need:
-   {"needFiles": true, "files": ["path1", "path2"], "reason": "why"}
-2. AFTER receiving files: Either request more OR generate the document.
+**WORKFLOW - FOLLOW THESE STEPS:**
 
-**WHEN GENERATING THE DOCUMENT:**
-- You MUST respond with VALID JSON containing the HTML content
-- Format: {"needFiles": false, "content": "<h1>Title</h1><p>Your HTML content here</p>"}
-- The "content" field MUST contain properly formatted HTML with tags like <h1>, <h2>, <p>, <ul>, <li>, <code>, etc.
-- DO NOT write descriptive text like "Based on the provided files..."
-- DO NOT write plain text - ONLY HTML tags with content inside them
-- Follow the template's HTML structure requirements exactly
-- Example of CORRECT format: {"needFiles": false, "content": "<h1>${documentName}</h1><h2>Overview</h2><p>This project is a...</p>"}
+**STEP 1 (Current Step):** Analyze the repository structure and README above. Then respond with JSON listing the specific files you need to examine to create the document according to the template requirements:
+Format: {"needFiles": true, "files": ["path/to/file1", "path/to/file2"], "reason": "brief explanation of why you need these files"}
 
-Start - which files do you need? JSON only:`;
+**STEP 2 (After receiving files):** You will receive the content of the files you requested. Review them and either:
+- Request MORE files if needed: {"needFiles": true, "files": ["path1", "path2"], "reason": "why"}
+- OR generate the final document: {"needFiles": false, "content": "YOUR_HTML_CONTENT"}
+
+**WHEN GENERATING THE FINAL DOCUMENT:**
+- STRICTLY FOLLOW the template format and structure provided at the top of this prompt
+- The template itself contains all requirements for code examples, validation logic, diagrams, etc.
+- You MUST respond with VALID JSON: {"needFiles": false, "content": "HTML_CONTENT_HERE"}
+- The "content" field MUST be a string containing complete HTML as specified in the template
+- Follow ALL formatting requirements from the template (HTML tags, structure, sections, etc.)
+- DO NOT add explanatory text like "Here is the document:" - just provide the JSON with HTML content
+- DO NOT deviate from the template's required format
+
+**IMPORTANT - Handle Length Constraints:**
+- If the document is too long for one response, you can split it into parts
+- Generate the document section by section if needed
+- For very comprehensive documents, focus on completing major sections first
+- Use the full token limit (8192) to generate as much quality content as possible
+
+**Start now - which files do you need? Respond with JSON only:**`;
 
             let iteration = 0;
             const maxIter = 10; // Increased from 5 to 10 iterations
@@ -305,30 +375,50 @@ Start - which files do you need? JSON only:`;
                     // Update progress with file count
                     onProgress?.('files', `Processing ${provided.length} files from repository...`);
                     
-                    prompt = `You previously requested these files. Here they are:
+                    prompt = `**REMINDER: Follow the template format provided in the initial prompt**
+
+You requested these files from the repository. Here they are:
 
 ${fileContents}
 
-**IMPORTANT NOTES:**
-- Files marked with ❌ NOT FOUND do not exist in the repository
-- Do NOT request files that were marked as NOT FOUND again
-- Work with the files that were successfully fetched (marked with ✅)
-- If you have enough information, generate the document now
+**EDITOR FORMATTING REMINDER:**
+Use TipTap-compatible HTML:
+- Headings: <h1> to <h5> (NO <h6>)
+- Code blocks ONLY (NO inline <code> tags):
+  <pre><code class="language-python" data-language="python">code here</code></pre>
+- Mermaid diagrams as code blocks:
+  <pre><code class="language-mermaid" data-language="mermaid">graph TD...</code></pre>
+- Text formatting: <strong>, <em>, <u>, <mark>, <s>
+- Lists: <ul><li>, <ol><li>
+- Tables: <table><thead><tr><th>, <tbody><tr><td>
+- Links: <a href="url">text</a>
 
-**WHEN YOU GENERATE THE DOCUMENT:**
-- You MUST return VALID JSON with this exact structure: {"needFiles": false, "content": "YOUR_HTML_HERE"}
-- The "content" field MUST be a string containing HTML markup
-- Use proper HTML tags: <h1>, <h2>, <h3>, <p>, <ul>, <li>, <ol>, <code>, <pre>, <strong>, <em>, etc.
-- DO NOT write plain text or descriptions like "Based on the files..."
-- DO NOT write "Here is the HTML:" - just put the HTML directly in the content field
-- Example CORRECT: {"needFiles": false, "content": "<h1>User Manual</h1><h2>Installation</h2><p>To install this project...</p>"}
-- Example WRONG: {"needFiles": false, "content": "Based on the provided files, this is a web application..."} ❌
+**CRITICAL INSTRUCTIONS:**
+- Files marked with ❌ NOT FOUND do not exist - DO NOT request them again
+- Work with successfully fetched files (marked with ✅)
+- You must create the document following the EXACT template format from the beginning of our conversation
+- The template specifies the required HTML structure, sections, and format
 
-Now respond with JSON:
-- If you need MORE files (that exist): {"needFiles": true, "files": ["path1", "path2"], "reason": "why"}
-- If you're ready to generate: {"needFiles": false, "content": "<h1>Title</h1><p>Your HTML content here</p>"}
+**YOUR NEXT STEP:**
 
-Your JSON response:`;
+Option 1 - Need more files?
+{"needFiles": true, "files": ["path/to/file"], "reason": "why you need it"}
+
+Option 2 - Ready to generate the document?
+{"needFiles": false, "content": "COMPLETE_HTML_CONTENT"}
+
+**REQUIREMENTS FOR THE DOCUMENT:**
+- Follow the template's HTML structure EXACTLY as specified
+- Use TipTap-compatible HTML tags (NO inline <code>, NO <h6>)
+- The template itself defines all content requirements (code examples, validation logic, etc.)
+- Include ALL required sections from the template
+- For code: <pre><code class="language-X" data-language="X">code</code></pre>
+- For diagrams: <pre><code class="language-mermaid" data-language="mermaid">graph</code></pre>
+- DO NOT add explanatory text - just provide the JSON with HTML content
+- The content must be based on the repository files you've examined
+- Example format: {"needFiles": false, "content": "<html><body><h1>Project User Manual</h1>...</body></html>"}
+
+**Respond with JSON only:**`;
                     console.log('📋 Sending files to AI and asking for next step...');
                 }
 
@@ -411,6 +501,286 @@ Your JSON response:`;
 
         } catch (error) {
             console.error('❌ Iterative error:', error);
+            onProgress?.('error', error instanceof Error ? error.message : 'Failed');
+            throw error;
+        }
+    }
+
+    /**
+     * Generate document content in sections to handle token limits
+     * This method generates the document part by part, allowing for longer documents
+     * Each section gets its own 8192 token budget, enabling unlimited document length
+     */
+    async generateDocumentInSections(
+        user: User,
+        templatePrompt: string,
+        repositoryInfo: { owner: string; repo: string; fullName: string },
+        documentRole: string,
+        documentName: string,
+        onProgress?: (stage: string, message?: string) => void
+    ): Promise<string> {
+        try {
+            console.log('🔄 Starting TRUE iterative section-by-section generation...');
+            onProgress?.('init', 'Preparing iterative generation...');
+
+            // PHASE 1: Collect repository files using existing iterative method
+            console.log('📚 PHASE 1: Collecting repository files...');
+            onProgress?.('files', 'Collecting repository files...');
+            
+            const repoContext = await repositoryContextService.getRepositoryContext(
+                user,
+                repositoryInfo.owner,
+                repositoryInfo.repo
+            );
+
+            if (!repoContext) {
+                throw new Error('Failed to fetch repository context');
+            }
+
+            const directoryTree = this.buildDirectoryTree(repoContext.structure);
+
+            // Collect all relevant files first
+            const collectedFiles: { path: string; content: string; language: string }[] = [];
+            const requestedFiles: string[] = [];
+
+            const filePrompt = `${templatePrompt}
+
+---
+
+**YOUR TASK:**
+Analyze this repository to create "${documentName}" for the role: ${documentRole}
+
+**REPOSITORY:**
+${repositoryInfo.fullName}
+
+**STRUCTURE:**
+${directoryTree}
+
+**README:**
+${repoContext.readme?.substring(0, 800) || 'None'}
+
+**INSTRUCTION:**
+Respond with JSON listing the TOP 5-8 most important files needed to create this document.
+Focus on core implementation files, main components, configuration files.
+
+Format: {"files": ["path1", "path2", "path3"]}
+
+Respond with JSON only:`;
+
+            console.log('📋 Asking AI which files to collect...');
+            const fileRes = await fetch(GENERATE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    prompt: filePrompt, 
+                    model: this.defaultModel, 
+                    generationConfig: { maxOutputTokens: 512 } 
+                }),
+            });
+
+            if (fileRes.ok) {
+                const fileData = await fileRes.json();
+                const fileText = String(fileData.text || '');
+                try {
+                    const match = fileText.match(/\{[\s\S]*\}/);
+                    if (match) {
+                        const parsed = JSON.parse(match[0]);
+                        if (parsed.files && Array.isArray(parsed.files)) {
+                            requestedFiles.push(...parsed.files);
+                            console.log(`📂 AI requested ${requestedFiles.length} files:`, requestedFiles);
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse file request, will use README only');
+                }
+            }
+
+            // Fetch the requested files
+            if (requestedFiles.length > 0) {
+                onProgress?.('files', `Fetching ${requestedFiles.length} key files...`);
+                for (const path of requestedFiles) {
+                    try {
+                        const file = await repositoryContextService.getFileWithContext(
+                            user,
+                            repositoryInfo.owner,
+                            repositoryInfo.repo,
+                            path
+                        );
+                        if (file?.content) {
+                            collectedFiles.push({
+                                path,
+                                content: file.content.substring(0, 3000), // Limit to 3000 chars per file
+                                language: file.language || 'text'
+                            });
+                            console.log(`✅ Collected: ${path}`);
+                        }
+                    } catch (error) {
+                        console.warn(`⚠️ Could not fetch ${path}`);
+                    }
+                }
+            }
+
+            console.log(`📦 Collected ${collectedFiles.length} files for context`);
+
+            // PHASE 2: Plan document sections
+            console.log('📋 PHASE 2: Planning document sections...');
+            onProgress?.('planning', 'Planning document sections...');
+
+            const planPrompt = `${templatePrompt}
+
+**TASK:** Plan the sections for "${documentName}"
+
+Analyze the template and break it into 4-8 major sections that should be generated separately.
+Each section should be substantial enough to warrant its own generation.
+
+Respond with JSON: {"sections": ["Section 1 Name", "Section 2 Name", ...]}
+
+Respond with JSON only:`;
+
+            const planRes = await fetch(GENERATE_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    prompt: planPrompt, 
+                    model: this.defaultModel, 
+                    generationConfig: { maxOutputTokens: 512 } 
+                }),
+            });
+
+            let sections: string[] = [];
+            if (planRes.ok) {
+                const planData = await planRes.json();
+                const planText = String(planData.text || '');
+                try {
+                    const match = planText.match(/\{[\s\S]*\}/);
+                    if (match) {
+                        const parsed = JSON.parse(match[0]);
+                        if (parsed.sections && Array.isArray(parsed.sections)) {
+                            sections = parsed.sections;
+                        }
+                    }
+                } catch (e) {
+                    console.warn('Failed to parse sections, using defaults');
+                }
+            }
+
+            // Fallback sections if planning failed
+            if (sections.length === 0) {
+                sections = ['Introduction', 'Getting Started', 'Core Features', 'Technical Details', 'Conclusion'];
+            }
+
+            console.log(`📋 Planned ${sections.length} sections:`, sections);
+
+            // PHASE 3: Generate each section with full 8192 token budget
+            console.log('✍️ PHASE 3: Generating sections...');
+            const generatedSections: string[] = [];
+            const filesContext = collectedFiles.map(f => 
+                `**${f.path}** (${f.language}):\n\`\`\`${f.language}\n${f.content}\n\`\`\``
+            ).join('\n\n');
+
+            for (let i = 0; i < sections.length; i++) {
+                const sectionName = sections[i];
+                onProgress?.('generate', `Generating ${i + 1}/${sections.length}: ${sectionName}`);
+                console.log(`\n📝 Generating section ${i + 1}/${sections.length}: ${sectionName}`);
+
+                const sectionPrompt = `${templatePrompt}
+
+---
+
+**EDITOR FORMATTING RULES:**
+
+Generate content using proper TipTap HTML formatting:
+
+**Headings:** <h1> to <h5> only (NO <h6>)
+**Text:** <strong>, <em>, <u>, <mark>, <s>
+**Code:** Use code blocks only (NO inline <code> tags):
+<pre><code class="language-javascript" data-language="javascript">
+// Your code here
+</code></pre>
+
+**Mermaid Diagrams:**
+<pre><code class="language-mermaid" data-language="mermaid">
+graph TD
+    A --> B
+</code></pre>
+
+**Lists:** <ul><li>, <ol><li>, or nested
+**Tables:** <table><thead><tr><th>, <tbody><tr><td>
+**Links:** <a href="url">text</a>
+**Quotes:** <blockquote><p>text</p></blockquote>
+
+---
+
+**REPOSITORY:** ${repositoryInfo.fullName}
+**DOCUMENT:** ${documentName}
+**ROLE:** ${documentRole}
+
+**KEY FILES:**
+${filesContext}
+
+**YOUR TASK:**
+Generate ONLY the "${sectionName}" section of the document.
+
+**CONTEXT - ALL SECTIONS:**
+${sections.map((s, idx) => `${idx + 1}. ${s}${idx < i ? ' ✅' : idx === i ? ' 👉 CURRENT' : ' ⏳'}`).join('\n')}
+
+**PREVIOUSLY GENERATED:**
+${generatedSections.length > 0 ? generatedSections.map((content, idx) => `[${sections[idx]}]: ${content.substring(0, 200)}...`).join('\n') : 'None - this is the first section'}
+
+**REQUIREMENTS:**
+- Generate ONLY the "${sectionName}" section
+- Follow the template's HTML format using TipTap-compatible tags
+- Use <h2> or <h3> for section headings (NOT <h1>)
+- For code: use <pre><code class="language-X" data-language="X">
+- For diagrams: use <pre><code class="language-mermaid" data-language="mermaid">
+- NO inline <code> tags - use code blocks for all code snippets
+- Be comprehensive and detailed for THIS section
+- Include code examples, explanations, and specifics from the repository files
+- Use your FULL 8192 token budget for quality content
+- DO NOT regenerate previous sections
+- Respond with ONLY the HTML content for this section (no JSON, no explanations)
+
+Generate the "${sectionName}" section now:`;
+
+                const sectionRes = await fetch(GENERATE_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        prompt: sectionPrompt, 
+                        model: this.defaultModel, 
+                        generationConfig: { maxOutputTokens: 8192 } 
+                    }),
+                });
+
+                if (!sectionRes.ok) {
+                    console.warn(`⚠️ Failed to generate section: ${sectionName}, skipping...`);
+                    continue;
+                }
+
+                const sectionData = await sectionRes.json();
+                const sectionContent = String(sectionData.text || '');
+                
+                // Clean the section content
+                const cleaned = this.cleanHTMLContent(sectionContent);
+                generatedSections.push(cleaned);
+                
+                console.log(`✅ Section ${i + 1} generated: ${cleaned.length} characters`);
+            }
+
+            // PHASE 4: Combine all sections
+            console.log('🔗 PHASE 4: Combining sections...');
+            onProgress?.('finalize', 'Combining all sections...');
+
+            const finalDocument = `<h1>${documentName}</h1>
+${generatedSections.join('\n\n')}`;
+
+            console.log(`✅ COMPLETE! Total document: ${finalDocument.length} characters`);
+            onProgress?.('done', 'Document generation complete!');
+
+            return finalDocument;
+
+        } catch (error) {
+            console.error('❌ Section generation error:', error);
             onProgress?.('error', error instanceof Error ? error.message : 'Failed');
             throw error;
         }

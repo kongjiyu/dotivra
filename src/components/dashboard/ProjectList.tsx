@@ -32,6 +32,25 @@ const formatDateOnly = (value: any): string => {
   });
 };
 
+/**
+ * Format GitHub repo URL to ensure it's a valid GitHub link
+ * Handles various input formats:
+ * - Full URL: https://github.com/user/repo
+ * - Short format: user/repo or user/repo.github.io
+ */
+const formatGitHubUrl = (repoUrl: string): string => {
+  if (!repoUrl) return '';
+  
+  // Already a full GitHub URL
+  if (repoUrl.startsWith('http://github.com/') || repoUrl.startsWith('https://github.com/')) {
+    return repoUrl;
+  }
+  
+  // If it doesn't start with http, assume it's a username/repo format
+  // Keep the repo name as-is (including .github.io if it's part of the actual repo name)
+  return `https://github.com/${repoUrl}`;
+};
+
 const getInitials = (text: string): string => {
   if (!text) return 'PR';
   const words = text.trim().split(/\s+/);
@@ -169,8 +188,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
   }, [projects, searchTerm]);
 
   const renderSkeleton = () => (
-    <section className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-      <div className="px-6 pt-8 pb-6 border-b border-gray-100">
+    <section className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col h-full">
+      <div className="px-6 pt-8 pb-6 border-b border-gray-100 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div>
             <div className="h-4 w-32 bg-gray-200 rounded animate-pulse mb-2" />
@@ -182,8 +201,8 @@ const ProjectList: React.FC<ProjectListProps> = ({
           </div>
         </div>
       </div>
-      <div className="px-6 py-8 space-y-4">
-        {[1, 2, 3].map((item) => (
+      <div className="px-6 py-8 space-y-4 flex-1">
+        {[1, 2, 3, 4, 5].map((item) => (
           <div key={item} className="h-16 bg-gray-100 rounded-lg animate-pulse" />
         ))}
       </div>
@@ -224,8 +243,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
   };
 
   const renderListView = () => (
-    <div className="px-6 pb-6">
-      <ScrollArea className="rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-x-auto border border-gray-200 bg-white">
         <table className="min-w-full divide-y divide-gray-100 text-left">
           <thead className="bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-500">
             <tr>
@@ -243,7 +261,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
                 <tr
                   key={project.id || `${project.ProjectName}-${index}`}
                   className="hover:bg-blue-50/40 cursor-pointer transition-colors"
-                  onClick={() => onProjectClick(String(project.id || project.Project_Id))}
+                  onClick={() => onProjectClick(String(project.Project_Id || project.id))}
                 >
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
@@ -266,13 +284,16 @@ const ProjectList: React.FC<ProjectListProps> = ({
                   <td className="px-6 py-4 text-gray-500">
                     {project.GitHubRepo ? (
                       <a
-                        href={project.GitHubRepo}
+                        href={formatGitHubUrl(project.GitHubRepo)}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                        className="text-blue-600 hover:text-blue-800 hover:underline flex items-center gap-1"
                         onClick={(e) => e.stopPropagation()}
                       >
                         {project.GitHubRepo.replace(/^https?:\/\/(www\.)?github\.com\//, '')}
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                        </svg>
                       </a>
                     ) : (
                       '—'
@@ -286,12 +307,11 @@ const ProjectList: React.FC<ProjectListProps> = ({
             })}
           </tbody>
         </table>
-      </ScrollArea>
-    </div>
+      </div>
   );
 
   const renderGridView = () => (
-    <div className="px-6 py-8">
+    <div className="px-6 py-6">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
         {filteredProjects.map((project, index) => {
           const formattedDate = formatDateOnly(project.Created_Time);
@@ -299,7 +319,7 @@ const ProjectList: React.FC<ProjectListProps> = ({
           return (
             <button
               key={project.id || `${project.ProjectName}-${index}`}
-              onClick={() => onProjectClick(String(project.id || project.Project_Id))}
+              onClick={() => onProjectClick(String(project.Project_Id || project.id))}
               className="relative text-left bg-white border border-gray-200 rounded-2xl shadow-sm hover:border-blue-200 hover:shadow-lg transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-200 flex flex-col"
             >
               <div className="h-32 bg-gray-50 border-b border-gray-100 flex items-center justify-center">
@@ -331,11 +351,11 @@ const ProjectList: React.FC<ProjectListProps> = ({
   );
 
   return (
-    <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <section className="bg-white border border-gray-200 rounded-xl overflow-hidden flex flex-col h-full shadow-sm">
       {/* Error banner */}
       {renderErrorBanner()}
 
-      <div className="px-6 pt-6 pb-5 border-b border-gray-100 space-y-4">
+      <div className="px-6 pt-6 pb-5 border-b border-gray-100 space-y-4 flex-shrink-0">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-800">Recent projects</h2>
@@ -388,27 +408,30 @@ const ProjectList: React.FC<ProjectListProps> = ({
         )}
       </div>
 
-      {filteredProjects.length === 0 ? (
-        <div className="px-6 py-10 text-center">
-          <h3 className="text-lg font-medium text-gray-800 mb-2">No projects found</h3>
-          <p className="text-sm text-gray-500 mb-6">
-            Create a new project to start building documentation with your team.
-          </p>
-          <button
-            type="button"
-            onClick={onNewProject}
-            className="inline-flex items-center px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors"
-          >
-            Create project
-          </button>
-        </div>
-      ) : viewMode === 'list' ? (
-        renderListView()
-      ) : (
-        <div className="min-h-[360px]">{renderGridView()}</div>
-      )}
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        {filteredProjects.length === 0 ? (
+          <div className="px-6 py-10 text-center h-full flex flex-col items-center justify-center">
+            <h3 className="text-lg font-medium text-gray-800 mb-2">No projects found</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              Create a new project to start building documentation with your team.
+            </p>
+            <button
+              type="button"
+              onClick={onNewProject}
+              className="inline-flex items-center px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-full hover:bg-blue-700 transition-colors"
+            >
+              Create project
+            </button>
+          </div>
+        ) : viewMode === 'list' ? (
+          renderListView()
+        ) : (
+          renderGridView()
+        )}
+      </div>
 
-      <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-center">
+      <div className="px-6 py-4 border-t border-gray-100 bg-gray-50 flex items-center justify-center flex-shrink-0">
         <button
           type="button"
           onClick={onViewAllProjects}

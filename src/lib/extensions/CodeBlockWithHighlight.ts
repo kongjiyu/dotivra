@@ -101,7 +101,35 @@ export const CodeBlockWithHighlight = CodeBlockLowlight
       return {
         language: {
           default: 'plaintext',
-          parseHTML: (element: HTMLElement) => element.getAttribute('data-language'),
+          parseHTML: (element: HTMLElement) => {
+            // Try to get language from data-language attribute first
+            const dataLang = element.getAttribute('data-language')
+            if (dataLang) return dataLang
+            
+            // Fallback: try to extract from class attribute (language-*)
+            const classList = element.className?.split(' ') || []
+            for (const cls of classList) {
+              if (cls.startsWith('language-')) {
+                return cls.replace('language-', '')
+              }
+            }
+            
+            // Check code element inside pre (for standard markdown format)
+            const codeElement = element.querySelector('code')
+            if (codeElement) {
+              const codeDataLang = codeElement.getAttribute('data-language')
+              if (codeDataLang) return codeDataLang
+              
+              const codeClassList = codeElement.className?.split(' ') || []
+              for (const cls of codeClassList) {
+                if (cls.startsWith('language-')) {
+                  return cls.replace('language-', '')
+                }
+              }
+            }
+            
+            return null
+          },
           renderHTML: (attributes: any) => {
             if (!attributes.language) {
               return {}
@@ -113,6 +141,54 @@ export const CodeBlockWithHighlight = CodeBlockLowlight
           },
         },
       }
+    },
+
+    parseHTML() {
+      return [
+        {
+          tag: 'pre',
+          preserveWhitespace: 'full',
+          getAttrs: (element: string | HTMLElement) => {
+            if (typeof element === 'string') return null
+            
+            const el = element as HTMLElement
+            
+            // Try to get language from pre element
+            let language = el.getAttribute('data-language')
+            
+            // Try from class
+            if (!language) {
+              const classList = el.className?.split(' ') || []
+              for (const cls of classList) {
+                if (cls.startsWith('language-')) {
+                  language = cls.replace('language-', '')
+                  break
+                }
+              }
+            }
+            
+            // Try from code element inside
+            if (!language) {
+              const codeElement = el.querySelector('code')
+              if (codeElement) {
+                language = codeElement.getAttribute('data-language')
+                
+                if (!language) {
+                  const codeClassList = codeElement.className?.split(' ') || []
+                  for (const cls of codeClassList) {
+                    if (cls.startsWith('language-')) {
+                      language = cls.replace('language-', '')
+                      break
+                    }
+                  }
+                }
+              }
+            }
+            
+            return language ? { language } : { language: 'plaintext' }
+          },
+        },
+      ]
     },
 
     addNodeView() {

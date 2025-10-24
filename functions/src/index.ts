@@ -8,6 +8,7 @@ import helmet from "helmet";
 import {createAppAuth} from "@octokit/auth-app";
 import {Octokit} from "@octokit/rest";
 import crypto from "crypto";
+import {WebSocketServer} from "ws";
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -1400,49 +1401,379 @@ app.get('/api/templates', async (req, res) => {
 });
 
 // Create new document
+// Create document endpoint - supports both old and new field naming conventions
 app.post('/api/documents', async (req, res) => {
   try {
-    const { title, content, projectId, userId, templateId, documentCategory } = req.body;
+    console.log('🔥 POST /api/documents received:', req.body);
     
-    if (!title || !projectId || !userId) {
-      return res.status(400).json({ error: 'Title, projectId, and userId are required' });
+    // Support both old (lowercase) and new (capital) field names for backwards compatibility
+    const { 
+      DocumentName, 
+      title,
+      DocumentType,
+      DocumentCategory,
+      documentCategory,
+      Project_Id,
+      projectId,
+      Template_Id,
+      templateId,
+      User_Id,
+      userId,
+      Content,
+      content,
+      IsDraft
+    } = req.body;
+    
+    // Use new field names with fallback to old names
+    const documentName = DocumentName || title;
+    const documentType = DocumentType || 'user-manual';
+    const category = DocumentCategory || documentCategory || 'General';
+    const projectIdValue = Project_Id || projectId;
+    const userIdValue = User_Id || userId;
+    const templateIdValue = Template_Id || templateId || null;
+    const contentValue = Content || content || '<p>Start writing your document...</p>';
+    const isDraft = IsDraft !== undefined ? IsDraft : true;
+    
+    // Validate required fields
+    if (!documentName || !projectIdValue || !userIdValue) {
+      console.log('❌ Document validation failed: missing required fields');
+      return res.status(400).json({ 
+        error: 'DocumentName, Project_Id, and User_Id are required',
+        received: { 
+          DocumentName: !!documentName,
+          Project_Id: !!projectIdValue,
+          User_Id: !!userIdValue
+        }
+      });
     }
+
+    console.log('✅ Document validation passed, creating document...');
     
     const docData = {
-      Title: title,
-      DocumentName: title, // Add DocumentName field for display
-      Content: content || '<p>Start writing your document...</p>',
-      ProjectId: projectId,
-      Project_Id: projectId, // Add Project_Id for compatibility
-      UserId: userId,
-      TemplateId: templateId || null,
-      DocumentCategory: documentCategory || 'General',
-      CreatedAt: admin.firestore.Timestamp.now(),
-      UpdatedAt: admin.firestore.Timestamp.now()
+      DocumentName: documentName,
+      DocumentType: documentType,
+      DocumentCategory: category,
+      Project_Id: projectIdValue,
+      Template_Id: templateIdValue,
+      User_Id: userIdValue,
+      Content: contentValue,
+      IsDraft: isDraft,
+      EditedBy: userIdValue,
+      Created_Time: admin.firestore.Timestamp.now(),
+      Updated_Time: admin.firestore.Timestamp.now(),
+      Hash: null
     };
+    
+    console.log('Creating document in Firestore:', docData);
     
     const docRef = await db.collection('Documents').add(docData);
     
+    console.log('✅ Document created with Firestore ID:', docRef.id);
+    
     const responseData = {
       id: docRef.id,
-      documentId: docRef.id, // Add documentId for consistency
       ...docData,
-      CreatedAt: docData.CreatedAt.toDate().toISOString(),
-      UpdatedAt: docData.UpdatedAt.toDate().toISOString()
+      Created_Time: docData.Created_Time.toDate().toISOString(),
+      Updated_Time: docData.Updated_Time.toDate().toISOString()
     };
     
     res.status(201).json({
       success: true,
-      documentId: docRef.id,
       document: responseData
     });
   } catch (error) {
     logger.error('Error creating document:', error);
-    res.status(500).json({ error: 'Failed to create document' });
+    res.status(500).json({ 
+      error: 'Failed to create document',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
   }
 });
 
-// Export the Express app as a Firebase Function with secrets
+// ============================================================================
+// WEBSOCKET SERVER FOR REAL-TIME DOCUMENT COLLABORATION
+// ============================================================================
+
+// Initialize WebSocket server with noServer mode for Firebase Functions
+const wss = new WebSocketServer({ noServer: true });
+
+// Store document rooms: documentId -> Set<WebSocket>
+const documentRooms = new Map<string, Set<any>>();
+
+wss.on("connection", (ws: any) => {
+  logger.info("WebSocket client connected ✅");
+  let currentDocumentId: string | null = null;
+
+  ws.on("message", async (msg: any) => {
+    try {
+      const data = JSON.parse(msg.toString());
+      logger.info("WebSocket received:", data.type, data.documentId);
+
+      switch (data.type) {
+        case 'join':
+          // Join document room
+          currentDocumentId = data.documentId;
+          if (!documentRooms.has(currentDocumentId)) {
+            documentRooms.set(currentDocumentId, new Set());
+          }
+          documentRooms.get(currentDocumentId)!.add(ws);
+          logger.info(`📄 Client joined document: ${currentDocumentId}`);
+          ws.send(JSON.stringify({ type: 'joined', documentId: currentDocumentId }));
+          break;
+
+        case 'sync_request':
+          // Client requesting current document state (for reconnection)
+          try {
+            const syncDocId = data.documentId;
+            const syncChannel = data.channel; // 'content' or 'summary'
+            const docRef = db.collection('Documents').doc(syncDocId);
+            const docSnap = await docRef.get();
+            
+            if (docSnap.exists) {
+              const docData = docSnap.data();
+              
+              // Ensure Summary field exists, add if missing
+              if (!docData?.Summary) {
+                await docRef.update({ Summary: '' });
+                logger.info(`➕ Added missing Summary field to document: ${syncDocId}`);
+              }
+              
+              // Send appropriate content based on channel
+              let content = '';
+              if (syncChannel === 'summary') {
+                content = docData?.Summary || '';
+              } else {
+                content = docData?.Content || '';
+              }
+              
+              ws.send(JSON.stringify({
+                type: 'sync_response',
+                documentId: syncDocId,
+                content: content,
+                version: docData?.version || 0,
+                channel: syncChannel,
+              }));
+              logger.info(`🔄 Sync response sent for document: ${syncDocId}, channel: ${syncChannel}, version: ${docData?.version || 0}`);
+            } else {
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Document not found',
+                documentId: syncDocId
+              }));
+            }
+          } catch (error) {
+            logger.error('Error handling sync_request:', error);
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Failed to sync document',
+              documentId: data.documentId
+            }));
+          }
+          break;
+
+        case 'edit':
+          // OT protocol: Handle edit with version checking
+          const { documentId: editDocId, content: editContent, baseVersion, seq, channel: editChannel } = data;
+          const editIsSummary = editChannel === 'summary';
+          
+          logger.info(`📝 Processing edit. DocId: ${editDocId}, Seq: ${seq}, BaseVersion: ${baseVersion}, Channel: ${editChannel}`);
+          
+          try {
+            const docRef = db.collection('Documents').doc(editDocId);
+            const docSnap = await docRef.get();
+            
+            if (!docSnap.exists) {
+              logger.error(`❌ Document not found: ${editDocId}`);
+              ws.send(JSON.stringify({
+                type: 'error',
+                message: 'Document not found',
+                documentId: editDocId
+              }));
+              break;
+            }
+            
+            const docData = docSnap.data();
+            const currentVersion = docData?.version || 0;
+            
+            // Ensure Summary field exists if we're editing summary
+            if (editIsSummary && !docData?.Summary) {
+              await docRef.update({ Summary: '' });
+              logger.info(`➕ Added missing Summary field to document: ${editDocId}`);
+            }
+            
+            logger.info(`📊 Current document version: ${currentVersion}, Incoming baseVersion: ${baseVersion}`);
+            
+            // Check if baseVersion matches current version
+            if (baseVersion !== currentVersion) {
+              // Reject stale edit
+              logger.info(`⚠️ Rejecting stale edit. Base: ${baseVersion}, Current: ${currentVersion}`);
+              ws.send(JSON.stringify({
+                type: 'reject',
+                documentId: editDocId,
+                seq,
+                currentVersion,
+                reason: 'stale_base_version'
+              }));
+              break;
+            }
+            
+            // Version matches, apply edit
+            const newVersion = currentVersion + 1;
+            const updateData: any = {
+              Updated_Time: admin.firestore.Timestamp.now(),
+              version: newVersion
+            };
+            
+            if (editIsSummary) {
+              updateData.Summary = editContent;
+              logger.info(`💾 Updating Summary field (channel: ${editChannel})`);
+            } else {
+              updateData.Content = editContent;
+              logger.info(`💾 Updating Content field (channel: ${editChannel})`);
+            }
+            
+            logger.info(`🔄 Saving to Firestore...`);
+            await docRef.update(updateData);
+            logger.info(`💾 Firestore updated successfully`);
+            
+            // Send acknowledgment to sender
+            const ackMessage = {
+              type: 'ack',
+              documentId: editDocId,
+              seq,
+              newVersion,
+              channel: editChannel
+            };
+            logger.info(`📤 Sending ACK:`, ackMessage);
+            ws.send(JSON.stringify(ackMessage));
+            
+            logger.info(`✅ Edit applied. Seq: ${seq}, New version: ${newVersion}, Channel: ${editChannel}`);
+            
+            // Broadcast to other clients in the same document room
+            if (documentRooms.has(editDocId)) {
+              const clients = documentRooms.get(editDocId)!;
+              clients.forEach(client => {
+                if (client !== ws && client.readyState === 1) { // 1 = OPEN
+                  client.send(JSON.stringify({
+                    type: 'update',
+                    documentId: editDocId,
+                    content: editContent,
+                    version: newVersion,
+                    channel: editChannel
+                  }));
+                }
+              });
+            }
+          } catch (error) {
+            logger.error('Error handling edit:', error);
+            ws.send(JSON.stringify({
+              type: 'error',
+              message: 'Failed to save edit',
+              documentId: editDocId,
+              seq
+            }));
+          }
+          break;
+
+        case 'update':
+          // Legacy: Save document update and broadcast to other clients
+          const { documentId, content, isSummary } = data;
+          
+          try {
+            const docRef = db.collection('Documents').doc(documentId);
+            const docSnap = await docRef.get();
+            const currentVersion = docSnap.exists ? (docSnap.data()?.version || 0) : 0;
+            const newVersion = currentVersion + 1;
+            
+            const updateData: any = {
+              Updated_Time: admin.firestore.Timestamp.now(),
+              version: newVersion
+            };
+            
+            if (isSummary) {
+              updateData.Summary = content;
+            } else {
+              updateData.Content = content;
+            }
+            
+            await docRef.update(updateData);
+            
+            // Send acknowledgment to sender
+            ws.send(JSON.stringify({ 
+              type: 'synced', 
+              documentId 
+            }));
+            
+            // Broadcast to other clients in the same document room
+            if (documentRooms.has(documentId)) {
+              const clients = documentRooms.get(documentId)!;
+              clients.forEach(client => {
+                if (client !== ws && client.readyState === 1) {
+                  client.send(JSON.stringify({
+                    type: 'update',
+                    documentId,
+                    content,
+                    version: newVersion,
+                    isSummary
+                  }));
+                }
+              });
+            }
+            
+            logger.info(`💾 Document ${documentId} saved and synced (legacy mode)`);
+          } catch (error) {
+            logger.error('Error saving document:', error);
+            ws.send(JSON.stringify({ 
+              type: 'error', 
+              message: 'Failed to save document',
+              documentId
+            }));
+          }
+          break;
+
+        default:
+          logger.info("Unknown message type:", data.type);
+      }
+    } catch (error) {
+      logger.error('Error processing WebSocket message:', error);
+      ws.send(JSON.stringify({ 
+        type: 'error', 
+        message: 'Invalid message format' 
+      }));
+    }
+  });
+
+  ws.on('close', () => {
+    // Remove client from document room
+    if (currentDocumentId && documentRooms.has(currentDocumentId)) {
+      documentRooms.get(currentDocumentId)!.delete(ws);
+      if (documentRooms.get(currentDocumentId)!.size === 0) {
+        documentRooms.delete(currentDocumentId);
+      }
+      logger.info(`📄 Client left document: ${currentDocumentId}`);
+    }
+    logger.info("WebSocket client disconnected ❌");
+  });
+
+  ws.send(JSON.stringify({ type: "connected" }));
+});
+
+// Wrap Express app to handle WebSocket upgrades
+const requestHandler = (req: any, res: any) => {
+  // Check if this is a WebSocket upgrade request
+  if (req.headers.upgrade === 'websocket') {
+    logger.info('🔌 WebSocket upgrade request detected');
+    // Handle WebSocket upgrade
+    wss.handleUpgrade(req, req.socket, Buffer.alloc(0), (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  } else {
+    // Normal HTTP request - pass to Express
+    app(req, res);
+  }
+};
+
+// Export the wrapped handler as a Firebase Function with secrets
 export const api = onRequest(
   {
     secrets: [
@@ -1456,5 +1787,5 @@ export const api = onRequest(
     memory: '1GiB',
     timeoutSeconds: 540,
   },
-  app
+  requestHandler
 );

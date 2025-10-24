@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
 import { 
   GeneralFeedback, 
   FeedbackSubmit
@@ -12,12 +13,26 @@ interface FeedbackModalProps {
 }
 
 const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
+  const location = useLocation();
+  
   const [feedbackData, setFeedbackData] = useState<FeedbackData>({
     email: '',
-    comment: ''
+    comment: '',
+    pageLink: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<FeedbackData>>({});
+
+  // Auto-detect current page when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      const currentPath = location.pathname;
+      // Only set if not already on feedback page
+      if (currentPath !== '/feedback') {
+        setFeedbackData(prev => ({ ...prev, pageLink: currentPath }));
+      }
+    }
+  }, [isOpen, location.pathname]);
 
   const validateForm = () => {
     const newErrors: Partial<FeedbackData> = {};
@@ -54,7 +69,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
       alert('Thank you for your feedback! We appreciate your input.');
       
       // Reset form and close modal
-      setFeedbackData({ email: '', comment: '' });
+      setFeedbackData({ email: '', comment: '', pageLink: '' });
       setErrors({});
       onClose();
     } catch (error) {
@@ -76,7 +91,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
 
   const handleClose = () => {
     if (!isSubmitting) {
-      setFeedbackData({ email: '', comment: '' });
+      setFeedbackData({ email: '', comment: '', pageLink: '' });
       setErrors({});
       onClose();
     }
