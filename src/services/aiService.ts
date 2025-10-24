@@ -253,6 +253,62 @@ Generate a helpful response that leverages the repository knowledge:`;
 
 ---
 
+**EDITOR FORMATTING GUIDELINES:**
+
+You are generating content for a TipTap rich text editor. Follow these HTML formatting rules:
+
+**Headings:** Use <h1> to <h5> (H6 not supported)
+- <h1>Main Title</h1>
+- <h2>Section</h2>
+- <h3>Subsection</h3>
+
+**Text Formatting:**
+- <strong>Bold</strong>
+- <em>Italic</em>
+- <u>Underline</u>
+- <mark>Highlight</mark>
+- <s>Strikethrough</s>
+
+**Lists:**
+- Unordered: <ul><li>Item</li></ul>
+- Ordered: <ol><li>Step</li></ol>
+- Nested lists supported
+
+**Code Blocks:** (NO inline <code> tags - only code blocks!)
+<pre><code class="language-javascript" data-language="javascript">
+function example() {
+  return "Use language-specific code blocks";
+}
+</code></pre>
+
+**Supported Languages:** javascript, typescript, python, java, cpp, c, csharp, html, css, json, yaml, bash, sql, go, rust, php, ruby, swift, kotlin, markdown, mermaid, plaintext
+
+**Mermaid Diagrams:** (Use as code blocks, not separate elements)
+<pre><code class="language-mermaid" data-language="mermaid">
+graph TD
+    A[Start] --> B[Process]
+    B --> C[End]
+</code></pre>
+
+**Tables:**
+<table>
+  <thead><tr><th>Header</th></tr></thead>
+  <tbody><tr><td>Data</td></tr></tbody>
+</table>
+
+**Links:** <a href="url">text</a>
+
+**Blockquotes:** <blockquote><p>Quote text</p></blockquote>
+
+**IMPORTANT:**
+- Use semantic HTML tags
+- NO inline <code> tags (use code blocks instead)
+- NO <h6> headings (use <h5> for smallest heading)
+- Include proper whitespace and structure
+- Use language-specific syntax for code blocks
+
+---
+
 **YOUR TASK:**
 Create a document titled "${documentName}" for the role: ${documentRole}
 
@@ -325,6 +381,18 @@ You requested these files from the repository. Here they are:
 
 ${fileContents}
 
+**EDITOR FORMATTING REMINDER:**
+Use TipTap-compatible HTML:
+- Headings: <h1> to <h5> (NO <h6>)
+- Code blocks ONLY (NO inline <code> tags):
+  <pre><code class="language-python" data-language="python">code here</code></pre>
+- Mermaid diagrams as code blocks:
+  <pre><code class="language-mermaid" data-language="mermaid">graph TD...</code></pre>
+- Text formatting: <strong>, <em>, <u>, <mark>, <s>
+- Lists: <ul><li>, <ol><li>
+- Tables: <table><thead><tr><th>, <tbody><tr><td>
+- Links: <a href="url">text</a>
+
 **CRITICAL INSTRUCTIONS:**
 - Files marked with ❌ NOT FOUND do not exist - DO NOT request them again
 - Work with successfully fetched files (marked with ✅)
@@ -341,9 +409,11 @@ Option 2 - Ready to generate the document?
 
 **REQUIREMENTS FOR THE DOCUMENT:**
 - Follow the template's HTML structure EXACTLY as specified
+- Use TipTap-compatible HTML tags (NO inline <code>, NO <h6>)
 - The template itself defines all content requirements (code examples, validation logic, etc.)
 - Include ALL required sections from the template
-- Use proper HTML tags as shown in the template (<html>, <body>, <h1>, <h2>, <h3>, <p>, <ul>, <li>, <code>, <pre>, etc.)
+- For code: <pre><code class="language-X" data-language="X">code</code></pre>
+- For diagrams: <pre><code class="language-mermaid" data-language="mermaid">graph</code></pre>
 - DO NOT add explanatory text - just provide the JSON with HTML content
 - The content must be based on the repository files you've examined
 - Example format: {"needFiles": false, "content": "<html><body><h1>Project User Manual</h1>...</body></html>"}
@@ -617,6 +687,30 @@ Respond with JSON only:`;
 
 ---
 
+**EDITOR FORMATTING RULES:**
+
+Generate content using proper TipTap HTML formatting:
+
+**Headings:** <h1> to <h5> only (NO <h6>)
+**Text:** <strong>, <em>, <u>, <mark>, <s>
+**Code:** Use code blocks only (NO inline <code> tags):
+<pre><code class="language-javascript" data-language="javascript">
+// Your code here
+</code></pre>
+
+**Mermaid Diagrams:**
+<pre><code class="language-mermaid" data-language="mermaid">
+graph TD
+    A --> B
+</code></pre>
+
+**Lists:** <ul><li>, <ol><li>, or nested
+**Tables:** <table><thead><tr><th>, <tbody><tr><td>
+**Links:** <a href="url">text</a>
+**Quotes:** <blockquote><p>text</p></blockquote>
+
+---
+
 **REPOSITORY:** ${repositoryInfo.fullName}
 **DOCUMENT:** ${documentName}
 **ROLE:** ${documentRole}
@@ -635,7 +729,11 @@ ${generatedSections.length > 0 ? generatedSections.map((content, idx) => `[${sec
 
 **REQUIREMENTS:**
 - Generate ONLY the "${sectionName}" section
-- Follow the template's HTML format (<h2>, <h3>, <p>, <ul>, <code>, <pre>, etc.)
+- Follow the template's HTML format using TipTap-compatible tags
+- Use <h2> or <h3> for section headings (NOT <h1>)
+- For code: use <pre><code class="language-X" data-language="X">
+- For diagrams: use <pre><code class="language-mermaid" data-language="mermaid">
+- NO inline <code> tags - use code blocks for all code snippets
 - Be comprehensive and detailed for THIS section
 - Include code examples, explanations, and specifics from the repository files
 - Use your FULL 8192 token budget for quality content
