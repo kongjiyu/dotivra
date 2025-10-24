@@ -24,7 +24,6 @@ import {
 	ChevronDown,
 	Wrench,
 	HelpCircle,
-	PanelLeft,
 	Menu,
 	FileBarChart,
 	Keyboard,

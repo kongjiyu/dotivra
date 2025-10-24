@@ -21,7 +21,7 @@ setGlobalOptions({maxInstances: 10});
 const dashboardSessions = new Map(); // sessionId -> { createdAt, expiresAt }
 
 // Import Gemini SDK
-import {GoogleGenerativeAI} from "@google/generative-ai";
+import {GoogleGenAI} from "@google/genai";
 
 // Helper: Clean expired sessions
 function cleanExpiredSessions() {
@@ -280,30 +280,28 @@ class GeminiBalancer {
       
       const keyState = picked.key;
       try {
-        const client = new GoogleGenerativeAI(keyState.key);
-        const modelClient = client.getGenerativeModel({
+        const client = new GoogleGenAI({apiKey: keyState.key});
+        
+        // New API: use client.models.generateContent()
+        const resp = await client.models.generateContent({
           model: options.model,
-          tools: options.tools,
-          systemInstruction: options.systemInstruction,
-          generationConfig: options.generationConfig,
-          safetySettings: options.safetySettings,
-        });
-        
-        const resp = await modelClient.generateContent({
           contents: options.contents,
-          generationConfig: options.generationConfig,
+          config: options.generationConfig,
           safetySettings: options.safetySettings,
           tools: options.tools,
           systemInstruction: options.systemInstruction,
         });
         
-        const metadata: any = resp?.response?.usageMetadata || {};
+        const metadata: any = resp?.usageMetadata || {};
         const usedTokens = Number(metadata.totalTokenCount || 0) || estimatedTokens;
         
         this.markUsage(keyState, usedTokens);
         
+        // Extract text from response
+        const text = resp?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+        
         return {
-          text: resp?.response?.text?.() ?? null,
+          text,
           usage: metadata,
           keyId: keyState.id,
           keyIdShort: keyState.id.slice(0, 12),

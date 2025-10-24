@@ -77,7 +77,6 @@ export default function DocumentHistory() {
                     </div>
                 )}
                 <VersionHistory
-                    documentId={documentId}
                     currentContent={documentContent || ""}
                     onRestoreVersion={handleRestoreVersion}
                     onPreviewVersion={handlePreviewVersion}
