@@ -1,11 +1,11 @@
 import DocumentLayout from "./DocumentLayout";
-import VersionHistory from "@/components/Document/VersionHistory";
+import VersionHistory from "@/components/document/VersionHistory";
 import { useNavigate } from "react-router-dom";
 import { useDocument } from "@/context/DocumentContext";
 
 export default function DocumentHistory() {
     const navigate = useNavigate();
-    const { documentContent, setDocumentContent, documentId } = useDocument();
+    const { documentContent, setDocumentContent } = useDocument();
 
     const handleRestoreVersion = (content: string) => {
         setDocumentContent(content);
@@ -21,7 +21,6 @@ export default function DocumentHistory() {
         <DocumentLayout showDocumentMenu={false}>
             <div className="h-full pt-2">
                 <VersionHistory
-                    documentId={documentId}
                     currentContent={documentContent || ""}
                     onRestoreVersion={handleRestoreVersion}
                     onPreviewVersion={handlePreviewVersion}

@@ -1,5 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
-import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, ChevronRight, ChevronDown } from "lucide-react";
 import type { Editor } from "@tiptap/react";
