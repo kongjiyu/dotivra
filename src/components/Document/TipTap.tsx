@@ -1,10 +1,10 @@
 import { EditorContext, useEditor } from "@tiptap/react";
-import DocumentContext from "./DocumentContext";
-import ToolBar from "./ToolBar";
+import DocumentContext from "../Document/DocumentContext";
+import ToolBar from "../Document/ToolBar";
 import { useMemo, useCallback, useState, useEffect, useRef } from "react";
 import { createTipTapConfig } from "../../config/tiptap-config";
 import { useLinkPreview } from '../../hooks/useLinkPreview';
-import LinkPreviewEditor from './LinkPreviewEditor';
+import LinkPreviewEditor from "../Document/LinkPreviewEditor";
 
 interface TiptapProps {
     initialContent?: string;
@@ -151,10 +151,10 @@ const Tiptap = ({
     // BUT only apply on first load, not on subsequent context updates
     useEffect(() => {
         if (!editor) return;
-        
+
         // Allow undefined or null to be skipped, but not empty string
         if (initialContent === undefined || initialContent === null) return;
-        
+
         // Check if this content was already applied
         if (lastAppliedContentRef.current === initialContent) return;
 
@@ -162,7 +162,7 @@ const Tiptap = ({
         // This prevents overwriting user's edits when context updates from auto-save
         const currentHTML = editor.getHTML();
         const isEditorEmpty = currentHTML === '<p></p>' || currentHTML === '' || currentHTML === '<p><br></p>';
-        
+
         // Only apply if editor is empty OR this is genuinely different content (not just a context update)
         if (isEditorEmpty || lastAppliedContentRef.current === null) {
             console.log('📝 Applying initial content to editor:', {
@@ -170,7 +170,7 @@ const Tiptap = ({
                 isEditorEmpty,
                 isFirstLoad: lastAppliedContentRef.current === null
             });
-            
+
             // false => do not emit update event, avoids extra history noise
             editor.commands.setContent(initialContent, { emitUpdate: false });
             // Ensure no history entry for this transaction
@@ -178,7 +178,7 @@ const Tiptap = ({
                 const tr = editor.state.tr.setMeta('addToHistory', false);
                 editor.view.dispatch(tr);
             }
-            
+
             // Mark this content as applied
             lastAppliedContentRef.current = initialContent;
         } else {

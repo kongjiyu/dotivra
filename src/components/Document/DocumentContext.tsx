@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/react";
 import { EditorContent } from "@tiptap/react";
 import { memo, useState, useEffect, useRef } from "react";
-import ContextMenu from "./ContextMenu";
+import ContextMenu from "../Document/ContextMenu";
 
 interface DocumentContextProps {
     editor: Editor | null;
