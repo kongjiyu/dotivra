@@ -7,6 +7,7 @@ import path from "path"
 export default defineConfig(({ mode }) => {
   // Use production API URL when building for production
   const productionApiUrl = 'https://api-uaxvd2wafa-uc.a.run.app';
+  const productionWsUrl = 'wss://api-uaxvd2wafa-uc.a.run.app';
   
   return {
     plugins: [react(), tailwindcss()],
@@ -17,9 +18,10 @@ export default defineConfig(({ mode }) => {
     },
     // Define environment variables at build time
     define: {
-      // Override VITE_API_URL for production builds
+      // Override VITE_API_URL and VITE_WS_URL for production builds
       ...(mode === 'production' && {
-        'import.meta.env.VITE_API_URL': JSON.stringify(productionApiUrl)
+        'import.meta.env.VITE_API_URL': JSON.stringify(productionApiUrl),
+        'import.meta.env.VITE_WS_URL': JSON.stringify(productionWsUrl)
       })
     },
     server: {

@@ -241,50 +241,34 @@ export default function DocumentEditor() {
                 setDocumentTitle("Document Load Error");
             } finally {
                 setIsLoadingDocument(false);
+                // Allow sendUpdate after initial load completes
+                setTimeout(() => {
+                    isInitialLoadingRef.current = false;
+                }, 1000);
             }
         };
 
         loadDocument();
     }, [documentId]); // Remove state setters from dependencies to prevent infinite loop
 
+    // Track if we're in the initial loading phase
+    const isInitialLoadingRef = useRef(true);
+
     // Optimized onUpdate: avoid re-rendering via context on each keystroke
     const handleDocumentUpdateOptimized = useCallback((content: string) => {
         latestContentRef.current = content;
-        documentContentRef.current = content; // Update ref for comparison
+        documentContentRef.current = content;
 
-        // Send update via WebSocket with debouncing
-        // Channel is already set to 'content' in useDocumentSync options
+        // Skip sendUpdate during initial load
+        if (isInitialLoadingRef.current) {
+            return;
+        }
+
+        // Use useDocumentSync hook to save with Firestore real-time sync
         if (documentId) {
-            if (autoSaveTimeoutRef.current) {
-                clearTimeout(autoSaveTimeoutRef.current);
-            }
-            autoSaveTimeoutRef.current = setTimeout(async () => {
-                try {
-                    setIsSaving(true);
-                    const contentToSave = latestContentRef.current;
-                    const response = await fetch(API_ENDPOINTS.document(documentId), {
-                        method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            Content: contentToSave,
-                            EditedBy: user?.uid || 'anonymous',
-                        }),
-                    });
-
-                    if (!response.ok) {
-                        console.error('❌ Failed to auto-save document:', response.status, await response.text());
-                    }
-
-                    // DO NOT update context here - it causes TipTap to re-apply content and overwrite user edits
-                    // The latestContentRef already tracks the current content
-                } catch (error) {
-                    console.error('❌ Auto-save error:', error);
-                } finally {
-                    setIsSaving(false);
-                }
-            }, 2000);
+            sendUpdate(content);
+            setIsSaving(true);
+            setTimeout(() => setIsSaving(false), 1000);
         }
     }, [documentId, sendUpdate]);
 
@@ -296,6 +280,20 @@ export default function DocumentEditor() {
             }
         };
     }, []);
+
+    // Warn user before leaving if there are unsaved changes
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (syncStatus === 'pending' || syncStatus === 'syncing') {
+                e.preventDefault();
+                e.returnValue = 'You have unsaved changes. Are you sure you want to leave?';
+                return e.returnValue;
+            }
+        };
+
+        window.addEventListener('beforeunload', handleBeforeUnload);
+        return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }, [syncStatus]);
 
     const handleDocumentUpdate = useCallback((content: string) => {
         latestContentRef.current = content;

@@ -25,7 +25,7 @@ import { FirestoreService } from "../../../firestoreService";
 interface DocumentLayoutProps {
     children: ReactNode;
     showDocumentMenu?: boolean;
-    syncStatus?: 'synced' | 'syncing' | 'error';
+    syncStatus?: 'synced' | 'syncing' | 'pending' | 'error';
 }
 
 export default function DocumentLayout({
@@ -274,6 +274,12 @@ export default function DocumentLayout({
 
                             {shouldShowSyncStatus() && (
                                 <div className="flex items-center gap-1 text-sm text-gray-500">
+                                    {syncStatus === 'pending' && (
+                                        <>
+                                            <CloudUpload className="w-4 h-4 text-yellow-600" />
+                                            <span className="text-yellow-600">Saving in 2s...</span>
+                                        </>
+                                    )}
                                     {syncStatus === 'syncing' && (
                                         <>
                                             <CloudUpload className="w-4 h-4 text-blue-600 animate-pulse" />

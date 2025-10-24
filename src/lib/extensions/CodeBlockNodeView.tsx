@@ -61,6 +61,13 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
     const codeRef = useRef<HTMLPreElement>(null)
     const mermaidRef = useRef<HTMLDivElement>(null)
 
+    // Auto-enable preview mode when language changes to mermaid
+    useEffect(() => {
+        if (node.attrs.language === 'mermaid') {
+            setIsPreviewMode(true)
+        }
+    }, [node.attrs.language])
+
     // Initialize Mermaid
     useEffect(() => {
         mermaid.initialize({
@@ -89,6 +96,9 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
         // Auto-enable preview mode for Mermaid language
         if (language === 'mermaid') {
             setIsPreviewMode(true)
+        } else {
+            // Disable preview mode for non-Mermaid languages
+            setIsPreviewMode(false)
         }
     }, [updateAttributes])
 
