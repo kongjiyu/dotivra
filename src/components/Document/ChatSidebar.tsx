@@ -1,23 +1,131 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { X, Sparkles, SendHorizonal, Wand2 } from "lucide-react";
+import { X, Sparkles, SendHorizonal, Wand2, Wrench, Loader2 } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 import { useDocument } from "@/context/DocumentContext";
 import { EnhancedAIContentWriter } from "@/utils/enhancedAIContentWriter";
-import type { ContentPosition } from "@/utils/enhancedAIContentWriter";
 import { aiService } from "@/services/aiService";
 import { useAuth } from "@/context/AuthContext";
 import { marked } from "marked";
-import { documentAgentService } from "@/services/documentAgentService";
+import { mcpService, type MCPToolCall } from "@/services/mcpService";
+import { chatHistoryService } from "@/services/chatHistoryService";
 
 export type ChatMessage = {
     id: string;
     role: "user" | "assistant";
     content: string;
     timestamp?: number;
+    toolCalls?: MCPToolCall[]; // Add MCP tool calls
+    type?: 'user' | 'assistant' | 'tool-use' | 'tool-response' | 'progress';
+    progressStage?: 'planning' | 'reasoning' | 'execution' | 'summary';
+    isTemporary?: boolean; // For progress messages that will be removed
+    toolReason?: string; // Reason for tool usage
+    toolResult?: string; // Result from tool execution
 };
+
+/**
+ * Parse AI response with progressive thinking markers into structured messages
+ */
+function parseProgressiveResponse(response: string, baseTimestamp: number): ChatMessage[] {
+    const messages: ChatMessage[] = [];
+    let currentId = Date.now();
+
+    // Split by emoji markers while preserving the marker
+    const sections = response.split(/(?=📋|🤔|⚙️|💭|✅|✨)/);
+
+    for (const section of sections) {
+        const trimmed = section.trim();
+        if (!trimmed) continue;
+
+        // Planning phase
+        if (trimmed.startsWith('📋 Planning:')) {
+            messages.push({
+                id: `progress-${currentId++}`,
+                role: 'assistant',
+                content: trimmed.replace('📋 Planning:', '').trim(),
+                timestamp: baseTimestamp,
+                type: 'progress',
+                progressStage: 'planning',
+                isTemporary: true
+            });
+        }
+        // Reasoning phase
+        else if (trimmed.startsWith('🤔 Reasoning:')) {
+            messages.push({
+                id: `progress-${currentId++}`,
+                role: 'assistant',
+                content: trimmed.replace('🤔 Reasoning:', '').trim(),
+                timestamp: baseTimestamp,
+                type: 'progress',
+                progressStage: 'reasoning',
+                isTemporary: true
+            });
+        }
+        // Execution phase - tool name
+        else if (trimmed.startsWith('⚙️ Executing:')) {
+            messages.push({
+                id: `progress-${currentId++}`,
+                role: 'assistant',
+                content: trimmed.replace('⚙️ Executing:', '').trim(),
+                timestamp: baseTimestamp,
+                type: 'tool-use',
+                progressStage: 'execution',
+                isTemporary: true
+            });
+        }
+        // Tool reason
+        else if (trimmed.startsWith('💭 Reason:')) {
+            messages.push({
+                id: `progress-${currentId++}`,
+                role: 'assistant',
+                content: trimmed.replace('💭 Reason:', '').trim(),
+                timestamp: baseTimestamp,
+                type: 'progress',
+                progressStage: 'execution',
+                toolReason: trimmed.replace('💭 Reason:', '').trim(),
+                isTemporary: true
+            });
+        }
+        // Tool result
+        else if (trimmed.startsWith('✅ Result:')) {
+            messages.push({
+                id: `progress-${currentId++}`,
+                role: 'assistant',
+                content: trimmed.replace('✅ Result:', '').trim(),
+                timestamp: baseTimestamp,
+                type: 'tool-response',
+                progressStage: 'execution',
+                toolResult: trimmed.replace('✅ Result:', '').trim(),
+                isTemporary: true
+            });
+        }
+        // Summary phase - final message (not temporary)
+        else if (trimmed.startsWith('✨ Summary:')) {
+            messages.push({
+                id: `progress-${currentId++}`,
+                role: 'assistant',
+                content: trimmed.replace('✨ Summary:', '').trim(),
+                timestamp: baseTimestamp,
+                type: 'progress',
+                progressStage: 'summary',
+                isTemporary: false // Keep the summary
+            });
+        }
+        // Regular text (no marker)
+        else {
+            messages.push({
+                id: `msg-${currentId++}`,
+                role: 'assistant',
+                content: trimmed,
+                timestamp: baseTimestamp,
+                type: 'assistant'
+            });
+        }
+    }
+
+    return messages;
+}
 
 interface ChatSidebarProps {
     open: boolean;
@@ -43,12 +151,17 @@ export default function ChatSidebar({
     const [input, setInput] = useState("");
     const [internalMessages, setInternalMessages] = useState<ChatMessage[]>([]);
     const [isGenerating, setIsGenerating] = useState(false);
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [hasMoreHistory, setHasMoreHistory] = useState(true);
     const listRef = useRef<HTMLDivElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const topSentinelRef = useRef<HTMLDivElement>(null);
+    const scrollViewportRef = useRef<HTMLDivElement>(null);
     const [aiWriter, setAIWriter] = useState<EnhancedAIContentWriter | null>(null);
 
-    // Get AI actions function from document context
-    const { showAIActions } = useDocument();
+    // Get document ID from context for MCP operations
+    const { documentId } = useDocument();
 
     // Get user context for repository operations
     const { user } = useAuth();
@@ -63,6 +176,68 @@ export default function ChatSidebar({
 
     // Combine external messages (if any) with internal state
     const messages = useMemo(() => externalMessages ?? internalMessages, [externalMessages, internalMessages]);
+
+    // Load initial chat history from Firebase when chat opens
+    useEffect(() => {
+        const loadHistory = async () => {
+            if (open && documentId && user?.uid && !externalMessages && internalMessages.length === 0) {
+                setIsLoadingHistory(true);
+                try {
+                    const history = await chatHistoryService.loadInitialHistory(documentId);
+                    if (history.length > 0) {
+                        setInternalMessages(history);
+                    }
+                } catch (error) {
+                    console.error('Failed to load chat history:', error);
+                } finally {
+                    setIsLoadingHistory(false);
+                }
+            }
+        };
+
+        loadHistory();
+    }, [open, documentId, user?.uid, externalMessages, internalMessages.length]);
+
+    // Load more history when scrolling to top
+    useEffect(() => {
+        if (!open || !topSentinelRef.current || !scrollViewportRef.current || externalMessages || !documentId) return;
+
+        const observer = new IntersectionObserver(
+            async (entries) => {
+                const entry = entries[0];
+                if (entry.isIntersecting && !isLoadingMore && hasMoreHistory && internalMessages.length > 0) {
+                    setIsLoadingMore(true);
+                    try {
+                        // Get the oldest message (first in array)
+                        const oldestMessage = internalMessages[0];
+                        const moreMessages = await chatHistoryService.loadMoreHistory(documentId, oldestMessage);
+
+                        if (moreMessages.length > 0) {
+                            // Prepend messages (they're already reversed from service)
+                            setInternalMessages((prev) => [...moreMessages, ...prev]);
+                        } else {
+                            // No more history available
+                            setHasMoreHistory(false);
+                        }
+                    } catch (error) {
+                        console.error('Failed to load more history:', error);
+                    } finally {
+                        setIsLoadingMore(false);
+                    }
+                }
+            },
+            {
+                root: scrollViewportRef.current,
+                threshold: 1.0
+            }
+        );
+
+        observer.observe(topSentinelRef.current);
+
+        return () => {
+            observer.disconnect();
+        };
+    }, [open, isLoadingMore, hasMoreHistory, documentId, externalMessages, internalMessages]);    // Note: Scroll-to-load-more-history feature now implemented with IntersectionObserver
 
     // Function to render markdown content as HTML with custom code block handling
     const renderMarkdown = (content: string): string => {
@@ -97,7 +272,7 @@ export default function ChatSidebar({
     // Add initial hello message when chat opens
     useEffect(() => {
         if (open && !externalMessages && internalMessages.length === 0) {
-            let content = 'Hello! I\'m your AI writing assistant powered by Gemini Pro 2.5 with advanced reasoning capabilities.\n\n**✍️ MCP-Powered Document Agent:**\nI work as an intelligent agent with precise tools to help you write, edit, and improve your documents.\n\n**🛠️ Available Tools:**\n• **Append** - Add content to the end of your document\n• **Insert** - Place content at any specific position\n• **Replace** - Improve existing text at any location\n• **Delete** - Remove unwanted content precisely\n• **Read** - Analyze your document for insights\n\n**🤖 Natural Language Commands:**\n• "Add a conclusion paragraph at the end"\n• "Insert a transition sentence after the introduction"\n• "Replace the third paragraph with something more engaging"\n• "Delete the repetitive sentences in the middle section"\n• "Improve the selected text to be more professional"\n\nI can determine exact positions in your document and make precise edits. Just tell me what you need!\n\n**💡 Quick Actions:**\n• Type `add <content>` to add new content with AI suggestions\n• Type `remove <content>` to mark content for removal\n• Type `edit <content>` to replace and improve existing text\n\nThese operations show highlighted changes with accept/reject options.';
+            let content = 'Hello! I\'m your AI writing assistant powered by **Gemini 2.0 Flash** with **MCP (Model Context Protocol)** function calling.\n\n**🔧 7 MCP Document Tools:**\n• **scan_document_content** - Analyze document structure\n• **search_document_content** - Find specific text\n• **get_document_content** - Retrieve document\n• **append_document_content** - Add to end\n• **insert_document_content** - Insert at position\n• **replace_document_content** - Replace text\n• **remove_document_content** - Delete content\n\n**💬 Natural Language Commands:**\nJust tell me what you want, and I\'ll automatically call the right tools:\n\n• "Scan the document structure"\n• "Search for the word \'hello\'"\n• "Append a conclusion paragraph"\n• "Replace the intro with something better"\n• "Remove any TODO items"\n• "Add a summary section at the end"\n• "Insert a new paragraph after the introduction"\n\n**✨ I intelligently decide which tools to use** - you just describe what you need!\n\nHow can I assist with your writing today?';
 
             if (repositoryInfo) {
                 content += `\n\n**🚀 Repository Integration Active!**\n📂 Connected to: \`${repositoryInfo.owner}/${repositoryInfo.repo}\`\n\n**Repository Commands:**\n• "Analyze code in [filename]" - Explain specific files\n• "Improve the React components" - Code improvements\n• "Debug the authentication flow" - Find issues\n• "Explain how routing works" - Understand patterns\n• "Document the API endpoints" - Generate docs\n\nI have access to your repository structure, README, and key files to provide contextual assistance!`;
@@ -198,177 +373,6 @@ export default function ChatSidebar({
         return () => clearTimeout(timeoutId);
     }, [messages.length, messages, open]);
 
-    // AI Operations Functions
-    const executeAIAddOperation = async (): Promise<string> => {
-        if (!aiWriter || !editor) throw new Error('Editor not available');
-
-        // Get current cursor position
-        const { from } = editor.state.selection;
-        const position: ContentPosition = {
-            from,
-            to: from,
-            length: 0
-        };
-
-        // Generate content to add
-        const newContent = `\n\n### New AI-Generated Section\n\nThis section was added through AI operations. It demonstrates how content can be intelligently inserted at specific positions within your document.\n\n**Key Features:**\n- Smart positioning\n- Context awareness\n- Interactive review process\n\n`;
-
-        // Execute the add operation
-        const changeId = await aiWriter.addContentAtPosition(position, newContent);
-        return changeId;
-    };
-
-    const executeAIRemoveOperation = async (): Promise<string> => {
-        if (!aiWriter || !editor) throw new Error('Editor not available');
-
-        // Try to find content to remove - look for a heading or paragraph
-        const doc = editor.state.doc;
-        let targetPosition: ContentPosition | null = null;
-
-        // Find the first non-empty paragraph or heading to remove
-        doc.descendants((node, pos) => {
-            if (!targetPosition && node.type.name === 'paragraph' && node.textContent.trim().length > 50) {
-                targetPosition = {
-                    from: pos,
-                    to: pos + node.nodeSize,
-                    length: node.nodeSize,
-                    text: node.textContent
-                };
-                return false; // Stop iteration
-            }
-            return true;
-        });
-
-        if (!targetPosition) {
-            // Fallback: mark current selection or cursor line
-            const { from, to } = editor.state.selection;
-            targetPosition = { from, to: to || from + 10, length: (to || from + 10) - from };
-        }
-
-        // Execute the remove operation
-        const changeId = await aiWriter.markContentForRemoval(targetPosition);
-        return changeId;
-    };
-
-    const executeAIEditOperation = async (): Promise<string> => {
-        if (!aiWriter || !editor) throw new Error('Editor not available');
-
-        // Find content to edit - look for the first paragraph
-        const doc = editor.state.doc;
-        let foundPosition: ContentPosition | null = null;
-
-        doc.descendants((node, pos) => {
-            if (!foundPosition && node.type.name === 'paragraph' && node.textContent.trim().length > 20) {
-                foundPosition = {
-                    from: pos,
-                    to: pos + node.nodeSize,
-                    length: node.nodeSize
-                };
-                return false; // Stop iteration
-            }
-            return true;
-        });
-
-        if (!foundPosition) {
-            throw new Error('No suitable content found to edit');
-        }
-
-        // Type assertion to help TypeScript understand the type
-        const position = foundPosition as ContentPosition;
-
-        // Generate improved content
-        const originalText = editor.state.doc.textBetween(position.from, position.to);
-        const improvedContent = `${originalText.trim()} Additionally, this content has been enhanced with AI-powered improvements, including better structure, clarity, and comprehensive details.`;
-
-        // Execute the replace operation
-        const changeId = await aiWriter.replaceContentWithHighlights(position, improvedContent);
-        return changeId;
-    };
-
-    // AI Content Generation Functions
-    const generateAIContent = async (prompt: string): Promise<string> => {
-        try {
-
-            // Determine the type of AI operation based on the prompt
-            const lowerPrompt = prompt.toLowerCase();
-
-            // Use user from hook for repository operations
-
-            // Check for repository-specific commands
-            if (repositoryInfo && user && (
-                lowerPrompt.includes('analyze code') ||
-                lowerPrompt.includes('explain file') ||
-                lowerPrompt.includes('improve code') ||
-                lowerPrompt.includes('debug') ||
-                lowerPrompt.includes('repository') ||
-                lowerPrompt.includes('codebase') ||
-                lowerPrompt.includes('.js') || lowerPrompt.includes('.ts') ||
-                lowerPrompt.includes('.tsx') || lowerPrompt.includes('.py') ||
-                lowerPrompt.includes('.java') || lowerPrompt.includes('.cpp')
-            )) {
-
-                // Check if user is asking about a specific file
-                const fileMatch = prompt.match(/([a-zA-Z0-9_-]+\.[a-zA-Z]+)/);
-                if (fileMatch) {
-                    const fileName = fileMatch[1];
-                    try {
-                        const analysis = lowerPrompt.includes('improve') ? 'improve' :
-                            lowerPrompt.includes('debug') ? 'debug' :
-                                lowerPrompt.includes('document') ? 'document' : 'explain';
-
-                        const result = await aiService.analyzeRepositoryCode(user, repositoryInfo, fileName, analysis);
-                        return `<h2>Repository Analysis: ${fileName}</h2>\n${result}`;
-                    } catch (error) {
-                    }
-                }
-
-                // General repository-aware generation
-                const result = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, editor ? editor.getHTML() : '');
-                return `<h2>Repository-Aware Response</h2>\n${result}`;
-            }
-
-            if (lowerPrompt.includes('summarize') || lowerPrompt.includes('summary')) {
-                // Generate summary of current document
-                const summary = await aiService.summarizeContent(editor ? editor.getHTML() : '');
-                return `<h2>Document Summary</h2>\n${summary}`;
-            } else if (lowerPrompt.includes('improve') || lowerPrompt.includes('enhance')) {
-                // Get selected text or current paragraph
-                const selectedText = editor?.state.selection.empty ? '' : editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to);
-                if (selectedText) {
-                    const improved = await aiService.improveText(selectedText, prompt);
-                    return `<h3>Improved Version:</h3>\n${improved}`;
-                } else {
-                    return `<p>Please select some text first, then ask me to improve it.</p>`;
-                }
-            } else if (lowerPrompt.includes('expand') || lowerPrompt.includes('elaborate')) {
-                // Expand on current content
-                const selectedText = editor?.state.selection.empty ? '' : editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to);
-                if (selectedText) {
-                    const expanded = await aiService.expandContent(selectedText, prompt);
-                    return expanded;
-                } else {
-                    const expanded = await aiService.expandContent(editor ? editor.getHTML() : '', prompt);
-                    return `<h2>Expanded Content</h2>\n${expanded}`;
-                }
-            } else {
-                // Check if we have repository context for better general generation
-                if (repositoryInfo && user) {
-                    const generated = await aiService.generateWithRepositoryContext(prompt, user, repositoryInfo, editor ? editor.getHTML() : '');
-                    return generated;
-                } else {
-                    // Fallback to regular generation
-                    const generated = await aiService.generateFromPrompt(prompt, editor ? editor.getHTML() : '');
-                    return generated;
-                }
-            }
-        } catch (error) {
-            console.error('❌ AI Content Generation Error:', error);
-            return `<p>I apologize, but I encountered an error while generating content. Please try rephrasing your request or try again later.</p>`;
-        }
-    };
-
-    // Regular AI content generation now uses EnhancedAIContentWriter for consistency
-
     const handleSend = async () => {
         const text = input.trim();
         if (!text) return;
@@ -387,261 +391,87 @@ export default function ChatSidebar({
             setInternalMessages(prev => [...prev, userMsg]);
             setIsGenerating(true);
 
+            // Save user message to Firebase
+            if (documentId && user?.uid) {
+                try {
+                    await chatHistoryService.saveMessage(documentId, userMsg);
+                } catch (error) {
+                    console.error('Failed to save user message:', error);
+                }
+            }
+
             try {
-                // Check for special AI operation commands
-                if (text.toLowerCase() === '*add') {
-                    const operationId = await executeAIAddOperation();
+                // Use MCP service for intelligent function calling
+                // Let the AI decide which tools to use based on the prompt
+                console.log('🔧 MCP Chat - Document ID:', documentId);
+                console.log('🔧 MCP Chat - Prompt:', text);
 
-                    // Store operation ID globally so DocumentEditor can access it
-                    (window as any).currentChatOperationId = operationId;
-                    (window as any).currentChatAIWriter = aiWriter;
+                // Get last 5 messages for context (excluding the current user message)
+                const recentHistory = messages.slice(-5).map(msg => ({
+                    role: msg.role,
+                    content: msg.content
+                }));
 
-                    // Show AI actions for the operation with a slight delay to ensure content is rendered
-                    setTimeout(() => {
-                        let actionFunction = showAIActions;
+                const mcpResponse = await mcpService.chat(text, documentId, recentHistory);
 
-                        // Fallback to global function if context function is not available
-                        if (!actionFunction && (window as any).currentShowAIActionsFunction) {
-                            actionFunction = (window as any).currentShowAIActionsFunction;
-                        }
+                console.log('✅ MCP Response:', mcpResponse);
 
-                        if (actionFunction && typeof actionFunction === 'function') {
-                            try {
-                                actionFunction("New content added via *add command", editor ? editor.getHTML() : '');
-                            } catch (error) {
-                                console.error('❌ Error calling showAIActions:', error);
-                            }
-                        }
-                    }, 300);
+                // Parse response for progressive thinking markers
+                const timestamp = Date.now();
+                const parsedMessages = parseProgressiveResponse(mcpResponse.text, timestamp);
 
-                    const assistantMsg: ChatMessage = {
-                        id: crypto.randomUUID(),
-                        role: "assistant",
-                        content: "✅ ADD Operation executed! New content has been added to your document with green highlighting. Use the action buttons to accept or reject the changes.",
-                        timestamp: Date.now(),
-                    };
-                    setInternalMessages(prev => [...prev, assistantMsg]);
-                } else if (text.toLowerCase() === '*remove') {
-                    const operationId = await executeAIRemoveOperation();
+                // If progressive markers found, use parsed messages; otherwise use simple message
+                if (parsedMessages.length > 0) {
+                    // Add all parsed progress messages
+                    setInternalMessages(prev => [...prev, ...parsedMessages]);
 
-                    // Store operation ID globally so DocumentEditor can access it
-                    (window as any).currentChatOperationId = operationId;
-                    (window as any).currentChatAIWriter = aiWriter;
-
-                    // Show AI actions for the operation with a slight delay to ensure content is rendered
-                    setTimeout(() => {
-                        let actionFunction = showAIActions;
-
-                        // Fallback to global function if context function is not available
-                        if (!actionFunction && (window as any).currentShowAIActionsFunction) {
-                            actionFunction = (window as any).currentShowAIActionsFunction;
-                        }
-
-                        if (actionFunction && typeof actionFunction === 'function') {
-                            try {
-                                actionFunction("Content marked for removal via *remove command", editor ? editor.getHTML() : '');
-                            } catch (error) {
-                                console.error('❌ Error calling showAIActions for *remove:', error);
-                            }
-                        } else {
-                            console.error('❌ showAIActions is not available for *remove!', {
-                                contextFunction: showAIActions,
-                                globalFunction: (window as any).currentShowAIActionsFunction,
-                                type: typeof showAIActions,
-                                isFunction: typeof showAIActions === 'function'
+                    // Save only the final summary or complete response to Firebase
+                    if (documentId && user?.uid) {
+                        const summaryMsg = parsedMessages.find(m => m.progressStage === 'summary') || parsedMessages[parsedMessages.length - 1];
+                        try {
+                            await chatHistoryService.saveMessage(documentId, {
+                                ...summaryMsg,
+                                toolCalls: mcpResponse.toolCalls
                             });
+                        } catch (error) {
+                            console.error('Failed to save assistant message:', error);
                         }
-                    }, 300);
-
-                    const assistantMsg: ChatMessage = {
-                        id: crypto.randomUUID(),
-                        role: "assistant",
-                        content: "🗑️ REMOVE Operation executed! Content has been marked for removal with red highlighting. Use the action buttons to accept or reject the changes.",
-                        timestamp: Date.now(),
-                    };
-                    setInternalMessages(prev => [...prev, assistantMsg]);
-                } else if (text.toLowerCase() === '*edit') {
-                    const operationId = await executeAIEditOperation();
-
-                    // Store operation ID globally so DocumentEditor can access it
-                    (window as any).currentChatOperationId = operationId;
-                    (window as any).currentChatAIWriter = aiWriter;
-
-                    // Show AI actions for the operation with a slight delay to ensure content is rendered
-                    setTimeout(() => {
-                        let actionFunction = showAIActions;
-
-                        // Fallback to global function if context function is not available
-                        if (!actionFunction && (window as any).currentShowAIActionsFunction) {
-                            actionFunction = (window as any).currentShowAIActionsFunction;
-                        }
-
-                        if (actionFunction && typeof actionFunction === 'function') {
-                            try {
-                                actionFunction("Content edited via *edit command", editor ? editor.getHTML() : '');
-                            } catch (error) {
-                                console.error('❌ Error calling showAIActions for *edit:', error);
-                            }
-                        } else {
-                            console.error('❌ showAIActions is not available for *edit!', {
-                                contextFunction: showAIActions,
-                                globalFunction: (window as any).currentShowAIActionsFunction,
-                                type: typeof showAIActions,
-                                isFunction: typeof showAIActions === 'function'
-                            });
-                        }
-                    }, 300);
-
-                    const assistantMsg: ChatMessage = {
-                        id: crypto.randomUUID(),
-                        role: "assistant",
-                        content: "🔄 EDIT Operation executed! Content has been replaced with dual highlighting (red for original, green for new). Use the action buttons to accept or reject the changes.",
-                        timestamp: Date.now(),
-                    };
-                    setInternalMessages(prev => [...prev, assistantMsg]);
+                    }
                 } else {
-                    // Check if this is a content generation request or a chat conversation
-                    const contentGenerationKeywords = [
-                        'generate', 'create', 'write', 'add', 'insert', 'make', 'produce', 'compose',
-                        'draft', 'develop', 'build', 'construct', 'design', 'formulate', 'outline'
-                    ];
+                    // Fallback to simple message if no markers found
+                    const assistantMsg: ChatMessage = {
+                        id: crypto.randomUUID(),
+                        role: "assistant",
+                        content: mcpResponse.text,
+                        timestamp: timestamp,
+                        toolCalls: mcpResponse.toolCalls
+                    };
 
-                    const isContentGeneration = contentGenerationKeywords.some(keyword =>
-                        text.toLowerCase().includes(keyword)
-                    ) || text.includes('*') || text.length > 100; // Long prompts are likely content requests
+                    setInternalMessages(prev => [...prev, assistantMsg]);
 
-                    if (isContentGeneration) {
-                        // Generate content and add to document
-                        const aiResponse = await generateAIContent(text);
-
-                        if (aiWriter && editor && aiResponse) {
-                            // Get the end of document position
-                            const doc = editor.state.doc;
-                            const endPosition = doc.content.size;
-
-                            const position: ContentPosition = {
-                                from: endPosition,
-                                to: endPosition,
-                                length: 0
-                            };
-
-                            // Add content to document with highlighting
-                            const operationId = await aiWriter.addContentAtPosition(position, `\n\n${aiResponse}`);
-
-                            // Store operation ID globally so DocumentEditor can access it
-                            (window as any).currentChatOperationId = operationId;
-                            (window as any).currentChatAIWriter = aiWriter;
-
-                            // Show AI actions with delay
-                            setTimeout(() => {
-                                let actionFunction = showAIActions;
-
-                                if (!actionFunction && (window as any).currentShowAIActionsFunction) {
-                                    actionFunction = (window as any).currentShowAIActionsFunction;
-                                }
-
-                                if (actionFunction && typeof actionFunction === 'function') {
-                                    try {
-                                        actionFunction(`AI Generated Content: ${text}`, editor ? editor.getHTML() : '');
-                                    } catch (error) {
-                                        console.error('❌ Error calling showAIActions:', error);
-                                    }
-                                }
-                            }, 300);
-
-                            const assistantMsg: ChatMessage = {
-                                id: crypto.randomUUID(),
-                                role: "assistant",
-                                content: "✨ Content generated and added to your document with green highlighting. Use the action buttons to accept, reject, or regenerate the content.",
-                                timestamp: Date.now(),
-                            };
-
-                            setInternalMessages(prev => [...prev, assistantMsg]);
-                        } else {
-                            throw new Error('Editor not available for content generation');
+                    // Save assistant message to Firebase
+                    if (documentId && user?.uid) {
+                        try {
+                            await chatHistoryService.saveMessage(documentId, assistantMsg);
+                        } catch (error) {
+                            console.error('Failed to save assistant message:', error);
                         }
-                    } else {
+                    }
+                }
 
-                        // Check if this is an agent command (MCP-style tools)
-                        const isAgentCommand = text.toLowerCase().includes('append') ||
-                            text.toLowerCase().includes('insert') ||
-                            text.toLowerCase().includes('replace') ||
-                            text.toLowerCase().includes('delete') ||
-                            text.toLowerCase().includes('add to document') ||
-                            text.toLowerCase().includes('add a ') ||
-                            text.toLowerCase().includes('change the') ||
-                            text.toLowerCase().includes('remove the') ||
-                            text.toLowerCase().includes('improve the') ||
-                            text.toLowerCase().includes('make the') ||
-                            text.toLowerCase().includes('rewrite the') ||
-                            text.toLowerCase().includes('edit the') ||
-                            text.startsWith('/agent');
-
-                        if (isAgentCommand && editor) {
-                            // Show progress message
-                            const progressId = crypto.randomUUID();
-                            const progressMsg: ChatMessage = {
-                                id: progressId,
-                                role: "assistant",
-                                content: "🤔 Agent analyzing your request...",
-                                timestamp: Date.now(),
-                            };
-                            setInternalMessages(prev => [...prev, progressMsg]);
-
-                            // Use document agent with reasoning and progress updates
-                            const agentResponse = await documentAgentService.processPrompt(
-                                text,
-                                editor,
-                                (status) => {
-                                    // Update progress message
-                                    setInternalMessages(prev =>
-                                        prev.map(msg =>
-                                            msg.id === progressId
-                                                ? { ...msg, content: status }
-                                                : msg
-                                        )
-                                    );
-                                }
-                            );
-
-                            // Build final response message
-                            let agentMessage = `🤖 **Agent Reasoning:**\n${agentResponse.reasoning}\n\n`;
-
-                            if (agentResponse.actions && agentResponse.actions.length > 0) {
-                                agentMessage += `**Actions Taken:**\n`;
-                                agentResponse.actions.forEach((action, index) => {
-                                    const posInfo = typeof action.position === 'number'
-                                        ? `at position ${action.position}`
-                                        : action.position
-                                            ? `from ${action.position.from} to ${action.position.to}`
-                                            : '';
-                                    agentMessage += `${index + 1}. **${action.type}** ${posInfo}: ${action.reason || 'Processing...'}\n`;
-                                });
-                            } else {
-                                agentMessage += `No document modifications needed.`;
-                            }
-
-                            // Replace progress message with final result
-                            setInternalMessages(prev =>
-                                prev.map(msg =>
-                                    msg.id === progressId
-                                        ? { ...msg, content: agentMessage }
-                                        : msg
-                                )
-                            );
-                        } else {
-                            // Regular chat response - don't add to document
-                            const aiResponse = await aiService.chatResponse(text, editor ? editor.getHTML() : '');
-
-                            const assistantMsg: ChatMessage = {
-                                id: crypto.randomUUID(),
-                                role: "assistant",
-                                content: aiResponse,
-                                timestamp: Date.now(),
-                            };
-
-                            setInternalMessages(prev => [...prev, assistantMsg]);
+                // If tools were used, reload the document to show changes IMMEDIATELY
+                if (mcpResponse.toolsUsed > 0 && editor && documentId) {
+                    console.log('🔄 Reloading document after tool execution...');
+                    // Reload document content immediately after MCP operations
+                    // The backend has already synced to Firebase by the time we get here
+                    try {
+                        const doc = await mcpService.loadDocument(documentId);
+                        if (doc.content) {
+                            console.log('✅ Document reloaded, updating editor');
+                            editor.commands.setContent(doc.content);
                         }
+                    } catch (err) {
+                        console.error('Failed to reload document:', err);
                     }
                 }
             } catch (error) {
@@ -653,6 +483,15 @@ export default function ChatSidebar({
                     timestamp: Date.now(),
                 };
                 setInternalMessages(prev => [...prev, errorMsg]);
+
+                // Save error message to Firebase
+                if (documentId && user?.uid) {
+                    try {
+                        await chatHistoryService.saveMessage(documentId, errorMsg);
+                    } catch (saveError) {
+                        console.error('Failed to save error message:', saveError);
+                    }
+                }
             } finally {
                 setIsGenerating(false);
             }
@@ -678,51 +517,141 @@ export default function ChatSidebar({
             {/* Content */}
             <div className="flex-1 flex flex-col p-0 overflow-hidden relative">
                 {/* Messages */}
-                <div className="flex-1 overflow-hidden">
-                    <ScrollArea className="h-full px-5 py-2">
-                        <div ref={listRef} className="space-y-4 relative">
-                            {messages.map((m) => (
-                                <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                                    <div className={`${m.role === "user" ? "max-w-[80%]" : "max-w-full"} space-y-2`}>
-                                        <div
-                                            className={`${m.role === "user"
-                                                ? "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg"
-                                                : m.content.includes("✅")
-                                                    ? "bg-gradient-to-r from-green-50 to-emerald-50 text-green-800 border-2 border-green-200 shadow-sm"
-                                                    : m.content.includes("❌")
-                                                        ? "bg-gradient-to-r from-red-50 to-pink-50 text-red-800 border-2 border-red-200 shadow-sm"
-                                                        : m.content.includes("✨")
-                                                            ? "bg-gradient-to-r from-purple-50 to-blue-50 text-purple-800 border-2 border-purple-200 shadow-sm"
-                                                            : "bg-white text-gray-900 border-2 border-gray-200"
-                                                } rounded-lg px-4 py-3 text-[0.95rem] leading-[1.6] ${m.role === "user" ? "whitespace-pre-wrap" : ""} break-words transition-all duration-200 hover:shadow-md`}
-                                        >
-                                            {m.role === "user" ? (
-                                                m.content
-                                            ) : (
-                                                <div
-                                                    className="prose prose-sm max-w-none chat-markdown-content
-                                                        prose-headings:mt-3 prose-headings:mb-2 prose-headings:font-semibold
-                                                        prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
-                                                        prose-p:my-2 prose-p:leading-relaxed prose-p:text-[0.95rem]
-                                                        prose-ul:my-2 prose-ul:pl-5 prose-ol:my-2 prose-ol:pl-5 
-                                                        prose-li:my-1 prose-li:leading-relaxed
-                                                        prose-pre:bg-[#1e1e1e] prose-pre:text-gray-100 prose-pre:p-4 prose-pre:rounded-md 
-                                                        prose-pre:text-sm prose-pre:overflow-x-auto prose-pre:my-3 prose-pre:shadow-lg
-                                                        prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
-                                                        prose-strong:font-semibold prose-strong:text-gray-900
-                                                        prose-a:text-blue-600 prose-a:underline hover:prose-a:text-blue-700
-                                                        prose-blockquote:border-l-4 prose-blockquote:border-gray-300 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:my-3
-                                                        prose-hr:border-gray-300 prose-hr:my-4
-                                                        prose-table:border-collapse prose-table:w-full prose-table:my-3
-                                                        prose-th:border prose-th:border-gray-300 prose-th:bg-gray-50 prose-th:p-2
-                                                        prose-td:border prose-td:border-gray-300 prose-td:p-2"
-                                                    dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
-                                                />
-                                            )}
-                                        </div>
+                <div
+                    ref={scrollViewportRef}
+                    className="flex-1 h-full overflow-y-auto overflow-x-hidden"
+                    style={{ scrollBehavior: 'smooth' }}
+                >
+                    <div className="px-5 py-2">
+                        <div ref={listRef} className="space-y-4 relative min-h-full">
+                            {/* Sentinel for loading more history at top */}
+                            {!externalMessages && (
+                                <div
+                                    ref={topSentinelRef}
+                                    className="h-1 w-full"
+                                    aria-hidden="true"
+                                />
+                            )}
+
+                            {/* Loading more history indicator */}
+                            {isLoadingMore && (
+                                <div className="flex justify-center py-2">
+                                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>Loading more messages...</span>
                                     </div>
                                 </div>
-                            ))}
+                            )}
+
+                            {/* Loading more history indicator */}
+                            {isLoadingHistory && (
+                                <div className="flex justify-center py-2">
+                                    <div className="flex items-center gap-2 text-sm text-gray-500">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span>Loading chat history...</span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {messages.map((m) => {
+                                // Determine message styling based on type
+                                let bgClass = "bg-white text-gray-900 border-2 border-gray-200";
+                                let icon = null;
+
+                                if (m.role === "user") {
+                                    bgClass = "bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg";
+                                } else if (m.type === 'progress') {
+                                    // Progress messages styling based on stage
+                                    if (m.progressStage === 'planning') {
+                                        bgClass = "bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-800 border-2 border-blue-200 shadow-sm";
+                                        icon = <span className="text-lg mr-2">📋</span>;
+                                    } else if (m.progressStage === 'reasoning') {
+                                        bgClass = "bg-gradient-to-r from-amber-50 to-yellow-50 text-amber-800 border-2 border-amber-200 shadow-sm";
+                                        icon = <span className="text-lg mr-2">🤔</span>;
+                                    } else if (m.progressStage === 'execution') {
+                                        bgClass = "bg-gradient-to-r from-indigo-50 to-purple-50 text-indigo-800 border-2 border-indigo-200 shadow-sm";
+                                        icon = <span className="text-lg mr-2">💭</span>;
+                                    } else if (m.progressStage === 'summary') {
+                                        bgClass = "bg-gradient-to-r from-emerald-50 to-green-50 text-emerald-800 border-2 border-emerald-300 shadow-md";
+                                        icon = <span className="text-lg mr-2">✨</span>;
+                                    }
+                                } else if (m.type === 'tool-use') {
+                                    bgClass = "bg-gradient-to-r from-purple-50 to-violet-50 text-purple-800 border-2 border-purple-300 shadow-sm";
+                                    icon = <span className="text-lg mr-2">⚙️</span>;
+                                } else if (m.type === 'tool-response') {
+                                    bgClass = "bg-gradient-to-r from-green-50 to-emerald-50 text-green-800 border-2 border-green-200 shadow-sm";
+                                    icon = <span className="text-lg mr-2">✅</span>;
+                                }
+
+                                return (
+                                    <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                                        <div className={`${m.role === "user" ? "max-w-[80%]" : "max-w-full"} space-y-2`}>
+                                            <div
+                                                className={`${bgClass} rounded-lg px-4 py-3 text-[0.95rem] leading-[1.6] ${m.role === "user" ? "whitespace-pre-wrap" : ""} break-words transition-all duration-200 hover:shadow-md`}
+                                            >
+                                                {m.role === "user" ? (
+                                                    m.content
+                                                ) : (
+                                                    <>
+                                                        <div className="flex items-start">
+                                                            {icon}
+                                                            <div
+                                                                className="flex-1 prose prose-sm max-w-none chat-markdown-content
+                                                            prose-headings:mt-3 prose-headings:mb-2 prose-headings:font-semibold
+                                                            prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
+                                                            prose-p:my-2 prose-p:leading-relaxed prose-p:text-[0.95rem]
+                                                            prose-ul:my-2 prose-ul:pl-5 prose-ol:my-2 prose-ol:pl-5 
+                                                            prose-li:my-1 prose-li:leading-relaxed
+                                                            prose-pre:bg-[#1e1e1e] prose-pre:text-gray-100 prose-pre:p-4 prose-pre:rounded-md 
+                                                            prose-pre:text-sm prose-pre:overflow-x-auto prose-pre:my-3 prose-pre:shadow-lg
+                                                            prose-code:bg-gray-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:text-sm
+                                                            prose-strong:font-semibold prose-strong:text-gray-900
+                                                            prose-a:text-blue-600 prose-a:underline hover:prose-a:text-blue-700
+                                                            prose-blockquote:border-l-4 prose-blockquote:border-gray-300 prose-blockquote:pl-4 prose-blockquote:italic prose-blockquote:my-3
+                                                            prose-hr:border-gray-300 prose-hr:my-4
+                                                            prose-table:border-collapse prose-table:w-full prose-table:my-3
+                                                            prose-th:border prose-th:border-gray-300 prose-th:bg-gray-50 prose-th:p-2
+                                                            prose-td:border prose-td:border-gray-300 prose-td:p-2"
+                                                                dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
+                                                            />
+                                                        </div>
+                                                        {/* Display MCP tool calls if present */}
+                                                        {m.toolCalls && m.toolCalls.length > 0 && (
+                                                            <div className="mt-3 pt-3 border-t border-gray-200">
+                                                                <div className="flex items-center gap-2 text-xs font-semibold text-purple-700 mb-2">
+                                                                    <Wrench className="w-3.5 h-3.5" />
+                                                                    Function Calls ({m.toolCalls.length})
+                                                                </div>
+                                                                <div className="space-y-1.5">
+                                                                    {m.toolCalls.map((tool, idx) => (
+                                                                        <div key={idx} className="bg-purple-50 border border-purple-200 rounded px-2.5 py-1.5">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="font-mono text-xs font-semibold text-purple-800">
+                                                                                    {tool.name}
+                                                                                </span>
+                                                                                <span className={`text-[10px] px-1.5 py-0.5 rounded ${tool.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                                                                                    }`}>
+                                                                                    {tool.success ? '✓' : '✗'}
+                                                                                </span>
+                                                                            </div>
+                                                                            {Object.keys(tool.args).length > 0 && (
+                                                                                <div className="text-[11px] text-gray-600 font-mono mt-1">
+                                                                                    {JSON.stringify(tool.args, null, 2).substring(0, 100)}
+                                                                                    {JSON.stringify(tool.args).length > 100 && '...'}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
                             {messages.length === 0 && (
                                 <div className="text-sm text-gray-500 text-center py-8">Ask for a summary, rewrite a section, or request suggestions.</div>
                             )}
@@ -748,7 +677,9 @@ export default function ChatSidebar({
                                 </div>
                             )}
                         </div>
-                    </ScrollArea>
+                        {/* Scroll anchor */}
+                        <div ref={messagesEndRef} />
+                    </div>
                 </div>
 
                 {/* Floating Quick Suggestions - positioned just above the composer */}
@@ -756,17 +687,17 @@ export default function ChatSidebar({
                     <div className="px-3 pb-2">
                         <div className="flex flex-wrap justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                             {(suggestions ?? (repositoryInfo ? [
-                                "*add",
-                                "*remove",
-                                "*edit",
                                 "Analyze repository",
                                 "Explain codebase",
+                                "Document the code",
+                                "Find best practices",
+                                "Suggest improvements",
                             ] : [
-                                "*add",
-                                "*remove",
-                                "*edit",
-                                "Improve content",
-                                "Add summary",
+                                "Add a summary",
+                                "Improve this section",
+                                "Search for keywords",
+                                "Expand on this topic",
+                                "Check document structure",
                             ])).slice(0, 5).map((s, idx) => (
                                 <Button
                                     key={`${idx}-${s.slice(0, 12)}`}

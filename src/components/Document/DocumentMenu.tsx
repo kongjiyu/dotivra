@@ -551,7 +551,19 @@ export default function DocumentMenu({
         padding-left: 24px;
         page-break-inside: auto !important;
       }
-      li { margin: 4px 0; }
+      ul {
+        list-style-type: disc !important;
+      }
+      ol {
+        list-style-type: decimal !important;
+      }
+      li { 
+        margin: 0;
+        padding: 4px 0;
+        display: list-item !important;
+        line-height: 1.6;
+        vertical-align: middle;
+      }
 
       .code-block-wrapper {
         margin: 16px 0;
@@ -626,9 +638,16 @@ export default function DocumentMenu({
 			wrapper.prepend(style);
 
 			// 7️⃣ Setup html2pdf options with spacing after page break (based on SO suggestion)
+			// Create filename from document title, sanitizing for file system
+			const sanitizedTitle = documentTitle
+				.replace(/[^a-z0-9\s-]/gi, '') // Remove special characters
+				.replace(/\s+/g, '_') // Replace spaces with underscores
+				.toLowerCase()
+				.substring(0, 100) || 'document'; // Limit length and provide fallback
+
 			const options = {
 				margin: 0,
-				filename: "document.pdf",
+				filename: `${sanitizedTitle}.pdf`,
 				image: { type: "jpeg", quality: 0.98 },
 				html2canvas: {
 					scale: 2,
@@ -652,6 +671,7 @@ export default function DocumentMenu({
 
 
 			console.log("[PDF Export] Generating PDF...");
+			console.log(wrapper);
 			await html2pdf().set(options).from(wrapper).save();
 			console.log("[PDF Export] PDF generation complete.");
 
@@ -902,6 +922,13 @@ export default function DocumentMenu({
 			// Replace all content
 			if (onUpdate) {
 				onUpdate(pendingImport.content);
+				// Add dividers after H1/H2 headings after a short delay to ensure content is loaded
+				setTimeout(() => {
+					if (editor) {
+						const { addDividersAfterHeadings } = require('@/utils/addDividersAfterHeadings');
+						addDividersAfterHeadings(editor);
+					}
+				}, 100);
 			}
 		} else if (action === 'append') {
 			// Append to existing content
@@ -909,6 +936,13 @@ export default function DocumentMenu({
 				const currentContent = editor.getHTML();
 				const combinedContent = currentContent + '<p></p>' + pendingImport.content;
 				onUpdate(combinedContent);
+				// Add dividers after H1/H2 headings after a short delay
+				setTimeout(() => {
+					if (editor) {
+						const { addDividersAfterHeadings } = require('@/utils/addDividersAfterHeadings');
+						addDividersAfterHeadings(editor);
+					}
+				}, 100);
 			}
 		}
 

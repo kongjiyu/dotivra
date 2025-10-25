@@ -155,6 +155,8 @@ export const Heading = TiptapHeading.extend<HeadingOptions>({
       ...this.parent?.(),
       // Tab shortcuts removed to prevent double indentation
       // ToolBar.tsx handles Tab/Shift-Tab with proper maxIndentLevel checking
+      // Note: Auto-add horizontal rule after H1/H2 should be handled during import/conversion only
+      // not during regular typing to avoid blocking Enter key functionality
     }
   },
 })

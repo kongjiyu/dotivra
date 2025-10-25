@@ -106,6 +106,39 @@ try {
 	console.warn('⚠️ Gemini balancer not initialized:', e?.message || e);
 }
 
+// Import MCP Test Routes and toolService
+import { createMcpTestRoutes } from './server/routes/mcpTestRoutes.js';
+import { initFirestore } from './server/services/toolService.js';
+import { createGeminiWithMcp } from './server/gemini/geminiMcpIntegration.js';
+
+// Initialize firestore in toolService
+initFirestore(firestore);
+
+// Initialize Gemini with MCP integration
+let geminiWithMcp;
+if (geminiBalancer) {
+	try {
+		geminiWithMcp = createGeminiWithMcp({
+			balancer: geminiBalancer,
+			firestore: firestore
+		});
+		console.log('✅ Gemini with MCP integration initialized');
+	} catch (error) {
+		console.error('❌ Failed to initialize Gemini with MCP:', error);
+	}
+}
+
+// Register MCP test routes with balancer
+try {
+	console.log('🔧 Initializing MCP test routes...');
+	const mcpTestRoutes = createMcpTestRoutes(firestore, geminiBalancer);
+	app.use('/api/mcp-test', mcpTestRoutes);
+	console.log('✅ MCP test routes registered at /api/mcp-test');
+} catch (error) {
+	console.error('❌ Failed to initialize MCP test routes:', error);
+	console.error(error.stack);
+}
+
 // Utility functions - Match existing Firebase format
 function generateProjectId() {
 	const now = new Date();
@@ -398,6 +431,101 @@ app.post('/api/gemini/generate', async (req, res) => {
 		});
 		const status = error?.status || 500;
 		res.status(status).json({ ok: false, error: error?.message || 'Failed to generate' });
+	}
+});
+
+// Generate with MCP tool calling
+app.post('/api/gemini/generate-with-tools', async (req, res) => {
+	try {
+		console.log('🔧 Gemini API with Tools Request received');
+
+		if (!geminiWithMcp) {
+			console.warn('⚠️ MCP not configured, falling back to regular generation');
+			// Fallback to regular generation
+			const {
+				prompt,
+				model = 'gemini-2.5-pro',
+				generationConfig = {},
+			} = req.body || {};
+
+			if (!prompt) {
+				return res.status(400).json({ error: 'Missing prompt' });
+			}
+
+			const result = await geminiBalancer.generate({
+				model,
+				contents: [{ role: 'user', parts: [{ text: prompt }] }],
+				generationConfig
+			});
+
+			return res.json({
+				success: true,
+				text: result.text,
+				toolCalls: [],
+				toolsUsed: 0,
+				model
+			});
+		}
+
+		const {
+			prompt,
+			documentId,
+			documentContent,
+			systemPrompt,
+			model = 'gemini-2.0-flash-exp',
+			generationConfig = {},
+		} = req.body || {};
+
+		if (!prompt) {
+			return res.status(400).json({ error: 'Missing prompt' });
+		}
+
+		// Set document context if provided
+		if (documentId) {
+			console.log(`📄 Setting document context: ${documentId}`);
+			await geminiWithMcp.setDocument(documentId);
+		}
+
+		// Build contents with user prompt
+		const contents = [{
+			role: 'user',
+			parts: [{ text: prompt }]
+		}];
+
+		// Add system instruction if provided
+		const systemInstruction = systemPrompt ? {
+			parts: [{ text: systemPrompt }]
+		} : undefined;
+
+		// Generate with tools
+		console.log('🤖 Generating with MCP tools...');
+		const result = await geminiWithMcp.generateWithTools({
+			model,
+			contents,
+			systemInstruction,
+			generationConfig: {
+				temperature: 0.7,
+				maxOutputTokens: 4096,
+				...generationConfig
+			},
+			enableMcpTools: true
+		});
+
+		console.log(`✅ Generation complete (${result.toolCalls?.length || 0} tools used)`);
+
+		res.json({
+			success: true,
+			text: result.text,
+			toolCalls: result.toolCalls || [],
+			toolsUsed: result.toolCalls?.length || 0,
+			model
+		});
+	} catch (error) {
+		console.error('❌ Gemini generate with tools error:', error);
+		res.status(500).json({
+			success: false,
+			error: error?.message || 'Failed to generate with tools'
+		});
 	}
 });
 
@@ -2234,4 +2362,16 @@ server.on("upgrade", (req, socket, head) => {
 	wss.handleUpgrade(req, socket, head, (ws) => {
 		wss.emit("connection", ws, req);
 	});
+});
+
+// Global error handlers
+process.on('unhandledRejection', (reason, promise) => {
+	console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
+	console.error(reason?.stack || reason);
+});
+
+process.on('uncaughtException', (error) => {
+	console.error('❌ Uncaught Exception:', error);
+	console.error(error.stack);
+	process.exit(1);
 });

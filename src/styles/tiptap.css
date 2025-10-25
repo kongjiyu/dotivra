@@ -1493,3 +1493,58 @@ kbd {
   box-shadow: none !important;
   font-family: inherit;
 }
+
+/* Image styling with resize support and border */
+.tiptap img.tiptap-image {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  cursor: pointer;
+  display: block;
+  margin: 1rem auto;
+  transition: all 0.2s ease;
+}
+
+.tiptap img.tiptap-image:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.tiptap img.tiptap-image.ProseMirror-selectednode {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  outline: none;
+  position: relative;
+}
+
+/* Image resize handles */
+.tiptap img.tiptap-image.ProseMirror-selectednode::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 12px;
+  height: 12px;
+  background: #3b82f6;
+  border: 2px solid white;
+  border-radius: 50%;
+  cursor: nwse-resize;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Dark theme image styles */
+.theme-dark .tiptap img.tiptap-image {
+  border-color: #4b5563;
+}
+
+.theme-dark .tiptap img.tiptap-image:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
+}
+
+.theme-dark .tiptap img.tiptap-image.ProseMirror-selectednode {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.25);
+}
+

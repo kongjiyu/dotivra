@@ -14,6 +14,31 @@ import {WebSocketServer} from "ws";
 admin.initializeApp();
 const db = admin.firestore();
 
+
+import {createGeminiWithMcp} from "./gemini/geminiMcpIntegration";
+
+type GeminiWithMcp = {
+  setDocument: (documentId: string) => Promise<any>;
+  generateWithTools: (params: {
+    prompt: string;
+    history?: any[];
+    systemInstruction?: string;
+    generationConfig?: any;
+    documentId?: string;
+  }) => Promise<string>;
+  streamWithTools: (params: {
+    prompt: string;
+    history?: any[];
+    systemInstruction?: string;
+    generationConfig?: any;
+    documentId?: string;
+    onChunk: (chunk: string) => void;
+  }) => Promise<string>;
+  getAvailableTools: () => any[];
+};
+
+let geminiWithMcp: GeminiWithMcp | null = null;
+
 setGlobalOptions({maxInstances: 10});
 
 // Gemini balancer initialization with Firebase Admin
@@ -286,12 +311,9 @@ class GeminiBalancer {
         const resp = await client.models.generateContent({
           model: options.model,
           contents: options.contents,
-          config: options.generationConfig,
-          safetySettings: options.safetySettings,
-          tools: options.tools,
-          systemInstruction: options.systemInstruction,
+          config: options.generationConfig
         });
-        
+
         const metadata: any = resp?.usageMetadata || {};
         const usedTokens = Number(metadata.totalTokenCount || 0) || estimatedTokens;
         
@@ -426,6 +448,16 @@ function initializeGeminiBalancer() {
 
 // Initialize on startup
 geminiBalancer = initializeGeminiBalancer();
+
+// Initialize MCP integration if balancer is available
+if (geminiBalancer) {
+  try {
+    geminiWithMcp = createGeminiWithMcp(geminiBalancer, db);
+    logger.info("✅ MCP integration initialized with 7 document tools");
+  } catch (error) {
+    logger.error("❌ Failed to initialize MCP integration:", error);
+  }
+}
 
 // Create Express app
 const app = express();
@@ -569,6 +601,83 @@ app.post('/api/gemini/generate', async (req, res) => {
     res.status(status).json({ 
       ok: false, 
       error: error instanceof Error ? error.message : 'Failed to generate' 
+    });
+  }
+});
+
+// Generate with MCP tool calling
+app.post('/api/gemini/generate-with-tools', async (req, res) => {
+  try {
+    logger.info('🔧 Gemini API with Tools Request received');
+
+    if (!geminiWithMcp) {
+      logger.warn('⚠️ MCP not configured, falling back to regular generation');
+      // Fallback to regular generation
+      const {
+        prompt,
+        model = 'gemini-2.5-pro',
+        generationConfig = {},
+      } = req.body || {};
+
+      if (!prompt) {
+        return res.status(400).json({ error: 'Missing prompt' });
+      }
+
+      const result = await geminiBalancer!.generate({
+        model,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig
+      });
+
+      return res.json({
+        success: true,
+        text: result.text,
+        toolCalls: [],
+        toolsUsed: 0,
+        model
+      });
+    }
+
+    const {
+      prompt,
+      documentId,
+      history = [],
+      systemPrompt,
+      model = 'gemini-2.0-flash-exp',
+      generationConfig = {},
+    } = req.body || {};
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Missing prompt' });
+    }
+
+    // Generate with tools using MCP integration
+    logger.info('🤖 Generating with MCP tools...');
+    const result = await geminiWithMcp.generateWithTools({
+      prompt,
+      history,
+      systemInstruction: systemPrompt,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 4096,
+        ...generationConfig
+      },
+      documentId
+    });
+
+    logger.info(`✅ Generation complete`);
+
+    res.json({
+      success: true,
+      text: result,
+      toolsUsed: 1, // MCP integration handles tool calls internally
+      model
+    });
+  } catch (error) {
+    logger.error('❌ Gemini generate with tools error:', error);
+    res.status(500).json({
+      success: false,
+      error: (error as any)?.message || 'Failed to generate with tools'
     });
   }
 });
@@ -1487,6 +1596,719 @@ app.post('/api/documents', async (req, res) => {
       error: 'Failed to create document',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
+  }
+});
+
+// ============================================================================
+// PROFILE MANAGEMENT ENDPOINTS
+// ============================================================================
+
+// Update user profile
+app.put('/api/profile/edit', async (req, res) => {
+  try {
+    logger.info('✏️ PUT /api/profile/edit received:', req.body);
+    const { userId, UserName, UserEmail, currentPassword, newPassword } = req.body;
+
+    // Validate required fields
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    // Find the user by User_Id
+    const querySnapshot = await db.collection('Users')
+      .where('User_Id', '==', userId)
+      .get();
+
+    if (querySnapshot.empty) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userDoc = querySnapshot.docs[0];
+    const userData = userDoc.data();
+
+    // If password is being changed, verify current password
+    if (newPassword && currentPassword) {
+      if (userData.UserPw !== currentPassword) {
+        return res.status(401).json({ error: 'Current password is incorrect' });
+      }
+    }
+
+    // Prepare update data
+    const updateData: any = {};
+    if (UserName) updateData.UserName = UserName;
+    if (UserEmail) updateData.UserEmail = UserEmail;
+    if (newPassword) updateData.UserPw = newPassword; // In production, hash this!
+
+    // Update the user document
+    await userDoc.ref.update(updateData);
+
+    // Return updated user data (without password)
+    const updatedUser = { ...userData, ...updateData };
+    const { UserPw: _, ...userResponse } = updatedUser;
+
+    logger.info('✅ Profile updated successfully for user:', userId);
+    res.json({
+      success: true,
+      message: 'Profile updated successfully',
+      user: userResponse
+    });
+  } catch (error) {
+    logger.error('❌ Error updating profile:', error);
+    res.status(500).json({
+      error: 'Failed to update profile',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Delete user profile
+app.delete('/api/profile/delete', async (req, res) => {
+  try {
+    logger.info('🗑️ DELETE /api/profile/delete received:', req.body);
+    const { userId, password } = req.body;
+
+    // Validate required fields
+    if (!userId || !password) {
+      return res.status(400).json({ error: 'userId and password are required' });
+    }
+
+    // Find the user by User_Id
+    const querySnapshot = await db.collection('Users')
+      .where('User_Id', '==', userId)
+      .get();
+
+    if (querySnapshot.empty) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userDoc = querySnapshot.docs[0];
+    const userData = userDoc.data();
+
+    // Verify password before deletion
+    if (userData.UserPw !== password) {
+      return res.status(401).json({ error: 'Incorrect password. Cannot delete profile.' });
+    }
+
+    // Delete the user document
+    await userDoc.ref.delete();
+
+    logger.info('✅ Profile deleted successfully for user:', userId);
+    res.json({
+      success: true,
+      message: 'Profile deleted successfully'
+    });
+  } catch (error) {
+    logger.error('❌ Error deleting profile:', error);
+    res.status(500).json({
+      error: 'Failed to delete profile',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// ============================================================================
+// DOCUMENT EDITOR & VERSION HISTORY ENDPOINTS
+// ============================================================================
+
+// Get all documents for a project (legacy path)
+app.get("/api/project/:projectId/documents", async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    const docsSnapshot = await db.collection("Documents")
+      .where("Project_Id", "==", projectId)
+      .get();
+
+    const documents = docsSnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ documents });
+  } catch (err) {
+    logger.error("Error fetching project documents:", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// Get single document content (legacy path)
+app.get("/api/document/editor/content/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const docSnap = await db.collection("Documents").doc(docId).get();
+
+    if (!docSnap.exists) return res.status(404).json({ error: "NOT_FOUND" });
+    res.json({ id: docSnap.id, ...docSnap.data() });
+  } catch (err) {
+    logger.error("Error fetching document content:", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// Update document content (legacy path)
+app.put("/api/document/editor/content/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const { content, isDraft } = req.body;
+
+    const updateData: any = {
+      Content: content,
+      IsDraft: isDraft,
+      Updated_Time: admin.firestore.Timestamp.now(),
+    };
+
+    // Add hash if crypto is available
+    if (content) {
+      updateData.Hash = "sha256:" + crypto.createHash("sha256").update(JSON.stringify(content)).digest("hex");
+    }
+
+    await db.collection("Documents").doc(docId).update(updateData);
+
+    res.json({ status: "ok" });
+  } catch (err) {
+    logger.error("Error updating document content:", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// Delete document (legacy path with cleanup)
+app.delete("/api/document/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+
+    // Delete the document
+    await db.collection("Documents").doc(docId).delete();
+
+    // Cleanup related records
+    const batch = db.batch();
+
+    const chatSnap = await db.collection("ChatHistory").where("Document_Id", "==", docId).get();
+    chatSnap.forEach((d) => batch.delete(d.ref));
+
+    const histSnap = await db.collection("DocumentHistory").where("Document_Id", "==", docId).get();
+    histSnap.forEach((d) => batch.delete(d.ref));
+
+    await batch.commit();
+
+    res.json({ status: "deleted", docId });
+  } catch (err) {
+    logger.error("Error deleting document:", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// Get document version history
+app.get("/api/document/editor/history/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    logger.info('📜 Fetching version history for document:', docId);
+
+    const historySnapshot = await db.collection("DocumentHistory")
+      .where("Document_Id", "==", docId)
+      .orderBy("Version", "desc")
+      .get();
+
+    logger.info('📊 Found', historySnapshot.docs.length, 'versions matching docId:', docId);
+    const versions = historySnapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ versions });
+  } catch (err) {
+    logger.error('❌ Error fetching version history:', err);
+    res.status(500).json({ error: "SERVER_ERROR", details: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
+// Get latest summary (assistant reply)
+app.get("/api/document/editor/summary/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const snapshot = await db.collection("ChatHistory")
+      .where("Document_Id", "==", docId)
+      .where("Role", "==", "assistant")
+      .orderBy("Created_Time", "desc")
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) return res.json({ summary: null });
+
+    const summary = snapshot.docs[0].data();
+    res.json({ summary: summary.Message });
+  } catch (err) {
+    logger.error("Error fetching summary:", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ============================================================================
+// CHAT HISTORY ENDPOINTS
+// ============================================================================
+
+// Get normal chat history
+app.get("/api/document/chat/history/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const snapshot = await db.collection("ChatHistory")
+      .where("Document_Id", "==", docId)
+      .orderBy("Created_Time", "asc")
+      .get();
+
+    const messages = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ messages });
+  } catch (err) {
+    logger.error("Error fetching chat history:", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// Add chat message (user/assistant)
+app.post("/api/document/chat/prompt", async (req, res) => {
+  try {
+    const { userId, docId, message, role } = req.body;
+
+    const newMsg = {
+      User_Id: userId || null,
+      Document_Id: docId,
+      Message: message,
+      Role: role || "user",
+      Created_Time: admin.firestore.Timestamp.now(),
+    };
+
+    const ref = await db.collection("ChatHistory").add(newMsg);
+    res.status(201).json({ id: ref.id, ...newMsg });
+  } catch (err) {
+    logger.error("Error adding chat message:", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ============================================================================
+// AI AGENT WORKFLOW ENDPOINTS
+// ============================================================================
+
+// Get workflow messages (reasoning → thinking → action)
+app.get("/api/document/chat/agent/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const snapshot = await db.collection("ChatHistory")
+      .where("Document_Id", "==", docId)
+      .orderBy("Created_Time", "asc")
+      .get();
+
+    const messages = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    res.json({ workflow: messages });
+  } catch (err) {
+    logger.error("Error fetching agent workflow:", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// Add AI agent step
+app.post("/api/document/chat/agent", async (req, res) => {
+  try {
+    const { docId, stage, message, userId } = req.body;
+
+    if (!["reasoning", "thinking", "action", "user"].includes(stage)) {
+      return res.status(400).json({ error: "INVALID_STAGE" });
+    }
+
+    const newMsg = {
+      User_Id: userId || null,
+      Document_Id: docId,
+      Stage: stage,
+      Message: message,
+      Role: stage === "user" ? "user" : "assistant",
+      Created_Time: admin.firestore.Timestamp.now(),
+    };
+
+    const ref = await db.collection("ChatHistory").add(newMsg);
+
+    // Auto-log Action step to DocumentHistory
+    if (stage === "action") {
+      await db.collection("DocumentHistory").add({
+        Document_Id: docId,
+        ActionID: ref.id,
+        Content: message,
+        Created_Time: admin.firestore.Timestamp.now(),
+        Version: Date.now(),
+      });
+    }
+
+    res.status(201).json({ id: ref.id, ...newMsg });
+  } catch (err) {
+    logger.error("Error adding agent step:", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// Get latest Action only
+app.get("/api/document/chat/agent/action/:docId", async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const snapshot = await db.collection("ChatHistory")
+      .where("Document_Id", "==", docId)
+      .where("Stage", "==", "action")
+      .orderBy("Created_Time", "desc")
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) return res.json({ action: null });
+
+    const action = snapshot.docs[0].data();
+    res.json({ action });
+  } catch (err) {
+    logger.error("Error fetching latest action:", err);
+    res.status(500).json({ error: "SERVER_ERROR" });
+  }
+});
+
+// ============================================================================
+// LINK PREVIEW ENDPOINT
+// ============================================================================
+
+app.get('/api/link-preview', async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'URL parameter is required' });
+    }
+
+    // Validate URL
+    let validUrl;
+    try {
+      validUrl = new URL(url);
+      if (!['http:', 'https:'].includes(validUrl.protocol)) {
+        return res.status(400).json({ error: 'Only HTTP and HTTPS URLs are supported' });
+      }
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    // Fetch webpage
+    const response = await fetch(validUrl.href, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Dotivra-Bot/1.0 (+https://dotivra.com)',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      redirect: 'follow',
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html')) {
+      return res.json({
+        url: validUrl.href,
+        title: validUrl.hostname,
+        error: 'Content is not HTML'
+      });
+    }
+
+    const html = await response.text();
+
+    // Helper function to extract meta content
+    const extractMetaContent = (html: string, regex: RegExp): string | null => {
+      const match = html.match(regex);
+      return match ? match[1].trim() : null;
+    };
+
+    // Parse HTML metadata
+    const metadata = {
+      url: validUrl.href,
+      title: extractMetaContent(html, /<title[^>]*>([^<]+)<\/title>/i) ||
+        extractMetaContent(html, /<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
+        validUrl.hostname,
+      description: extractMetaContent(html, /<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+        extractMetaContent(html, /<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i),
+      image: extractMetaContent(html, /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i),
+      siteName: extractMetaContent(html, /<meta[^>]*property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i),
+      favicon: `${validUrl.protocol}//${validUrl.hostname}/favicon.ico`
+    };
+
+    // Clean up the title
+    if (metadata.title) {
+      metadata.title = metadata.title.trim().replace(/\s+/g, ' ')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+    }
+
+    // Limit description length
+    if (metadata.description && metadata.description.length > 200) {
+      metadata.description = metadata.description.substring(0, 200) + '...';
+    }
+
+    res.json(metadata);
+  } catch (error) {
+    logger.error('Link preview error:', error);
+
+    const urlStr = typeof req.query.url === 'string' ? req.query.url : '';
+    let hostname = 'Unknown';
+    try {
+      const urlObj = new URL(urlStr);
+      hostname = urlObj.hostname;
+    } catch {}
+
+    res.json({
+      url: urlStr,
+      title: hostname,
+      error: error instanceof Error ? error.message : 'Failed to fetch preview'
+    });
+  }
+});
+
+// ============================================================================
+// MCP TEST ENDPOINTS
+// ============================================================================
+
+// POST /api/mcp-test/document - Load a document by ID
+app.post('/api/mcp-test/document', async (req, res) => {
+  try {
+    const { documentId } = req.body;
+
+    if (!documentId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Document ID is required'
+      });
+    }
+
+    logger.info(`📄 Loading document: ${documentId}`);
+
+    if (!geminiWithMcp) {
+      return res.status(503).json({
+        success: false,
+        error: 'MCP not initialized'
+      });
+    }
+
+    // Set document and get content
+    const result = await geminiWithMcp.setDocument(documentId);
+
+    res.json({
+      success: true,
+      documentId,
+      content: result.content || '',
+      documentName: result.documentName || ''
+    });
+  } catch (error) {
+    logger.error('❌ Error loading document:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to load document',
+      details: (error as Error).message
+    });
+  }
+});
+
+// GET /api/mcp-test/tools - Get all available MCP tools
+app.get('/api/mcp-test/tools', async (req, res) => {
+  try {
+    if (!geminiWithMcp) {
+      return res.status(503).json({
+        success: false,
+        error: 'MCP not initialized'
+      });
+    }
+
+    const tools = geminiWithMcp.getAvailableTools();
+
+    res.json({
+      success: true,
+      count: tools.length,
+      tools: tools.map(tool => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.parameters
+      }))
+    });
+  } catch (error) {
+    logger.error('❌ Error fetching MCP tools:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch MCP tools',
+      details: (error as Error).message
+    });
+  }
+});
+
+// POST /api/mcp-test/generate - Test generation with MCP tools
+app.post('/api/mcp-test/generate', async (req, res) => {
+  try {
+    const { prompt, documentId, model = 'gemini-2.0-flash-exp' } = req.body;
+    if (!prompt) {
+      return res.status(400).json({
+        success: false,
+        error: 'Prompt is required'
+      });
+    }
+
+    logger.info(`📝 MCP Generate request - Prompt: "${prompt.substring(0, 50)}..." Document: ${documentId || 'none'}`);
+
+    if (!geminiWithMcp) {
+      return res.status(503).json({
+        success: false,
+        error: 'MCP not initialized'
+      });
+    }
+
+    // Get available tools for debugging
+    const availableTools = geminiWithMcp.getAvailableTools();
+    logger.info(`📋 Available tools (${availableTools.length}):`, availableTools.map(t => t.name).join(', '));
+
+    const systemPrompt = `You are a document manipulation assistant with access to MCP (Model Context Protocol) tools.
+
+CRITICAL RULES:
+1. When users ask to perform ANY document operation, you MUST call the appropriate function tool
+2. DO NOT explain what you would do - IMMEDIATELY CALL THE FUNCTION
+3. DO NOT ask for confirmation - JUST DO IT
+4. DO NOT suggest alternatives - USE THE TOOLS
+
+Available tools and when to use them:
+- scan_document_content(reason) → User says: "scan", "analyze", "check", "review", "examine" the document
+- search_document_content(query, reason) → User says: "find", "search", "locate", "look for" + text
+- append_document_content(content, reason) → User says: "add", "append", "put at end", "add to bottom"
+- insert_document_content(position, content, reason) → User says: "insert at", "add at position", "put at line"
+- replace_document_content(position, content, reason) → User says: "replace", "change", "update", "modify" + text
+- remove_document_content(position, reason) → User says: "delete", "remove", "erase", "clear" + text
+- get_document_content(documentId) → User says: "read", "get", "show", "retrieve" document
+
+${documentId ? `\nCurrent document ID: ${documentId}\nDocument is loaded and ready. EXECUTE OPERATIONS IMMEDIATELY.` : '\nNo document loaded. If user asks for operations, tell them to open a document first.'}`;
+
+    logger.info(`🤖 Generating with model: ${model}`);
+
+    const result = await geminiWithMcp.generateWithTools({
+      prompt,
+      systemInstruction: systemPrompt,
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 4096
+      },
+      documentId
+    });
+
+    logger.info(`✅ Generation complete`);
+
+    res.json({
+      success: true,
+      text: result,
+      model
+    });
+  } catch (error) {
+    logger.error('❌ MCP generate error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate',
+      details: (error as Error).message
+    });
+  }
+});
+
+// POST /api/mcp-test/set-document - Set current document context
+app.post('/api/mcp-test/set-document', async (req, res) => {
+  try {
+    const { documentId } = req.body;
+
+    if (!documentId) {
+      return res.status(400).json({
+        success: false,
+        error: 'Document ID is required'
+      });
+    }
+
+    if (!geminiWithMcp) {
+      return res.status(503).json({
+        success: false,
+        error: 'MCP not initialized'
+      });
+    }
+
+    logger.info(`📄 Setting document context: ${documentId}`);
+    const result = await geminiWithMcp.setDocument(documentId);
+
+    res.json({
+      success: true,
+      documentId,
+      documentName: result.documentName || '',
+      contentLength: result.content?.length || 0
+    });
+  } catch (error) {
+    logger.error('❌ Error setting document:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to set document',
+      details: (error as Error).message
+    });
+  }
+});
+
+// GET /api/mcp-test/health - System health check
+app.get('/api/mcp-test/health', (req, res) => {
+  res.json({
+    success: true,
+    status: 'ok',
+    mcp: {
+      initialized: geminiWithMcp !== null,
+      toolCount: geminiWithMcp ? geminiWithMcp.getAvailableTools().length : 0
+    },
+    balancer: {
+      initialized: geminiBalancer !== null
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// ============================================================================
+// GEMINI REASONING ENDPOINT (SSE Streaming)
+// ============================================================================
+
+app.post('/api/gemini/reasoning', async (req, res) => {
+  try {
+    logger.info("🧠 Reasoning API Request received");
+    const {
+      prompt,
+      contents,
+      model = "gemini-2.5-pro",
+      tools,
+      systemInstruction,
+      generationConfig,
+      safetySettings,
+      toolConfig,
+    } = req.body || {};
+
+    if (!geminiBalancer) {
+      logger.error("❌ geminiBalancer not initialized");
+      return res.status(503).json({ error: "Balancer not configured" });
+    }
+
+    let effectiveContents = contents;
+    if (!effectiveContents && typeof prompt === "string") {
+      effectiveContents = [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `You are a reasoning AI agent. Follow this process:\n\nTHINK → PLAN → EXECUTE → REVIEW\n\nRespond using short, natural explanations for each phase, prefixed by emojis (🧠, 🧩, ⚙️, ✅).\n\nUser prompt: ${prompt}`,
+            },
+          ],
+        },
+      ];
+    }
+
+    // Set SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    // Note: Streaming implementation would need to be adapted for Firebase Functions
+    // For now, return a placeholder
+    res.write(`data: ${JSON.stringify({ phase: "message", message: "Reasoning endpoint requires streaming support" })}\n\n`);
+    res.write(`data: ${JSON.stringify({ phase: "done", message: "Reasoning completed." })}\n\n`);
+    res.end();
+  } catch (error) {
+    logger.error("❌ Reasoning error:", error);
+    res.write(`data: ${JSON.stringify({ phase: "error", message: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
+    res.end();
   }
 });
 

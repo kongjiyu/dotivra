@@ -1,7 +1,7 @@
 // server/routes/gemini.js - Shared Gemini routes for both local and Firebase
 export function createGeminiRoutes(options = {}) {
-  const { geminiBalancer, logger = console } = options;
-  
+  const { geminiBalancer, logger = console, geminiWithMcp = null } = options;
+
   // Session storage for dashboard authentication
   const dashboardSessions = new Map();
 
@@ -50,7 +50,7 @@ export function createGeminiRoutes(options = {}) {
         cleanExpiredSessions();
 
         logger.log('✅ Dashboard session created');
-        
+
         res.json({
           sessionId,
           expiresAt: new Date(expiresAt).toISOString(),
@@ -65,12 +65,12 @@ export function createGeminiRoutes(options = {}) {
     generate: async (req, res) => {
       try {
         logger.log('🔵 Gemini API Request received');
-        
+
         if (!geminiBalancer) {
           logger.error('❌ Balancer not configured!');
           return res.status(503).json({ error: 'Balancer not configured' });
         }
-        
+
         const {
           prompt,
           contents,
@@ -111,9 +111,81 @@ export function createGeminiRoutes(options = {}) {
       } catch (error) {
         logger.error('❌ Gemini generate error:', error);
         const status = error?.status || 500;
-        res.status(status).json({ 
-          ok: false, 
-          error: error?.message || 'Failed to generate' 
+        res.status(status).json({
+          ok: false,
+          error: error?.message || 'Failed to generate'
+        });
+      }
+    },
+
+    // Generate with MCP tool calling
+    generateWithTools: async (req, res) => {
+      try {
+        logger.log('🔧 Gemini API with Tools Request received');
+
+        if (!geminiWithMcp) {
+          logger.warn('⚠️ MCP not configured, falling back to regular generation');
+          return await createGeminiRoutes.generate(req, res);
+        }
+
+        const {
+          prompt,
+          documentId,
+          documentContent,
+          systemPrompt,
+          model = 'gemini-2.0-flash-exp',
+          generationConfig = {},
+        } = req.body || {};
+
+        if (!prompt) {
+          return res.status(400).json({ error: 'Missing prompt' });
+        }
+
+        // Set document context if provided
+        if (documentId) {
+          logger.log(`📄 Setting document context: ${documentId}`);
+          await geminiWithMcp.setDocument(documentId);
+        }
+
+        // Build contents with system instruction and user prompt
+        const contents = [{
+          role: 'user',
+          parts: [{ text: prompt }]
+        }];
+
+        // Add system instruction if provided
+        const systemInstruction = systemPrompt ? {
+          parts: [{ text: systemPrompt }]
+        } : undefined;
+
+        // Generate with tools
+        logger.log('🤖 Generating with MCP tools...');
+        const result = await geminiWithMcp.generateWithTools({
+          model,
+          contents,
+          systemInstruction,
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 4096,
+            ...generationConfig
+          },
+          enableMcpTools: true
+        });
+
+        logger.log(`✅ Generation complete (${result.toolCalls?.length || 0} tools used)`);
+
+        res.json({
+          success: true,
+          text: result.text,
+          toolCalls: result.toolCalls || [],
+          toolsUsed: result.toolCalls?.length || 0,
+          model
+        });
+      } catch (error) {
+        logger.error('❌ Gemini generate with tools error:', error);
+        res.status(500).json({
+          success: false,
+          error: error?.message || 'Failed to generate with tools'
         });
       }
     },
@@ -143,7 +215,7 @@ export function createGeminiRoutes(options = {}) {
       try {
         const { sessionId } = req.body;
         const isValid = verifySession(sessionId);
-        
+
         if (isValid) {
           const session = dashboardSessions.get(sessionId);
           res.json({

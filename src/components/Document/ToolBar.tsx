@@ -1,7 +1,6 @@
 import type { Editor } from "@tiptap/react";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import { useDocument } from "@/context/DocumentContext";
 import { Button } from "@/components/ui/button";
 import {
     Select,
@@ -46,456 +45,34 @@ import {
     Network,
     Eraser,
     Link,
-    GripVertical,
-    GripHorizontal,
-    ArrowLeftRight,
-    ArrowUpDown,
-    Type,
-    Minus
+    Minus,
+    ImageIcon,
 } from "lucide-react";
+import { TableGridSelector } from "./TableGridSelector";
+import { useDocument } from "@/context/DocumentContext";
 
 const FONT_FAMILIES = [
     "Inter", "Arial", "Georgia", "Roboto", "Courier New", "Times New Roman", "Verdana", "Tahoma", "Monospace",
 ];
 
 // Table Grid Selector Component
-const TableGridSelector = ({ onSelect }: { onSelect: (rows: number, cols: number) => void }) => {
-    const [hoverRows, setHoverRows] = useState(0);
-    const [hoverCols, setHoverCols] = useState(0);
-
-    const maxRows = 6;
-    const maxCols = 8;
-
-    const handleCellHover = (row: number, col: number) => {
-        setHoverRows(row);
-        setHoverCols(col);
-    };
-
-    const handleCellClick = (row: number, col: number) => {
-        onSelect(row, col);
-    };
-
-    return (
-        <div className="flex flex-col items-center space-y-3">
-            {/* Grid */}
-            <div
-                className="grid gap-1 justify-center"
-                style={{
-                    gridTemplateColumns: `repeat(${maxCols}, 22px)`,
-                    width: 'fit-content'
-                }}
-                onMouseLeave={() => {
-                    setHoverRows(0);
-                    setHoverCols(0);
-                }}
-            >
-                {Array.from({ length: maxRows * maxCols }, (_, index) => {
-                    const row = Math.floor(index / maxCols) + 1;
-                    const col = (index % maxCols) + 1;
-                    const isSelected = row <= hoverRows && col <= hoverCols;
-
-                    return (
-                        <div
-                            key={index}
-                            className={`
-                                w-5 h-5 border border-gray-300 cursor-pointer transition-colors rounded-sm
-                                ${isSelected ? 'bg-blue-500 border-blue-500' : 'bg-white hover:bg-blue-100'}
-                            `}
-                            onMouseEnter={() => handleCellHover(row, col)}
-                            onClick={() => handleCellClick(row, col)}
-                        />
-                    );
-                })}
-            </div>
-
-            {/* Label */}
-            <div className="text-center text-sm text-gray-600">
-                {hoverRows} x {hoverCols}
-            </div>
-        </div>
-    );
-};
 
 
 
 const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly?: boolean }) => {
-
-    // Get Navigation Pane and ChatSidebar visibility from context to recalculate boundaries
-    const { showNavigationPane, chatSidebarOpen } = useDocument();
 
     const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [currentFontSize, setCurrentFontSize] = useState<string>('16px');
     const [currentFontFamily, setCurrentFontFamily] = useState<string>("Inter");
     const [currentTextColor, setCurrentTextColor] = useState<string>('#000000');
     const [currentBackgroundColor, setCurrentBackgroundColor] = useState<string>('');
+    const [tablePopoverOpen, setTablePopoverOpen] = useState(false);
+    const tablePopoverTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const [isInPreviewMode, setIsInPreviewMode] = useState(false);
     const [maxIndentLevel, setMaxIndentLevel] = useState<number>(14);
 
-    // Draggable toolbar state
-    const [toolbarPosition, setToolbarPosition] = useState<{ x: number; y: number } | null>(null);
-    const [isDragging, setIsDragging] = useState(false);
-    const [isVertical, setIsVertical] = useState<boolean>(false);
-    // Max available width for toolbar (viewport minus nav/chat panes)
-    const [toolbarMaxWidth, setToolbarMaxWidth] = useState<number | null>(null);
-    // Selection debug info when user selects across different block elements
-    const [selectionDebug, setSelectionDebug] = useState<{
-        active: boolean;
-        startType?: string;
-        endType?: string;
-        from?: number;
-        to?: number;
-        startDepth?: number;
-        endDepth?: number;
-        selectionType?: string;
-        selectedText?: string;
-        startNodeAttrs?: any;
-        endNodeAttrs?: any;
-        parentChain?: string[];
-    } | null>(null);
-    const dragStartPos = useRef<{ x: number; y: number; toolbarX: number; toolbarY: number } | null>(null);
     const containerRef = useRef<HTMLDivElement | null>(null);
-
-    // Load toolbar orientation preference from cookies on mount
-    useEffect(() => {
-        const savedOrientation = document.cookie
-            .split('; ')
-            .find(row => row.startsWith('toolbarOrientation='))
-            ?.split('=')[1];
-
-        if (savedOrientation === 'vertical') {
-            setIsVertical(true);
-        }
-    }, []);
-
-    // Save toolbar orientation to cookies
-    const toggleOrientation = () => {
-        const newOrientation = !isVertical;
-        setIsVertical(newOrientation);
-
-        // Save to cookies (expires in 1 year)
-        const expires = new Date();
-        expires.setFullYear(expires.getFullYear() + 1);
-        document.cookie = `toolbarOrientation=${newOrientation ? 'vertical' : 'horizontal'}; expires=${expires.toUTCString()}; path=/`;
-    };
-
-    // Drag handlers for toolbar - Optimized to match WordCount's efficiency
-    const handleDragStart = useCallback((e: React.MouseEvent) => {
-        if (!containerRef.current) return;
-
-        const rect = containerRef.current.getBoundingClientRect();
-        setIsDragging(true);
-        dragStartPos.current = {
-            x: e.clientX,
-            y: e.clientY,
-            toolbarX: rect.left,
-            toolbarY: rect.top,
-        };
-    }, []);
-
-    const handleDragMove = useCallback((e: MouseEvent) => {
-        if (!isDragging || !dragStartPos.current || !containerRef.current) return;
-
-        const deltaX = e.clientX - dragStartPos.current.x;
-        const deltaY = e.clientY - dragStartPos.current.y;
-        let newX = dragStartPos.current.toolbarX + deltaX;
-        let newY = dragStartPos.current.toolbarY + deltaY;
-
-        // Get toolbar dimensions for boundary checking
-        const toolbar = containerRef.current;
-        const toolbarRect = toolbar.getBoundingClientRect();
-
-        // Calculate boundaries accounting for NavigationPane and ChatSidebar
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
-
-        // Left boundary (NavigationPane)
-        const navPaneWidth = showNavigationPane ? Math.max(viewportWidth * 0.15, 200) : 0;
-        const leftBoundary = navPaneWidth;
-
-        // Right boundary (ChatSidebar)
-        const chatSidebarWidth = chatSidebarOpen ? 426 : 10;
-        const rightBoundary = viewportWidth - chatSidebarWidth - toolbarRect.width;
-
-        // Top boundary (header area)
-        const topBoundary = 152;
-
-        // Bottom boundary
-        const bottomBoundary = viewportHeight - toolbarRect.height;
-
-        // Clamp position within calculated boundaries
-        newX = Math.max(leftBoundary, Math.min(newX, rightBoundary));
-        newY = Math.max(topBoundary, Math.min(newY, bottomBoundary));
-
-        setToolbarPosition({ x: newX, y: newY });
-    }, [isDragging, showNavigationPane, chatSidebarOpen]);
-
-    const handleDragEnd = useCallback(() => {
-        setIsDragging(false);
-        dragStartPos.current = null;
-    }, []);
-
-    // Set up drag event listeners - Optimized to prevent re-creation
-    useEffect(() => {
-        if (isDragging) {
-            document.addEventListener('mousemove', handleDragMove);
-            document.addEventListener('mouseup', handleDragEnd);
-            return () => {
-                document.removeEventListener('mousemove', handleDragMove);
-                document.removeEventListener('mouseup', handleDragEnd);
-            };
-        }
-    }, [isDragging, handleDragMove, handleDragEnd]);
-
-    // Ref to track if we're currently updating position (prevent infinite loops)
-    const isUpdatingPosition = useRef(false);
-
-    // Helper function to calculate smart position when orientation changes
-    const getSmartPositionForOrientation = useCallback((currentPos: { x: number; y: number } | null): { x: number; y: number } | null => {
-        if (!currentPos || !containerRef.current) return null;
-
-        try {
-            const tiptapContainer = document.querySelector('.tiptap-container');
-
-            if (!tiptapContainer) return null;
-
-            const containerRect = tiptapContainer.getBoundingClientRect();
-
-            // Wait for toolbar to re-render with new dimensions
-            setTimeout(() => {
-                if (!containerRef.current) return;
-                const toolbarRect = containerRef.current.getBoundingClientRect();
-
-                if (toolbarRect.width <= 0 || toolbarRect.height <= 0) return;
-
-                // Check if toolbar would overflow with current position
-                const wouldOverflowRight = currentPos.x + toolbarRect.width > containerRect.right;
-                const wouldOverflowBottom = currentPos.y + toolbarRect.height > containerRect.bottom;
-                const wouldOverflowLeft = currentPos.x < containerRect.left;
-                const wouldOverflowTop = currentPos.y < containerRect.top;
-
-                const willOverflow = wouldOverflowRight || wouldOverflowBottom || wouldOverflowLeft || wouldOverflowTop;
-
-                // Only reposition if there's an overflow
-                if (!willOverflow) {
-                    // No overflow, keep current position
-                    return;
-                }
-
-                // Overflow detected - apply smart repositioning
-                const centerX = containerRect.left + containerRect.width / 2;
-                const centerY = containerRect.top + containerRect.height / 2;
-
-                const isOnLeft = currentPos.x < centerX;
-                const isOnTop = currentPos.y < centerY;
-
-                let newX: number;
-                let newY: number;
-                const padding = 16; // Padding from edges
-
-                // Determine new position based on which quadrant the toolbar was in
-                if (isOnLeft && isOnTop) {
-                    // Top-left quadrant → position at top-left
-                    newX = containerRect.left + padding;
-                    newY = containerRect.top + padding;
-                } else if (!isOnLeft && isOnTop) {
-                    // Top-right quadrant → position at top-right
-                    newX = containerRect.right - toolbarRect.width - padding;
-                    newY = containerRect.top + padding;
-                } else if (isOnLeft && !isOnTop) {
-                    // Bottom-left quadrant → position at bottom-left
-                    newX = containerRect.left + padding;
-                    newY = containerRect.bottom - toolbarRect.height - padding;
-                } else {
-                    // Bottom-right quadrant → position at bottom-right
-                    newX = containerRect.right - toolbarRect.width - padding;
-                    newY = containerRect.bottom - toolbarRect.height - padding;
-                }
-
-                // Ensure position is within bounds
-                newX = Math.max(containerRect.left, Math.min(newX, containerRect.right - toolbarRect.width));
-                newY = Math.max(containerRect.top, Math.min(newY, containerRect.bottom - toolbarRect.height));
-
-                setToolbarPosition({ x: newX, y: newY });
-            }, 50); // Small delay to let DOM update
-
-            return currentPos; // Return current position temporarily
-        } catch (error) {
-            console.error('Error calculating smart position:', error);
-            return null;
-        }
-    }, []);
-
-    // Helper function to safely clamp position with error handling
-    // Account for both NavigationPane and ChatSidebar boundaries
-    const safeClampPosition = useCallback((position: { x: number; y: number } | null): { x: number; y: number } | null => {
-        if (!position || !containerRef.current || isUpdatingPosition.current) return position;
-
-        try {
-            const toolbar = containerRef.current;
-            const toolbarRect = toolbar.getBoundingClientRect();
-
-            // Validate rect dimensions to prevent invalid calculations
-            if (toolbarRect.width <= 0 || toolbarRect.height <= 0) {
-                return null; // Fallback to default position
-            }
-
-            // Calculate boundaries accounting for NavigationPane and ChatSidebar
-            const viewportWidth = window.innerWidth;
-            const viewportHeight = window.innerHeight;
-
-            // Left boundary (NavigationPane)
-            const navPaneWidth = showNavigationPane ? Math.max(viewportWidth * 0.15, 200) : 0;
-            const leftBoundary = navPaneWidth;
-
-            // Right boundary (ChatSidebar)
-            const chatSidebarWidth = chatSidebarOpen ? 320 : 0;
-            const rightBoundary = viewportWidth - chatSidebarWidth - toolbarRect.width;
-
-            // Top boundary (header area)
-            const topBoundary = 152;
-
-            // Bottom boundary
-            const bottomBoundary = viewportHeight - toolbarRect.height;
-
-            // Clamp position within calculated boundaries
-            const clampedX = Math.max(leftBoundary, Math.min(position.x, rightBoundary));
-            const clampedY = Math.max(topBoundary, Math.min(position.y, bottomBoundary));
-
-            // Check if position actually changed (prevent unnecessary updates)
-            const hasChanged = Math.abs(clampedX - position.x) > 1 || Math.abs(clampedY - position.y) > 1;
-
-            return hasChanged ? { x: clampedX, y: clampedY } : position;
-        } catch (error) {
-            console.error('Error clamping toolbar position:', error);
-            return null; // Fallback to default position on error
-        }
-    }, [showNavigationPane, chatSidebarOpen]);
-
-    // Handle window resize to re-clamp toolbar position within new boundaries
-    useEffect(() => {
-        // Don't run during active drag to prevent lag
-        if (isDragging) return;
-
-        let resizeTimeout: NodeJS.Timeout;
-
-        const handleResize = () => {
-            // Debounce resize handler to prevent too many updates
-            clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(() => {
-                if (!toolbarPosition || isUpdatingPosition.current) return;
-
-                isUpdatingPosition.current = true;
-                const newPosition = safeClampPosition(toolbarPosition);
-
-                if (newPosition && newPosition !== toolbarPosition) {
-                    setToolbarPosition(newPosition);
-                }
-
-                // Reset flag after a delay
-                setTimeout(() => {
-                    isUpdatingPosition.current = false;
-                }, 100);
-            }, 150); // Debounce by 150ms
-        };
-
-        // Update toolbarMaxWidth on resize as well
-        const updateMaxWidth = () => {
-            const viewportWidth = window.innerWidth;
-            const navPaneWidth = showNavigationPane ? Math.max(viewportWidth * 0.15, 200) : 0;
-            const chatWidth = chatSidebarOpen ? 320 : 0;
-            const available = Math.max(200, viewportWidth - navPaneWidth - chatWidth - 40); // 40px padding
-            setToolbarMaxWidth(available);
-        };
-
-        updateMaxWidth();
-        window.addEventListener('resize', updateMaxWidth);
-
-        window.addEventListener('resize', handleResize);
-        return () => {
-            window.removeEventListener('resize', handleResize);
-            window.removeEventListener('resize', updateMaxWidth);
-            clearTimeout(resizeTimeout);
-        };
-    }, [toolbarPosition, safeClampPosition, isDragging, showNavigationPane, chatSidebarOpen]);
-
-    // Check position when orientation changes and apply smart repositioning
-    useEffect(() => {
-        // Don't run during active drag to prevent lag
-        if (isDragging || isUpdatingPosition.current || !toolbarPosition) return;
-
-        isUpdatingPosition.current = true;
-
-        // Use smart positioning based on current quadrant
-        getSmartPositionForOrientation(toolbarPosition);
-
-        // Reset flag after processing
-        setTimeout(() => {
-            isUpdatingPosition.current = false;
-        }, 200);
-
-    }, [isVertical, getSmartPositionForOrientation, toolbarPosition, isDragging]); // Only trigger on orientation change
-
-    // Force recalculation of default position when NavigationPane or ChatSidebar toggles
-    useEffect(() => {
-        // Don't run during active drag to prevent lag
-        if (isDragging) return;
-
-        if (!toolbarPosition) {
-            // Trigger re-render to recalculate inline style
-            setCurrentFontSize(prev => prev);
-        }
-    }, [showNavigationPane, chatSidebarOpen, toolbarPosition, isDragging]);
-
-    // Recalculate toolbar position when NavigationPane or ChatSidebar toggles - instant adjustment
-    useEffect(() => {
-        // Don't run during active drag to prevent lag
-        if (isDragging || !containerRef.current) return;
-
-        // Use requestAnimationFrame for immediate but smooth adjustment
-        const recalculateFrame = requestAnimationFrame(() => {
-            const toolbar = containerRef.current;
-            if (!toolbar) return;
-
-            const toolbarRect = toolbar.getBoundingClientRect();
-
-            // If toolbar has a saved position, clamp it to new boundaries
-            if (toolbarPosition) {
-                // Calculate boundaries accounting for NavigationPane and ChatSidebar
-                const viewportWidth = window.innerWidth;
-                const viewportHeight = window.innerHeight;
-
-                // Left boundary (NavigationPane)
-                const navPaneWidth = showNavigationPane ? Math.max(viewportWidth * 0.15, 200) : 0;
-                const leftBoundary = navPaneWidth;
-
-                // Right boundary (ChatSidebar)
-                const chatSidebarWidth = chatSidebarOpen ? 320 : 0;
-                const rightBoundary = viewportWidth - chatSidebarWidth - toolbarRect.width;
-
-                // Top boundary (header area)
-                const topBoundary = 152;
-
-                // Bottom boundary
-                const bottomBoundary = viewportHeight - toolbarRect.height;
-
-                let newX = toolbarPosition.x;
-                let newY = toolbarPosition.y;
-
-                // Clamp position to new boundaries
-                newX = Math.max(leftBoundary, Math.min(newX, rightBoundary));
-                newY = Math.max(topBoundary, Math.min(newY, bottomBoundary));
-
-                // Only update if position changed
-                if (newX !== toolbarPosition.x || newY !== toolbarPosition.y) {
-                    setToolbarPosition({ x: newX, y: newY });
-                }
-            }
-            // If toolbar is at default position, it will automatically recalculate via inline style
-        });
-
-        return () => cancelAnimationFrame(recalculateFrame);
-    }, [showNavigationPane, chatSidebarOpen, toolbarPosition, isDragging]);
 
     // Calculate dynamic maxIndentLevel based on window width
     // Wider screens can handle more indentation levels without content overflow
@@ -510,11 +87,11 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
     // Check if editing should be disabled - moved to top to avoid hoisting issues
     const isEditingDisabled = readOnly || isInPreviewMode;
-
     // Get current font attributes and heading state from editor when selection changes
     useEffect(() => {
         if (!editor) return;
 
+        console.log('[ToolBar] isEditingDisabled:', isEditingDisabled, 'readOnly:', readOnly, 'isInPreviewMode:', isInPreviewMode);
         const updateToolbarState = () => {
             // SELECTION DEBUG: detect cross-block selection and populate debug state
             try {
@@ -527,7 +104,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     const endNode = resolvedTo.parent;
 
                     if (startNode && endNode && startNode.type && endNode.type && (startNode.type !== endNode.type || resolvedFrom.depth !== resolvedTo.depth)) {
-                        // Cross-block selection detected - gather detailed info
+                        // Cross-block selection detected - log detailed info
                         const selectedText = state.doc.textBetween(from, to, ' ', ' ');
                         const selectionType = state.selection.constructor.name;
 
@@ -538,31 +115,23 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                             if (ancestor) parentChain.push(ancestor.type.name);
                         }
 
-                        const debugInfo = {
-                            active: true,
-                            startType: startNode.type.name,
-                            endType: endNode.type.name,
-                            from,
-                            to,
-                            startDepth: resolvedFrom.depth,
-                            endDepth: resolvedTo.depth,
-                            selectionType,
-                            selectedText: selectedText.substring(0, 50) + (selectedText.length > 50 ? '...' : ''),
-                            startNodeAttrs: startNode.attrs,
-                            endNodeAttrs: endNode.attrs,
-                            parentChain,
-                        };
-
-                        setSelectionDebug(debugInfo);
-                        console.debug('[ToolBar] Cross-block selection detected:', debugInfo);
-                        console.debug('[ToolBar] Full selection text:', selectedText);
-                    } else {
-                        // Clear debug if single-block selection
-                        if (selectionDebug && selectionDebug.active) setSelectionDebug(null);
+                        console.group('🔍 Cross-Block Selection Detected');
+                        console.log('Selection Type:', selectionType);
+                        console.log('Range:', `${from} -> ${to} (${to - from} chars)`);
+                        console.log('Start Block:', {
+                            type: startNode.type.name,
+                            depth: resolvedFrom.depth,
+                            attrs: startNode.attrs
+                        });
+                        console.log('End Block:', {
+                            type: endNode.type.name,
+                            depth: resolvedTo.depth,
+                            attrs: endNode.attrs
+                        });
+                        console.log('Parent Chain:', parentChain.join(' ->'));
+                        console.log('Selected Text:', selectedText);
+                        console.groupEnd();
                     }
-                } else {
-                    // Clear when no selection
-                    if (selectionDebug && selectionDebug.active) setSelectionDebug(null);
                 }
             } catch (err) {
                 // ignore debug errors
@@ -570,15 +139,32 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             }
 
             // Check if we're in a code block first
+            let inMermaidPreview = false;
             const inCodeBlock = editor.isActive('codeBlock');
 
-            // Check specifically for Mermaid preview/error mode
-            // Look for Mermaid preview containers or error indicators
-            const mermaidPreviews = document.querySelectorAll('[data-mermaid-preview="true"], .mermaid-preview, .mermaid-container');
-            const mermaidErrors = document.querySelectorAll('[data-mermaid-error="true"], .mermaid-error, .syntax-error, .mermaid-parse-error');
+            if (inCodeBlock) {
+                // Get the current DOM element of the active node
+                const { from } = editor.state.selection
+                const domAtPos = editor.view.domAtPos(from)
+                const nodeEl = domAtPos?.node
 
+                // Find the nearest block container (the <pre> or wrapping div)
+                const codeBlockEl = (nodeEl as HTMLElement)?.closest('pre, [data-node-type="codeBlock"], .tiptap-code-block')
+
+                if (codeBlockEl) {
+                    // Now limit queries to the current code block only
+                    const mermaidPreviews = codeBlockEl.querySelectorAll(
+                        '[data-mermaid-preview="true"], .mermaid-preview, .mermaid-container'
+                    )
+                    const mermaidErrors = codeBlockEl.querySelectorAll(
+                        '[data-mermaid-error="true"], .mermaid-error, .syntax-error, .mermaid-parse-error'
+                    )
+
+                    inMermaidPreview = mermaidPreviews.length > 0 || mermaidErrors.length > 0
+                }
+            }
             // Only disable editing when Mermaid is in preview mode or showing errors
-            const inMermaidPreview = inCodeBlock && (mermaidPreviews.length > 0 || mermaidErrors.length > 0);
+            console.log('[ToolBar] Mermaid preview mode:', inMermaidPreview, 'Code block:', inCodeBlock, 'Previews found:');
             setIsInPreviewMode(inMermaidPreview);
 
             // Get text style attributes (font size and family)
@@ -732,19 +318,66 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
         // Note: Resize monitoring is handled by the bookmark-style hiding useEffect below
     }, [editor]);
 
-    // Width-based responsive toolbar - show/hide sections based on specific window width breakpoints
+    // Width-based responsive toolbar - show/hide sections based on available width
+    // Base on window width but adjust for open sidebars (navigation pane: 300px, chat sidebar: 400px)
     const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+    const [toolbarLeft, setToolbarLeft] = useState('50%');
+    const { showNavigationPane, chatSidebarOpen } = useDocument();
+
+    // Calculate available width accounting for sidebars
+    const calculateAvailableWidth = () => {
+        let availableWidth = window.innerWidth;
+        // More aggressive shrinking when both sidebars are open
+        if (showNavigationPane && chatSidebarOpen) {
+            availableWidth -= 850; // Compound penalty for both sidebars
+        } else {
+            if (showNavigationPane) availableWidth -= 300; // Navigation pane width
+            if (chatSidebarOpen) availableWidth -= 400; // Chat sidebar width
+        }
+        return availableWidth;
+    };
+
+    // Calculate toolbar position based on the document content container (the white page)
+    useEffect(() => {
+        const updateToolbarPosition = () => {
+            // Look for the document-context white page container
+            const documentContainer = document.querySelector('.document-context > div > div');
+            if (documentContainer) {
+                const rect = documentContainer.getBoundingClientRect();
+                const centerX = rect.left + (rect.width / 2);
+                setToolbarLeft(`${centerX}px`);
+            }
+        };
+
+        // Initial update and debounced resize handler
+        updateToolbarPosition();
+
+        let resizeTimeout: NodeJS.Timeout;
+        const handleResize = () => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(updateToolbarPosition, 100);
+        };
+
+        window.addEventListener('resize', handleResize);
+
+        return () => {
+            window.removeEventListener('resize', handleResize);
+            clearTimeout(resizeTimeout);
+        };
+    }, [showNavigationPane, chatSidebarOpen]); // Re-calculate when sidebars change
 
     // Initialize maxIndentLevel based on initial window width
     useEffect(() => {
-        const initialMaxIndentLevel = calculateMaxIndentLevel(windowWidth);
+        const availableWidth = calculateAvailableWidth();
+        const initialMaxIndentLevel = calculateMaxIndentLevel(availableWidth);
         setMaxIndentLevel(initialMaxIndentLevel);
     }, []); // Run once on mount
 
+    // Update width when window resizes or sidebars toggle
     useEffect(() => {
         // Throttled resize handler to improve performance and reduce lag
         const handleResize = () => {
-            const newWidth = window.innerWidth;
+            const newWidth = calculateAvailableWidth();
 
             // Only update if we crossed a breakpoint threshold for smoother performance
             const thresholds = [1400, 1150, 1000, 850, 650];
@@ -752,23 +385,24 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             const newThreshold = thresholds.find(t => newWidth >= t) || 0;
 
             if (oldThreshold === newThreshold && Math.abs(newWidth - windowWidth) < 50) return;
-            console.log('� ========== WIDTH-BASED TOOLBAR DEBUG ==========');
-            console.log('� Window width changed:', windowWidth, '→', newWidth);
+            console.log('========== WIDTH-BASED TOOLBAR DEBUG ==========');
+            console.log('Available width changed:', windowWidth, '->', newWidth);
+            console.log('Navigation pane:', showNavigationPane, 'Chat sidebar:', chatSidebarOpen);
 
             // Update maxIndentLevel based on new width
             const newMaxIndentLevel = calculateMaxIndentLevel(newWidth);
             setMaxIndentLevel(newMaxIndentLevel);
-            console.log('� Max indent level updated:', maxIndentLevel, '→', newMaxIndentLevel);
+            console.log('Max indent level updated:', maxIndentLevel, '->', newMaxIndentLevel);
 
             // Calculated width breakpoints based on actual toolbar section sizes
-            // Core sections (always visible): Bold, Italic, Underline, Font Size, Font Color, Background Color ≈ 400px
-            // More Options button: ≈ 50px, Separators and padding: ≈ 100px, Base requirement: ≈ 550px
+            // Core sections (always visible): Bold, Italic, Underline, Font Size, Font Color, Background Color ~400px
+            // More Options button: ~50px, Separators and padding: ~100px, Base requirement: ~550px
             const breakpoints = {
-                insertOptions: 1400,    // Insert Options (Table, Diagram, Link) ≈ 200px - hide below 1400px
-                textAlign: 1150,        // Text Alignment (4 buttons) ≈ 150px - hide below 1150px  
-                clearFormatting: 1000,  // Clear Formatting (1 button) ≈ 40px - hide below 1000px
-                indent: 850,            // Indentation (2 buttons) ≈ 100px - hide below 850px (earlier than before)
-                lists: 650              // Lists (3 buttons) ≈ 150px - hide below 650px (earlier than before)
+                insertOptions: 1400,    // Insert Options (Table, Diagram, Link) �?200px - hide below 1400px
+                textAlign: 1150,        // Text Alignment (4 buttons) �?150px - hide below 1150px  
+                clearFormatting: 1000,  // Clear Formatting (1 button) �?40px - hide below 1000px
+                indent: 850,            // Indentation (2 buttons) �?100px - hide below 850px (earlier than before)
+                lists: 650              // Lists (3 buttons) �?150px - hide below 650px (earlier than before)
             };
 
 
@@ -778,8 +412,8 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                 newWidth < breakpoints.indent ||
                 newWidth < breakpoints.lists;
 
-            console.log('�   - More Options needed:', hasHiddenSections ? 'SHOW' : 'HIDE');
-            console.log('� ==========================================');
+            console.log('  - More Options needed:', hasHiddenSections ? 'SHOW' : 'HIDE');
+            console.log('==========================================');
 
             setWindowWidth(newWidth);
         };
@@ -818,21 +452,56 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             if (debounceTimer) clearTimeout(debounceTimer);
             if (rafId) cancelAnimationFrame(rafId);
         };
-    }, [windowWidth, maxIndentLevel]); // Fixed: Added windowWidth and maxIndentLevel to dependencies
+    }, [windowWidth, maxIndentLevel, showNavigationPane, chatSidebarOpen]); // Re-calculate when sidebars change
 
-    // Helper functions to determine section visibility based on available toolbar width (drag area)
-    // In vertical mode, show only essential options (up to font/color), wrap Lists/Indent/Align/Insert in More Options
+    // Helper functions to determine section visibility based on available toolbar width
     // Memoize these functions to prevent unnecessary recalculations
-    // Use toolbarMaxWidth (available drag area) instead of windowWidth for better responsive behavior
-    const availableWidth = toolbarMaxWidth || windowWidth;
-    const shouldShowInsertOptions = useMemo(() => isVertical ? false : availableWidth >= 1400, [isVertical, availableWidth]);
-    const shouldShowIndent = useMemo(() => isVertical ? false : availableWidth >= 1200, [isVertical, availableWidth]);
-    const shouldShowClearFormatting = useMemo(() => isVertical ? false : availableWidth >= 1200, [isVertical, availableWidth]);
-    const shouldShowLists = useMemo(() => isVertical ? false : availableWidth >= 1000, [isVertical, availableWidth]);
-    const shouldShowTextAlign = useMemo(() => isVertical ? false : availableWidth >= 900, [isVertical, availableWidth]);
-    const shouldShowMoreOptions = useMemo(() =>
-        isVertical ? true : (!shouldShowInsertOptions || !shouldShowTextAlign || !shouldShowClearFormatting || !shouldShowIndent || !shouldShowLists),
-        [isVertical, shouldShowInsertOptions, shouldShowTextAlign, shouldShowClearFormatting, shouldShowIndent, shouldShowLists]
+    // Optimized breakpoints for toolbar - sections hide progressively as width decreases
+    // Calculate available width after accounting for sidebars
+    const availableWidth = calculateAvailableWidth();
+    const toolbarMaxWidth = Math.min(availableWidth - 40, 1400); // Increased from 900px to 1400px to show all sections
+
+    // Progressive hiding from largest to smallest sections
+    // Essential formatting (Bold, Italic, etc.) + Font controls: ~400px
+    // Each section adds approximately:
+    // - Insert Options (Table, Diagram, Link, Divider): ~220px
+    // - Indent controls: ~90px  
+    // - Clear Formatting: ~50px
+    // - Lists: ~140px
+    // - Text Align: ~120px
+    // - Font Controls (Family + Size): ~280px
+    // - Heading Selector: ~150px
+
+    const shouldShowInsertOptions = useMemo(() => toolbarMaxWidth >= 1400, [toolbarMaxWidth]);
+    const shouldShowIndent = useMemo(() => toolbarMaxWidth >= 1300, [toolbarMaxWidth]);
+    const shouldShowClearFormatting = useMemo(() => toolbarMaxWidth >= 1100, [toolbarMaxWidth]);
+    const shouldShowLists = useMemo(() => toolbarMaxWidth >= 900, [toolbarMaxWidth]);
+    const shouldShowTextAlign = useMemo(() => toolbarMaxWidth >= 800, [toolbarMaxWidth]);
+    const shouldShowFontControls = useMemo(() => toolbarMaxWidth >= 650, [toolbarMaxWidth]);
+    const shouldShowHeadingSelector = useMemo(() => toolbarMaxWidth >= 500, [toolbarMaxWidth]);
+
+    // Show more options when ANY section is hidden
+    const shouldShowMoreOptions = useMemo(() => {
+        const showMore = !shouldShowInsertOptions || !shouldShowTextAlign || !shouldShowClearFormatting ||
+            !shouldShowIndent || !shouldShowLists || !shouldShowFontControls || !shouldShowHeadingSelector;
+
+        // Debug logging
+        console.log('[ToolBar] Visibility Check:', {
+            toolbarMaxWidth,
+            availableWidth,
+            shouldShowInsertOptions,
+            shouldShowIndent,
+            shouldShowClearFormatting,
+            shouldShowLists,
+            shouldShowTextAlign,
+            shouldShowFontControls,
+            shouldShowHeadingSelector,
+            shouldShowMoreOptions: showMore
+        });
+
+        return showMore;
+    }, [toolbarMaxWidth, availableWidth, shouldShowInsertOptions, shouldShowTextAlign, shouldShowClearFormatting, shouldShowIndent,
+        shouldShowLists, shouldShowFontControls, shouldShowHeadingSelector]
     );
 
     // Add keyboard shortcut handlers for indentation with dynamic limits
@@ -912,7 +581,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     // Font size input handling with typing state
     const [fontSizeInput, setFontSizeInput] = useState<string>('16');
     const [isTyping, setIsTyping] = useState(false);
-    const [showFontSizePopover, setShowFontSizePopover] = useState(false);
 
     // Sync input field with current font size only when not typing
     useEffect(() => {
@@ -1004,165 +672,30 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
     // Helper function to determine dropdown alignment based on toolbar position
     const getDropdownAlignment = useCallback((): { side: 'top' | 'bottom' | 'left' | 'right'; align: 'start' | 'center' | 'end' } => {
-        if (!containerRef.current) {
-            return isVertical ? { side: 'right', align: 'start' } : { side: 'bottom', align: 'end' };
-        }
-
-        try {
-            const toolbarRect = containerRef.current.getBoundingClientRect();
-            const tiptapContainer = document.querySelector('.tiptap-container');
-
-            if (!tiptapContainer) {
-                return isVertical ? { side: 'right', align: 'start' } : { side: 'bottom', align: 'end' };
-            }
-
-            const containerRect = tiptapContainer.getBoundingClientRect();
-
-            if (isVertical) {
-                // Vertical toolbar: check if at left or right edge
-                const distanceFromLeft = toolbarRect.left - containerRect.left;
-
-                // If toolbar is closer to left edge (within 100px), popup to right
-                // Otherwise, popup to left
-                if (distanceFromLeft < 100) {
-                    return { side: 'right', align: 'start' };
-                } else {
-                    return { side: 'left', align: 'start' };
-                }
-            } else {
-                // Horizontal toolbar: check if at top or bottom edge
-                const distanceFromTop = toolbarRect.top - containerRect.top;
-
-                // If toolbar is closer to top edge (within 100px), popup to bottom
-                // Otherwise, popup to top
-                if (distanceFromTop < 100) {
-                    return { side: 'bottom', align: 'end' };
-                } else {
-                    return { side: 'top', align: 'end' };
-                }
-            }
-        } catch (error) {
-            console.error('Error calculating dropdown alignment:', error);
-            return isVertical ? { side: 'right', align: 'start' } : { side: 'bottom', align: 'end' };
-        }
-    }, [isVertical]);
+        // Always horizontal mode, toolbar at top-center
+        return { side: 'bottom', align: 'end' };
+    }, []);
 
     // Memoize dropdown alignment to avoid recalculating on every render
-    const dropdownAlignment = useMemo(() => getDropdownAlignment(), [getDropdownAlignment, toolbarPosition, isVertical, showMoreOptions]);
+    const dropdownAlignment = useMemo(() => getDropdownAlignment(), [getDropdownAlignment, showMoreOptions]);
 
     return (
         <>
             <div
                 ref={containerRef}
-                className={`toolbar ${isVertical
-                    ? 'flex-col items-center w-fit'
-                    : 'flex items-center'
-                    } gap-0 p-1.5 rounded-md border border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-lg`}
-                style={toolbarPosition ? {
-                    position: 'fixed',
-                    left: `${toolbarPosition.x}px`,
-                    top: `${toolbarPosition.y}px`,
-                    cursor: isDragging ? 'grabbing' : 'default',
-                    zIndex: 100,
-                    ...(isVertical && { maxHeight: '600px', overflowY: 'auto' }),
-                    transition: isDragging ? 'none' : undefined,
-                    // Ensure toolbar doesn't exceed available width
-                    ...(toolbarMaxWidth ? { maxWidth: `${toolbarMaxWidth}px`, width: 'auto' } : {})
-                } : (() => {
-                    // Calculate initial position within tiptap-container based on NavigationPane state
-                    const tiptapContainer = document.querySelector('.tiptap-container');
-                    const containerRect = tiptapContainer?.getBoundingClientRect();
-
-                    if (isVertical) {
-                        // Vertical mode: Top-left of drag area (tiptap-container)
-                        // Ensure we're positioned within the actual container boundaries
-                        const leftPos = containerRect ? containerRect.left + 16 : 16;
-                        return {
-                            position: 'fixed' as const,
-                            left: `${leftPos}px`,
-                            top: '168px', // Top of drag area (152px content start + 16px padding)
-                            zIndex: 100,
-                            maxHeight: '600px',
-                            overflowY: 'auto' as const
-                        };
-                    } else {
-                        // Horizontal mode: Top-center of drag area (tiptap-container)
-                        // Calculate center based on actual container position (accounts for NavigationPane)
-                        if (containerRect) {
-                            const centerX = containerRect.left + containerRect.width / 2;
-                            const available = toolbarMaxWidth || window.innerWidth - (showNavigationPane ? Math.max(window.innerWidth * 0.15, 200) : 0) - (chatSidebarOpen ? 320 : 0) - 40;
-                            return {
-                                position: 'fixed' as const,
-                                left: `${centerX}px`,
-                                top: '168px',
-                                transform: 'translateX(-50%)',
-                                zIndex: 100,
-                                maxWidth: `${available}px`,
-                                width: 'auto'
-                            };
-                        } else {
-                            // Fallback when container not ready - center of viewport
-                            return {
-                                position: 'fixed' as const,
-                                left: '50%',
-                                top: '168px',
-                                transform: 'translateX(-50%)',
-                                zIndex: 100
-                            };
-                        }
-                    }
-                })()}
+                className="toolbar fixed top-[152px] z-50 flex items-center gap-0 p-1.5 rounded-md border border-gray-200 bg-white/95 backdrop-blur supports-[backdrop-filter]:bg-white/80 shadow-lg overflow-hidden"
+                style={{
+                    left: toolbarLeft,
+                    transform: 'translateX(-50%)',
+                    width: 'fit-content',
+                    minWidth: '200px',
+                    maxWidth: `${toolbarMaxWidth}px`, // Adjusted for sidebars
+                    flexWrap: 'nowrap' // Prevent wrapping - hide sections in More Options instead
+                }}
             >
 
-                {/* Selection debug overlay (visible when cross-block selection detected) */}
-                {selectionDebug && selectionDebug.active && (
-                    <div className="absolute -top-32 left-0 bg-red-50 text-red-700 px-3 py-2 rounded-lg text-xs z-50 border-2 border-red-200 shadow-lg max-w-md">
-                        <div className="font-bold text-sm mb-1 text-red-800">🔍 Cross-Block Selection Debug</div>
-                        <div className="space-y-1">
-                            <div><strong>Type:</strong> {selectionDebug.selectionType}</div>
-                            <div><strong>Range:</strong> {selectionDebug.from} → {selectionDebug.to} ({(selectionDebug.to ?? 0) - (selectionDebug.from ?? 0)} chars)</div>
-                            <div><strong>Start:</strong> {selectionDebug.startType} (depth: {selectionDebug.startDepth})</div>
-                            <div><strong>End:</strong> {selectionDebug.endType} (depth: {selectionDebug.endDepth})</div>
-                            {selectionDebug.selectedText && (
-                                <div><strong>Text:</strong> "{selectionDebug.selectedText}"</div>
-                            )}
-                            {selectionDebug.parentChain && selectionDebug.parentChain.length > 0 && (
-                                <div><strong>Chain:</strong> {selectionDebug.parentChain.join(' → ')}</div>
-                            )}
-                        </div>
-                    </div>
-                )}
-                {/* Drag Handle and Orientation Toggle */}
-                <div className={`flex ${isVertical ? 'flex-col gap-1 items-center' : 'items-center gap-1'} flex-shrink-0`}>
-                    {/* Drag Handle - Enlarged for better grab area with padding */}
-                    <div
-                        className={`flex items-center justify-center ${isVertical ? 'h-10 w-10 py-2' : 'h-10 w-10 px-2'} cursor-grab active:cursor-grabbing hover:bg-gray-100 rounded transition-colors flex-shrink-0`}
-                        onMouseDown={handleDragStart}
-                        title="Drag to reposition toolbar"
-                    >
-                        {isVertical ? (
-                            <GripHorizontal className="w-5 h-5 text-gray-500" />
-                        ) : (
-                            <GripVertical className="w-5 h-5 text-gray-500" />
-                        )}
-                    </div>
-
-                    {/* Orientation Toggle Button - Separate row in vertical mode */}
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={toggleOrientation}
-                        className={`h-8 ${isVertical ? 'w-8' : 'w-8'} p-0 bg-white hover:bg-gray-50 border-gray-300 flex items-center justify-center`}
-                        title={isVertical ? "Switch to Horizontal" : "Switch to Vertical"}
-                    >
-                        {isVertical ? <ArrowLeftRight className="w-4 h-4" /> : <ArrowUpDown className="w-4 h-4" />}
-                    </Button>
-                </div>
-
-                <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>
-
                 {/* ESSENTIAL FORMATTING - Always visible */}
-                <div className={`flex ${isVertical ? 'flex-col gap-1 items-center' : 'items-center gap-0.5'} flex-shrink-0`}>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
                     {/* Basic Text Formatting */}
                     <Button variant="outline" size="sm"
                         onClick={() => {
@@ -1171,131 +704,156 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                             }
                         }}
                         disabled={isEditingDisabled}
-                        className={`h-8 w-8 p-0 ${isActive('bold') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                        className={`h-7 w-7 p-0 ${isActive('bold') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                             } ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                         title="Bold"
                     >
-                        <Bold className="w-4 h-4" />
+                        <Bold className="w-3.5 h-3.5" />
                     </Button>
 
                     <Button variant="outline" size="sm"
                         onClick={() => editor.chain().focus().toggleItalic().run()}
-                        className={`h-8 w-8 p-0 ${isActive('italic') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                        className={`h-7 w-7 p-0 ${isActive('italic') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                             }`}
                         title="Italic"
                     >
-                        <Italic className="w-4 h-4" />
+                        <Italic className="w-3.5 h-3.5" />
                     </Button>
 
                     <Button variant="outline" size="sm"
                         onClick={() => editor.chain().focus().toggleUnderline().run()}
-                        className={`h-8 w-8 p-0 ${isActive('underline') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                        className={`h-7 w-7 p-0 ${isActive('underline') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                             }`}
                         title="Underline"
                     >
-                        <Underline className="w-4 h-4" />
+                        <Underline className="w-3.5 h-3.5" />
                     </Button>
 
                     <Button variant="outline" size="sm"
                         onClick={() => editor.chain().focus().toggleStrike().run()}
-                        className={`h-8 w-8 p-0 ${isActive('strike') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                        className={`h-7 w-7 p-0 ${isActive('strike') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                             }`}
                         title="Strikethrough"
                     >
-                        <Strikethrough className="w-4 h-4" />
+                        <Strikethrough className="w-3.5 h-3.5" />
                     </Button>
 
                     <Button variant="outline" size="sm"
                         onClick={() => editor.chain().focus().toggleCode().run()}
-                        className={`h-8 w-8 p-0 ${isActive('code') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                        className={`h-7 w-7 p-0 ${isActive('code') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                             }`}
                         title="Inline Code"
                     >
-                        <Code className="w-4 h-4" />
+                        <Code className="w-3.5 h-3.5" />
                     </Button>
 
-                    <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>
+                    {shouldShowHeadingSelector && <div className={'w-px h-6 bg-gray-300 mx-0.5'}></div>}
 
                     {/* Headings & Blocks Dropdown */}
-                    <Select
-                        value={
-                            isActive('heading', { level: 1 }) ? 'h1' :
-                                isActive('heading', { level: 2 }) ? 'h2' :
-                                    isActive('heading', { level: 3 }) ? 'h3' :
-                                        isActive('heading', { level: 4 }) ? 'h4' :
-                                            isActive('heading', { level: 5 }) ? 'h5' :
-                                                isActive('blockquote') ? 'blockquote' :
-                                                    isActive('codeBlock') ? 'codeBlock' : 'paragraph'
-                        }
-                        onValueChange={(value) => {
-                            // Determine current selection or cursor position
+                    {shouldShowHeadingSelector && (
+                        <Select
+                            value={
+                                isActive('heading', { level: 1 }) ? 'h1' :
+                                    isActive('heading', { level: 2 }) ? 'h2' :
+                                        isActive('heading', { level: 3 }) ? 'h3' :
+                                            isActive('heading', { level: 4 }) ? 'h4' :
+                                                isActive('heading', { level: 5 }) ? 'h5' :
+                                                    isActive('blockquote') ? 'blockquote' :
+                                                        isActive('codeBlock') ? 'codeBlock' : 'paragraph'
+                            }
+                            onValueChange={(value) => {
+                                // Get current selection
+                                const { state } = editor;
+                                const { from, to } = state.selection;
+                                const hasSelection = from !== to;
 
-                            // Helper to apply an exclusive block type
-                            const applyExclusive = (target: 'paragraph' | 'blockquote' | 'codeBlock' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5') => {
-                                const c = editor.chain().focus();
-                                // Clear conflicting wrappers first
-                                if (target !== 'codeBlock' && editor.isActive('codeBlock')) c.toggleCodeBlock();
-                                if (target !== 'blockquote' && editor.isActive('blockquote')) c.toggleBlockquote();
+                                // Helper to apply a block type to the current selection or block
+                                const applyBlockType = (target: 'paragraph' | 'blockquote' | 'codeBlock' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5') => {
+                                    // Store the original selection range
+                                    const originalFrom = from;
+                                    const originalTo = to;
 
-                                // Normalize to paragraph before applying target to avoid mixed states
-                                c.setParagraph();
+                                    if (!hasSelection) {
+                                        // No selection - apply to current block
+                                        const c = editor.chain().focus();
 
-                                switch (target) {
-                                    case 'paragraph':
-                                        // already set above
-                                        break;
-                                    case 'blockquote':
-                                        c.toggleBlockquote();
-                                        break;
-                                    case 'codeBlock':
-                                        c.toggleCodeBlock();
-                                        break;
-                                    case 'h1':
-                                        c.toggleHeading({ level: 1 });
-                                        break;
-                                    case 'h2':
-                                        c.toggleHeading({ level: 2 });
-                                        break;
-                                    case 'h3':
-                                        c.toggleHeading({ level: 3 });
-                                        break;
-                                    case 'h4':
-                                        c.toggleHeading({ level: 4 });
-                                        break;
-                                    case 'h5':
-                                        c.toggleHeading({ level: 5 });
-                                        break;
+                                        // Clear conflicting types first
+                                        if (target !== 'codeBlock' && editor.isActive('codeBlock')) c.toggleCodeBlock();
+                                        if (target !== 'blockquote' && editor.isActive('blockquote')) c.toggleBlockquote();
+                                        if (target === 'paragraph' && editor.isActive('heading')) c.setParagraph();
+
+                                        switch (target) {
+                                            case 'paragraph':
+                                                c.setParagraph();
+                                                break;
+                                            case 'blockquote':
+                                                c.setBlockquote();
+                                                break;
+                                            case 'codeBlock':
+                                                c.setCodeBlock();
+                                                break;
+                                            case 'h1':
+                                                c.setHeading({ level: 1 });
+                                                break;
+                                            case 'h2':
+                                                c.setHeading({ level: 2 });
+                                                break;
+                                            case 'h3':
+                                                c.setHeading({ level: 3 });
+                                                break;
+                                            case 'h4':
+                                                c.setHeading({ level: 4 });
+                                                break;
+                                            case 'h5':
+                                                c.setHeading({ level: 5 });
+                                                break;
+                                        }
+                                        c.run();
+                                    } else {
+                                        // Has selection - apply to all blocks in selection
+                                        const chain = editor.chain().focus();
+
+                                        // Use setNode for block types which will apply to all selected blocks
+                                        switch (target) {
+                                            case 'paragraph':
+                                                chain.setParagraph();
+                                                break;
+                                            case 'blockquote':
+                                                // First convert to paragraphs, then wrap in blockquote
+                                                chain.setParagraph().setBlockquote();
+                                                break;
+                                            case 'codeBlock':
+                                                chain.setCodeBlock();
+                                                break;
+                                            default:
+                                                // For headings, extract the level
+                                                const level = parseInt(target.charAt(1)) as 1 | 2 | 3 | 4 | 5;
+                                                chain.setHeading({ level });
+                                                break;
+                                        }
+
+                                        // Run the command
+                                        chain.run();
+
+                                        // Restore the text selection after applying block type
+                                        // Use requestAnimationFrame to ensure dropdown is closed first
+                                        requestAnimationFrame(() => {
+                                            requestAnimationFrame(() => {
+                                                editor.chain().focus().setTextSelection({ from: originalFrom, to: originalTo }).run();
+                                            });
+                                        });
+                                    }
+                                };
+
+                                // Apply the selected block type
+                                if (value === 'paragraph' || value === 'h1' || value === 'h2' || value === 'h3' || value === 'h4' || value === 'h5' || value === 'blockquote' || value === 'codeBlock') {
+                                    applyBlockType(value as any);
                                 }
-                                c.run();
-                            };
-
-                            // Headings & Paragraph: if no selection, act on current block to improve UX
-                            if (value === 'paragraph' || value === 'h1' || value === 'h2' || value === 'h3' || value === 'h4' || value === 'h5') {
-                                applyExclusive(value as any);
-                                return;
-                            }
-
-                            // Quote & Code Block may apply to the current block even without selection
-                            if (value === 'blockquote' || value === 'codeBlock') {
-                                applyExclusive(value as any);
-                                return;
-                            }
-                        }}
-                    >
-                        <SelectTrigger className={isVertical ? "w-8 h-8 p-0 [&>svg]:hidden flex items-center justify-center" : "w-[150px] h-8 text-sm"}>
-                            <SelectValue>
-                                {isVertical ? (
-                                    // Icon-only display in vertical mode
-                                    isActive('heading', { level: 1 }) ? <span className="text-lg font-bold">H1</span> :
-                                        isActive('heading', { level: 2 }) ? <span className="text-base font-bold">H2</span> :
-                                            isActive('heading', { level: 3 }) ? <span className="text-sm font-bold">H3</span> :
-                                                isActive('heading', { level: 4 }) ? <span className="text-xs font-bold">H4</span> :
-                                                    isActive('heading', { level: 5 }) ? <span className="text-xs font-bold">H5</span> :
-                                                        isActive('blockquote') ? <Quote className="w-4 h-4" /> :
-                                                            isActive('codeBlock') ? <Code className="w-4 h-4" /> :
-                                                                <span className="text-sm font-normal">P</span>
-                                ) : (
-                                    // Full text display in horizontal mode
+                            }}
+                        >
+                            <SelectTrigger data-size="" className="w-[120px] h-7 text-xs">
+                                <SelectValue>
+                                    {/* Full text display in horizontal mode */}
                                     <>
                                         {isActive('heading', { level: 1 }) && "Heading 1"}
                                         {isActive('heading', { level: 2 }) && "Heading 2"}
@@ -1306,219 +864,144 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                         {isActive('codeBlock') && "Code Block"}
                                         {(!isActive('heading') && !isActive('blockquote') && !isActive('codeBlock')) && "Paragraph"}
                                     </>
-                                )}
-                            </SelectValue>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="paragraph">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm font-normal">P</span>
-                                    <span>Paragraph</span>
-                                </div>
-                            </SelectItem>
-                            <SelectItem value="h1">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-lg font-bold">H1</span>
-                                    <span>Heading 1</span>
-                                </div>
-                            </SelectItem>
-                            <SelectItem value="h2">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-base font-bold">H2</span>
-                                    <span>Heading 2</span>
-                                </div>
-                            </SelectItem>
-                            <SelectItem value="h3">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-sm font-bold">H3</span>
-                                    <span>Heading 3</span>
-                                </div>
-                            </SelectItem>
-                            <SelectItem value="h4">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold">H4</span>
-                                    <span>Heading 4</span>
-                                </div>
-                            </SelectItem>
-                            <SelectItem value="h5">
-                                <div className="flex items-center gap-2">
-                                    <span className="text-xs font-bold">H5</span>
-                                    <span>Heading 5</span>
-                                </div>
-                            </SelectItem>
-                            <SelectItem value="blockquote">
-                                <div className="flex items-center gap-2">
-                                    <Quote className="w-4 h-4" />
-                                    <span>Quote</span>
-                                </div>
-                            </SelectItem>
-                            <SelectItem value="codeBlock">
-                                <div className="flex items-center gap-2">
-                                    <Code className="w-4 h-4" />
-                                    <span>Code Block</span>
-                                </div>
-                            </SelectItem>
-                        </SelectContent>
-                    </Select>
+                                </SelectValue>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="paragraph">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-normal">P</span>
+                                        <span>Paragraph</span>
+                                    </div>
+                                </SelectItem>
+                                <SelectItem value="h1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg font-bold">H1</span>
+                                        <span>Heading 1</span>
+                                    </div>
+                                </SelectItem>
+                                <SelectItem value="h2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-base font-bold">H2</span>
+                                        <span>Heading 2</span>
+                                    </div>
+                                </SelectItem>
+                                <SelectItem value="h3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-bold">H3</span>
+                                        <span>Heading 3</span>
+                                    </div>
+                                </SelectItem>
+                                <SelectItem value="h4">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold">H4</span>
+                                        <span>Heading 4</span>
+                                    </div>
+                                </SelectItem>
+                                <SelectItem value="h5">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold">H5</span>
+                                        <span>Heading 5</span>
+                                    </div>
+                                </SelectItem>
+                                <SelectItem value="blockquote">
+                                    <div className="flex items-center gap-2">
+                                        <Quote className="w-3.5 h-3.5" />
+                                        <span>Quote</span>
+                                    </div>
+                                </SelectItem>
+                                <SelectItem value="codeBlock">
+                                    <div className="flex items-center gap-2">
+                                        <Code className="w-3.5 h-3.5" />
+                                        <span>Code Block</span>
+                                    </div>
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                    )}
 
-                    <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>
+                    {shouldShowFontControls && <div className={'w-px h-6 bg-gray-300 mx-0.5'}></div>}
 
                     {/* Font Styling - Bookmark-style hiding */}
-                    {true && ( // Font family always visible
-                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
-                            {isVertical ? (
-                                // Vertical mode: Popover with icon trigger showing font list
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className={`h-8 w-8 p-0 flex items-center justify-center ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                            disabled={isEditingDisabled}
-                                            title="Font Family"
-                                        >
-                                            <Type className="w-4 h-4" />
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent side="right" align="center" className="w-48 p-2">
-                                        <div className="space-y-1">
-                                            <h4 className="text-xs font-medium text-gray-700 mb-2">Font Family</h4>
-                                            {FONT_FAMILIES.map(f => (
-                                                <button
-                                                    key={f}
-                                                    onClick={() => {
-                                                        if (!isEditingDisabled) {
-                                                            editor.chain().focus().setFontFamily(f).run();
-                                                            setCurrentFontFamily(f);
-                                                        }
-                                                    }}
-                                                    className={`w-full text-left px-3 py-2 text-sm rounded hover:bg-gray-100 transition-colors ${currentFontFamily === f ? 'bg-blue-50 text-blue-700 font-medium' : ''
-                                                        }`}
-                                                    style={{ fontFamily: f }}
-                                                >
-                                                    {f}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                            ) : (
-                                // Horizontal mode: Dropdown selector
+                    {shouldShowFontControls && ( // Font family always visible
+                        <div className={`flex items-center gap-0.5`}>
+                            {/* Horizontal mode: Dropdown selector */}
+                            <Select
+                                value={isEditingDisabled ? '' : currentFontFamily}
+                                onValueChange={(value) => {
+                                    if (!isEditingDisabled) {
+                                        editor.chain().focus().setFontFamily(value).run();
+                                        setCurrentFontFamily(value);
+                                    }
+                                }}
+                                disabled={isEditingDisabled}
+                            >
+                                <SelectTrigger data-size="" className={`w-[140px] h-7.5 text-xs ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                    <SelectValue placeholder={isEditingDisabled ? '' : currentFontFamily} />
+                                </SelectTrigger>
+                                <SelectContent side="bottom">
+                                    {FONT_FAMILIES.map(f => (
+                                        <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
+
+                    {shouldShowFontControls && ( // Font size always visible
+                        <div className={`flex items-center gap-0.5`}>
+                            {/* Font Size Input with Dropdown - Horizontal mode: full input + dropdown */}
+                            <div className="relative flex items-center">
+                                <input
+                                    type="text"
+                                    value={isEditingDisabled ? '' : fontSizeInput}
+                                    onChange={(e) => {
+                                        if (!isEditingDisabled) {
+                                            handleFontSizeChange(e.target.value);
+                                        }
+                                    }}
+                                    onKeyDown={handleFontSizeKeyDown}
+                                    onBlur={handleFontSizeBlur}
+                                    onFocus={() => setIsTyping(true)}
+                                    disabled={isEditingDisabled}
+                                    placeholder={isEditingDisabled ? '' : '16'}
+                                    className={`w-14 h-7.5 text-xs text-center border border-gray-300 rounded-l-md bg-white mr-0
+                                       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`}
+                                />
                                 <Select
-                                    value={isEditingDisabled ? '' : currentFontFamily}
+                                    value={isEditingDisabled ? '' : fontSizeInput}
                                     onValueChange={(value) => {
                                         if (!isEditingDisabled) {
-                                            editor.chain().focus().setFontFamily(value).run();
-                                            setCurrentFontFamily(value);
+                                            setIsTyping(false);
+                                            applyFontSize(value);
                                         }
                                     }}
                                     disabled={isEditingDisabled}
                                 >
-                                    <SelectTrigger className={`w-[140px] h-8 text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                                        <SelectValue placeholder={isEditingDisabled ? '' : currentFontFamily} />
+                                    <SelectTrigger className={`h-7.5 w-6 border border-l-0 border-gray-300 rounded-l-none rounded-r-md bg-white p-0 flex items-center justify-center [&>svg]:w-3 [&>svg]:h-3
+   ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'outline-none focus:ring-offset-0 focus:outline-none hover:bg-gray-50 focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`} data-size="">
                                     </SelectTrigger>
-                                    <SelectContent side="bottom">
-                                        {FONT_FAMILIES.map(f => (
-                                            <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
+                                    <SelectContent align="center" side="bottom" className="w-20">
+                                        {['4', '6', '8', '10', '12', '16', '20', '24', '28', '36', '48', '64', '72', '96'].map(size => (
+                                            <SelectItem key={size} value={size}>
+                                                {size}
+                                            </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
-                            )}
+                            </div>
                         </div>
                     )}
 
-                    {true && ( // Font size always visible
-                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
-                            {/* Font Size Input with Dropdown - Unified Implementation */}
-                            {isVertical ? (
-                                // Vertical mode: Button that opens popover to pick size
-                                <Popover open={showFontSizePopover} onOpenChange={setShowFontSizePopover}>
-                                    <PopoverTrigger asChild>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className={`h-8 w-8 p-0 flex items-center justify-center text-xs font-medium ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                            disabled={isEditingDisabled}
-                                            title={`Font Size: ${fontSizeInput}px`}
-                                        >
-                                            {fontSizeInput}
-                                        </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent side="right" align="center" className="w-20 p-2">
-                                        <div className="space-y-1">
-                                            <h4 className="text-xs font-medium text-gray-700 mb-2">Size</h4>
-                                            {['4', '6', '8', '10', '12', '14', '16', '18', '20', '24', '28', '32', '36', '48', '64', '72', '96'].map(size => (
-                                                <button
-                                                    key={size}
-                                                    onClick={() => {
-                                                        setIsTyping(false);
-                                                        applyFontSize(size);
-                                                        setShowFontSizePopover(false);
-                                                    }}
-                                                    className={`w-full text-center px-2 py-1.5 text-sm rounded hover:bg-gray-100 transition-colors ${fontSizeInput === size ? 'bg-blue-50 text-blue-700 font-medium' : ''
-                                                        }`}
-                                                >
-                                                    {size}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </PopoverContent>
-                                </Popover>
-                            ) : (
-                                // Horizontal mode: full input + dropdown
-                                <div className="relative flex items-center">
-                                    <input
-                                        type="text"
-                                        value={isEditingDisabled ? '' : fontSizeInput}
-                                        onChange={(e) => {
-                                            if (!isEditingDisabled) {
-                                                handleFontSizeChange(e.target.value);
-                                            }
-                                        }}
-                                        onKeyDown={handleFontSizeKeyDown}
-                                        onBlur={handleFontSizeBlur}
-                                        onFocus={() => setIsTyping(true)}
-                                        disabled={isEditingDisabled}
-                                        placeholder={isEditingDisabled ? '' : '16'}
-                                        className={`w-14 h-8 text-sm text-center border border-gray-300 rounded-l-md bg-white mr-0
-                                           ${isEditingDisabled ? 'opacity-50 cursor-not-allowed bg-gray-50' : 'hover:border-gray-400 focus:outline-none focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`}
-                                    />
-                                    <Select
-                                        value={isEditingDisabled ? '' : fontSizeInput}
-                                        onValueChange={(value) => {
-                                            if (!isEditingDisabled) {
-                                                setIsTyping(false);
-                                                applyFontSize(value);
-                                            }
-                                        }}
-                                        disabled={isEditingDisabled}
-                                    >
-                                        <SelectTrigger className={`h-8 w-6 border border-l-0 border-gray-300 rounded-l-none rounded-r-md bg-white p-0 flex items-center justify-center [&>svg]:w-3 [&>svg]:h-3
-       ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : 'outline-none focus:ring-offset-0 focus:outline-none hover:bg-gray-50 focus:border-blue-400 focus:ring-1 focus:ring-blue-200'}`} data-size="">
-                                        </SelectTrigger>
-                                        <SelectContent align="center" side="bottom" className="w-20">
-                                            {['4', '6', '8', '10', '12', '16', '20', '24', '28', '36', '48', '64', '72', '96'].map(size => (
-                                                <SelectItem key={size} value={size}>
-                                                    {size}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
-                        </div>
-                    )}
-
-                    {true && ( // Text color always visible
-                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
-                            <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>
+                    {shouldShowFontControls && ( // Text color always visible
+                        <div className={`flex items-center gap-0.5`}>
+                            <div className={'w-px h-6 bg-gray-300 mx-0.5'}></div>
 
                             {/* Text Color with current color indicator */}
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <div className="h-8 w-8 p-0  flex flex-col justify-center items-center relative">
+                                    <div className="h-7 w-7 p-0  flex flex-col justify-center items-center relative">
                                         <Button variant="outline" size="sm"
-                                            className="h-7 w-8 bg-white hover:bg-gray-50"
+                                            className="h-6.5 w-7 bg-white hover:bg-gray-50"
                                             title="Text Color"
                                             disabled={isEditingDisabled}
                                         >
@@ -1528,7 +1011,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                                 }} />
                                         </Button>
                                         <div
-                                            className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
+                                            className="w-5 h-0.5 mt-0.5 p-[1px] rounded-sm border border-gray-300"
                                             style={{
                                                 backgroundColor: isEditingDisabled ? 'transparent' : currentTextColor,
                                                 borderColor: currentTextColor ? 'transparent' : '#d1d5db'
@@ -1536,14 +1019,14 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                         />
                                     </div>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-64 p-4" side={isVertical ? "right" : "bottom"} align="center">
+                                <PopoverContent className="w-64 p-4" side="bottom" align="center">
                                     <div className="space-y-3">
                                         <h4 className="text-sm font-medium text-gray-700">Text Color</h4>
 
                                         {/* Default Color */}
                                         <div className="flex items-center gap-2">
                                             <button
-                                                className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
+                                                className="w-8 h-7 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
                                                 onClick={() => {
                                                     if (!isEditingDisabled) {
                                                         editor.chain().focus().unsetColor().run();
@@ -1624,13 +1107,13 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     )}
 
                     {/* Background Color with current color indicator */}
-                    {true && ( // Background color always visible
-                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
+                    {shouldShowFontControls && ( // Background color always visible
+                        <div className={`flex items-center gap-0.5`}>
                             <Popover>
                                 <PopoverTrigger asChild>
-                                    <div className="h-8 w-8 p-0 flex flex-col justify-center items-center relative">
+                                    <div className="h-7 w-7 p-0 flex flex-col justify-center items-center relative">
                                         <Button variant="outline" size="sm"
-                                            className="w-8 h-7 bg-white hover:bg-gray-50"
+                                            className="w-7 h-6.5 bg-white hover:bg-gray-50"
                                             title="Background Color"
                                             disabled={isEditingDisabled}
                                             style={{
@@ -1640,7 +1123,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                             <Palette className="w-3 h-3" />
                                         </Button>
                                         <div
-                                            className="w-7 h-1 mt-0.5 p-[1px] rounded-sm border border-gray-300"
+                                            className="w-5 h-0.5 mt-0.5 p-[1px] rounded-sm border border-gray-300"
                                             style={{
                                                 backgroundColor: isEditingDisabled ? 'transparent' : (currentBackgroundColor || '#ffffff'),
                                                 borderColor: currentBackgroundColor ? 'transparent' : '#d1d5db'
@@ -1648,7 +1131,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                         />
                                     </div>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-80 p-4" side={isVertical ? "right" : "bottom"} align="center">
+                                <PopoverContent className="w-80 p-4" side="bottom" align="center">
                                     <div className="space-y-4">
                                         <h4 className="text-sm font-medium text-gray-700">Background Color</h4>
 
@@ -1663,7 +1146,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                         {/* Default Background */}
                                         <div className="flex items-center gap-2">
                                             <button
-                                                className="w-8 h-8 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
+                                                className="w-8 h-7 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-sm font-medium shadow-sm"
                                                 onClick={() => {
                                                     if (!isEditingDisabled) {
                                                         if (editor?.isActive('tableCell')) {
@@ -1681,7 +1164,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                                 }}
                                                 title="No Background"
                                             >
-                                                ✕
+                                                �?
                                             </button>
                                             <span className="text-xs text-gray-500">No Background</span>
                                         </div>
@@ -1743,7 +1226,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                                     ].map(({ color, name }) => (
                                                         <button
                                                             key={color}
-                                                            className="w-8 h-8 rounded border border-gray-300 hover:scale-110 transition-transform"
+                                                            className="w-8 h-7 rounded border border-gray-300 hover:scale-110 transition-transform"
                                                             style={{ backgroundColor: color }}
                                                             onClick={() => {
                                                                 if (!isEditingDisabled) {
@@ -1770,11 +1253,11 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     )}
 
                     {/* Separator before Text Alignment - only show if alignment is visible */}
-                    {shouldShowTextAlign && <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>}
+                    {shouldShowTextAlign && <div className={'w-px h-6 bg-gray-300 mx-0.5'}></div>}
 
                     {/* Text Alignment */}
                     {shouldShowTextAlign && (
-                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
+                        <div className={`flex items-center gap-0.5`}>
                             <Select
                                 value={
                                     editor.isActive({ textAlign: 'center' }) ? 'center' :
@@ -1785,15 +1268,15 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                     editor.chain().focus().setTextAlign(value).run();
                                 }}
                             >
-                                <SelectTrigger className="w-16 h-8 px-4 border border-gray-300 bg-white hover:bg-gray-50 [&>svg]:hidden">
+                                <SelectTrigger className="w-14 h-7.5 px-4 border border-gray-300 bg-white hover:bg-gray-50 [&>svg]:hidden" data-size="">
                                     <div className="flex items-center justify-between w-full">
                                         <div className="flex items-center">
-                                            {editor.isActive({ textAlign: 'center' }) && <AlignCenter className="w-4 h-4" />}
-                                            {editor.isActive({ textAlign: 'right' }) && <AlignRight className="w-4 h-4" />}
-                                            {editor.isActive({ textAlign: 'justify' }) && <AlignJustify className="w-4 h-4" />}
+                                            {editor.isActive({ textAlign: 'center' }) && <AlignCenter className="w-3.5 h-3.5" />}
+                                            {editor.isActive({ textAlign: 'right' }) && <AlignRight className="w-3.5 h-3.5" />}
+                                            {editor.isActive({ textAlign: 'justify' }) && <AlignJustify className="w-3.5 h-3.5" />}
                                             {(!editor.isActive({ textAlign: 'center' }) &&
                                                 !editor.isActive({ textAlign: 'right' }) &&
-                                                !editor.isActive({ textAlign: 'justify' })) && <AlignLeft className="w-4 h-4" />}
+                                                !editor.isActive({ textAlign: 'justify' })) && <AlignLeft className="w-3.5 h-3.5" />}
                                         </div>
                                         <ChevronDown className="w-3 h-3 ml-1 text-gray-500" />
                                     </div>
@@ -1801,25 +1284,25 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                 <SelectContent>
                                     <SelectItem value="left">
                                         <div className="flex items-center gap-2">
-                                            <AlignLeft className="w-4 h-4" />
+                                            <AlignLeft className="w-3.5 h-3.5" />
                                             <span>Left</span>
                                         </div>
                                     </SelectItem>
                                     <SelectItem value="center">
                                         <div className="flex items-center gap-2">
-                                            <AlignCenter className="w-4 h-4" />
+                                            <AlignCenter className="w-3.5 h-3.5" />
                                             <span>Center</span>
                                         </div>
                                     </SelectItem>
                                     <SelectItem value="right">
                                         <div className="flex items-center gap-2">
-                                            <AlignRight className="w-4 h-4" />
+                                            <AlignRight className="w-3.5 h-3.5" />
                                             <span>Right</span>
                                         </div>
                                     </SelectItem>
                                     <SelectItem value="justify">
                                         <div className="flex items-center gap-2">
-                                            <AlignJustify className="w-4 h-4" />
+                                            <AlignJustify className="w-3.5 h-3.5" />
                                             <span>Justify</span>
                                         </div>
                                     </SelectItem>
@@ -1829,41 +1312,41 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                     )}
 
                     {/* Separator before Lists - only show if lists are visible */}
-                    {shouldShowLists && <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>}
+                    {shouldShowLists && <div className={'w-px h-6 bg-gray-300 mx-0.5'}></div>}
 
                     {/* Essential Lists */}
                     {shouldShowLists && (
                         <>
                             <Button variant="outline" size="sm"
                                 onClick={() => editor.chain().focus().toggleBulletList().run()}
-                                className={`h-8 w-8 p-0 ${isActive('bulletList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                                className={`h-7 w-7 p-0 ${isActive('bulletList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                                     }`}
                                 title="Bullet List"
                             >
-                                <List className="w-4 h-4" />
+                                <List className="w-3.5 h-3.5" />
                             </Button>
 
                             <Button variant="outline" size="sm"
                                 onClick={() => editor.chain().focus().toggleOrderedList().run()}
-                                className={`h-8 w-8 p-0 ${isActive('orderedList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                                className={`h-7 w-7 p-0 ${isActive('orderedList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                                     }`}
                                 title="Numbered List"
                             >
-                                <ListOrdered className="w-4 h-4" />
+                                <ListOrdered className="w-3.5 h-3.5" />
                             </Button>
                             <Button variant="outline"
                                 onClick={() => editor.chain().focus().toggleTaskList().run()}
-                                className={`h-8 w-8 p-0 ${isActive('taskList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
+                                className={`h-7 w-7 p-0 ${isActive('taskList') ? 'bg-blue-100 text-blue-600 border-blue-300' : 'bg-white hover:bg-gray-50'
                                     }`}
                                 title="Task List"
                             >
-                                <CheckSquare className="w-4 h-4" />
+                                <CheckSquare className="w-3.5 h-3.5" />
                             </Button>
                         </>
                     )}
 
                     {/* Separator before Indent - only show if indent is visible */}
-                    {shouldShowIndent && <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>}
+                    {shouldShowIndent && <div className={'w-px h-6 bg-gray-300 mx-0.5'}></div>}
 
                     {/* Indentation Controls */}
                     {shouldShowIndent && (
@@ -1892,10 +1375,10 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                     }
                                 }}
                                 disabled={isEditingDisabled}
-                                className={`h-8 w-8 p-0 rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`h-7 w-7 p-0 rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 title="Indent"
                             >
-                                <IndentIncrease className="w-4 h-4" />
+                                <IndentIncrease className="w-3.5 h-3.5" />
                             </Button>
 
                             <Button variant="outline"
@@ -1909,10 +1392,10 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                     }
                                 }}
                                 disabled={isEditingDisabled}
-                                className={`h-8 w-8 p-0  rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                className={`h-7 w-7 p-0  rounded-md bg-white hover:bg-gray-50 transition-colors text-sm ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                                 title="Outdent"
                             >
-                                <IndentDecrease className="w-4 h-4" />
+                                <IndentDecrease className="w-3.5 h-3.5" />
                             </Button>
                         </>
                     )}
@@ -1926,36 +1409,63 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                 }
                             }}
                             disabled={isEditingDisabled}
-                            className={`h-8 w-8 p-0 bg-white hover:bg-gray-50 ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            className={`h-7 w-7 p-0 bg-white hover:bg-gray-50 ${isEditingDisabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                             title="Clear All Formatting"
                         >
-                            <Eraser className="w-4 h-4" />
+                            <Eraser className="w-3.5 h-3.5" />
                         </Button>
                     )}
 
                     {/* Separator before Insert Options - only show if insert options are visible */}
-                    {shouldShowInsertOptions && <div className={isVertical ? 'h-px w-full bg-gray-200 my-1' : 'w-px h-6 bg-gray-300 mx-0.5'}></div>}
+                    {shouldShowInsertOptions && <div className={'w-px h-6 bg-gray-300 mx-0.5'}></div>}
 
                     {/* INSERT OPTIONS */}
                     {shouldShowInsertOptions && (
-                        <div className={`flex ${isVertical ? 'flex-col gap-1' : 'items-center gap-0.5'}`}>
+                        <div className={`flex items-center gap-0.5`}>
                             {/* Table Grid Selector */}
-                            <Popover>
+                            <Popover open={tablePopoverOpen} onOpenChange={setTablePopoverOpen}>
                                 <PopoverTrigger asChild>
                                     <Button variant="outline" size="sm"
-                                        className={isVertical ? "h-8 w-8 p-0" : "flex items-center gap-1.5 px-2 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"}
+                                        className="flex items-center gap-1.5 px-2 py-1 h-7 rounded-md hover:bg-gray-100 transition-colors text-sm"
                                         title="Insert Table"
+                                        onMouseEnter={() => {
+                                            if (tablePopoverTimerRef.current) {
+                                                clearTimeout(tablePopoverTimerRef.current);
+                                            }
+                                            setTablePopoverOpen(true);
+                                        }}
+                                        onMouseLeave={() => {
+                                            tablePopoverTimerRef.current = setTimeout(() => {
+                                                setTablePopoverOpen(false);
+                                            }, 300);
+                                        }}
                                     >
-                                        <Table className="w-4 h-4" />
-                                        {!isVertical && <span className="hidden lg:inline">Table</span>}
+                                        <Table className="w-3.5 h-3.5" />
+                                        <span className="hidden lg:inline">Table</span>
                                     </Button>
                                 </PopoverTrigger>
-                                <PopoverContent className="w-64 p-4" side={isVertical ? "right" : "bottom"} align="start">
+                                <PopoverContent
+                                    className="w-64 p-4"
+                                    side="bottom"
+                                    align="start"
+                                    onMouseEnter={() => {
+                                        if (tablePopoverTimerRef.current) {
+                                            clearTimeout(tablePopoverTimerRef.current);
+                                        }
+                                        setTablePopoverOpen(true);
+                                    }}
+                                    onMouseLeave={() => {
+                                        tablePopoverTimerRef.current = setTimeout(() => {
+                                            setTablePopoverOpen(false);
+                                        }, 300);
+                                    }}
+                                >
                                     <div className="space-y-3">
                                         <h4 className="text-sm font-medium text-gray-700">Insert Table</h4>
                                         <TableGridSelector
                                             onSelect={(rows, cols) => {
                                                 editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+                                                setTablePopoverOpen(false);
                                             }}
                                         />
                                     </div>
@@ -1965,20 +1475,45 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                             <Button variant="outline" size="sm"
                                 onClick={() => {
                                     const defaultChart = `graph TD
-                                                    A[Start] --> B{Decision}
-                                                    B -->|Yes| C[Do something]
-                                                    B -->|No| D[Do something else]
-                                                    C --> E[End]
-                                                    D --> E`;
+A[Start] --> B{Decision}
+B -->|Yes| C[Do something]
+B -->|No| D[Do something else]
+C --> E[End]
+D --> E`;
 
                                     // Insert a Mermaid code block directly instead of using prompt
                                     editor?.chain().focus().toggleCodeBlock({ language: 'mermaid' }).insertContent(defaultChart).run();
                                 }}
-                                className={isVertical ? "h-8 w-8 p-0" : "flex items-center gap-1.5 px-2 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"}
+                                className="flex items-center gap-1.5 px-2 py-1 h-7 rounded-md hover:bg-gray-100 transition-colors text-sm"
                                 title="Insert Mermaid Diagram"
                             >
-                                <Network className="w-4 h-4" />
-                                {!isVertical && <span className="hidden lg:inline">Diagram</span>}
+                                <Network className="w-3.5 h-3.5" />
+                                <span className="hidden lg:inline">Diagram</span>
+                            </Button>
+
+                            <Button variant="outline" size="sm"
+                                onClick={() => {
+                                    const input = document.createElement('input');
+                                    input.type = 'file';
+                                    input.accept = 'image/*';
+                                    input.onchange = (e) => {
+                                        const file = (e.target as HTMLInputElement).files?.[0];
+                                        if (file) {
+                                            const reader = new FileReader();
+                                            reader.onload = () => {
+                                                const result = reader.result as string;
+                                                editor?.chain().focus().setImage({ src: result }).run();
+                                            };
+                                            reader.readAsDataURL(file);
+                                        }
+                                    };
+                                    input.click();
+                                }}
+                                className="flex items-center gap-1.5 px-2 py-1 h-7 rounded-md hover:bg-gray-100 transition-colors text-sm"
+                                title="Image"
+                            >
+                                <ImageIcon className="w-3.5 h-3.5" />
+                                <span className="hidden lg:inline">Image</span>
                             </Button>
 
                             <Button variant="outline" size="sm"
@@ -2022,22 +1557,22 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                         }
                                     }
                                 }}
-                                className={isVertical ? "h-8 w-8 p-0" : "flex items-center gap-1.5 px-2 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"}
+                                className="flex items-center gap-1.5 px-2 py-1 h-7 rounded-md hover:bg-gray-100 transition-colors text-sm"
                                 title="Insert Link"
                             >
-                                <Link className="w-4 h-4" />
-                                {!isVertical && <span className="hidden lg:inline">Link</span>}
+                                <Link className="w-3.5 h-3.5" />
+                                <span className="hidden lg:inline">Link</span>
                             </Button>
 
                             <Button variant="outline" size="sm"
                                 onClick={() => {
                                     editor?.chain().focus().setHorizontalRule().run();
                                 }}
-                                className={isVertical ? "h-8 w-8 p-0" : "flex items-center gap-1.5 px-2 py-1 h-8 rounded-md hover:bg-gray-100 transition-colors text-sm"}
+                                className="flex items-center gap-1.5 px-2 py-1 h-7 rounded-md hover:bg-gray-100 transition-colors text-sm"
                                 title="Insert Divider"
                             >
-                                <Minus className="w-4 h-4" />
-                                {!isVertical && <span className="hidden lg:inline">Divider</span>}
+                                <Minus className="w-3.5 h-3.5" />
+                                <span className="hidden lg:inline">Divider</span>
                             </Button>
                         </div>
                     )}
@@ -2046,7 +1581,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
                 {/* Spacing before More Options */}
                 {shouldShowMoreOptions && (
-                    <div className={isVertical ? 'h-2 w-full' : 'w-px h-6 bg-gray-300 mx-2'}></div>
+                    <div className={'w-px h-6 bg-gray-300 mx-2'}></div>
                 )}
 
                 {/* MORE OPTIONS DROPDOWN - Shows when sections are hidden due to narrow width */}
@@ -2058,7 +1593,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                     className="flex items-center px-2 h-8 bg-white hover:bg-gray-50"
                                     title="More Options"
                                 >
-                                    <MoreHorizontal className="w-4 h-4" />
+                                    <MoreHorizontal className="w-3.5 h-3.5" />
                                 </Button>
                             </DropdownMenuTrigger>
 
@@ -2069,29 +1604,177 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                             >
                                 {/* Categorized sections - only show categories when sections are hidden */}
 
+                                {/* HEADING SELECTOR CATEGORY */}
+                                {!shouldShowHeadingSelector && (
+                                    <>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                            Block Type
+                                        </div>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
+                                            <span className="text-sm font-normal mr-2">P</span>
+                                            <span>Paragraph</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().setHeading({ level: 1 }).run()}>
+                                            <span className="text-lg font-bold mr-2">H1</span>
+                                            <span>Heading 1</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().setHeading({ level: 2 }).run()}>
+                                            <span className="text-base font-bold mr-2">H2</span>
+                                            <span>Heading 2</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().setHeading({ level: 3 }).run()}>
+                                            <span className="text-sm font-bold mr-2">H3</span>
+                                            <span>Heading 3</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().setBlockquote().run()}>
+                                            <Quote className="w-3.5 h-3.5 mr-2" />
+                                            <span>Quote</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().setCodeBlock().run()}>
+                                            <Code className="w-3.5 h-3.5 mr-2" />
+                                            <span>Code Block</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
+
+                                {/* FONT CONTROLS CATEGORY */}
+                                {!shouldShowFontControls && (
+                                    <>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                            Font
+                                        </div>
+                                        <div className="px-2 py-2">
+                                            <div className="text-xs text-gray-500 mb-1">Font Family</div>
+                                            <Select
+                                                value={currentFontFamily}
+                                                onValueChange={(value) => {
+                                                    editor.chain().focus().setFontFamily(value).run();
+                                                    setCurrentFontFamily(value);
+                                                }}
+                                            >
+                                                <SelectTrigger className="w-full h-7 text-xs">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {FONT_FAMILIES.map(f => (
+                                                        <SelectItem key={f} value={f} style={{ fontFamily: f }}>{f}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <div className="px-2 py-2">
+                                            <div className="text-xs text-gray-500 mb-1">Font Size</div>
+                                            <Select
+                                                value={fontSizeInput}
+                                                onValueChange={(value) => {
+                                                    setIsTyping(false);
+                                                    applyFontSize(value);
+                                                }}
+                                            >
+                                                <SelectTrigger className="w-full h-7 text-xs">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {['4', '6', '8', '10', '12', '16', '20', '24', '28', '36', '48', '64', '72', '96'].map(size => (
+                                                        <SelectItem key={size} value={size}>{size}</SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
+
                                 {/* INSERT CATEGORY */}
                                 {!shouldShowInsertOptions && (
                                     <>
                                         <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
                                             Insert
                                         </div>
-                                        <DropdownMenuItem onClick={() => {
-                                            editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
-                                        }}>
-                                            <Table className="w-4 h-4 mr-2" />
-                                            <span>Table</span>
+                                        <DropdownMenuItem>
+                                            {/* Table Grid Selector */}
+                                            <Popover open={tablePopoverOpen} onOpenChange={setTablePopoverOpen}>
+                                                <PopoverTrigger asChild>
+                                                    <div data-variant="default" className="
+                                                           focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:!text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-4 rounded-sm px-0 py-0 text-sm outline-hidden [&_svg:not([class*='size-'])]:size-4
+                                                        "
+                                                        onMouseEnter={() => {
+                                                            if (tablePopoverTimerRef.current) {
+                                                                clearTimeout(tablePopoverTimerRef.current);
+                                                            }
+                                                            setTablePopoverOpen(true);
+                                                        }}
+                                                        onMouseLeave={() => {
+                                                            tablePopoverTimerRef.current = setTimeout(() => {
+                                                                setTablePopoverOpen(false);
+                                                            }, 300);
+                                                        }}
+                                                    >
+                                                        <Table className="w-3.5 h-3.5" />
+                                                        <span className="hidden lg:inline">Table</span>
+                                                    </div>
+                                                </PopoverTrigger>
+                                                <PopoverContent
+                                                    className="w-64 p-4"
+                                                    side="left"
+                                                    align="start"
+                                                    onMouseEnter={() => {
+                                                        if (tablePopoverTimerRef.current) {
+                                                            clearTimeout(tablePopoverTimerRef.current);
+                                                        }
+                                                        setTablePopoverOpen(true);
+                                                    }}
+                                                    onMouseLeave={() => {
+                                                        tablePopoverTimerRef.current = setTimeout(() => {
+                                                            setTablePopoverOpen(false);
+                                                        }, 300);
+                                                    }}
+                                                >
+                                                    <div className="space-y-3">
+                                                        <h4 className="text-sm font-medium text-gray-700">Insert Table</h4>
+                                                        <TableGridSelector
+                                                            onSelect={(rows, cols) => {
+                                                                editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
+                                                                setTablePopoverOpen(false);
+                                                            }}
+                                                        />
+                                                    </div>
+                                                </PopoverContent>
+                                            </Popover>
+
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => {
                                             const defaultChart = `graph TD
-    A[Start] --> B{Decision}
-    B -->|Yes| C[Do something]
-    B -->|No| D[Do something else]
-    C --> E[End]
-    D --> E`;
+A[Start] --> B{Decision}
+B -->|Yes| C[Do something]
+B -->|No| D[Do something else]
+C --> E[End]
+D --> E`;
                                             editor?.chain().focus().toggleCodeBlock({ language: 'mermaid' }).insertContent(defaultChart).run();
                                         }}>
-                                            <Network className="w-4 h-4 mr-2" />
+                                            <Network className="w-3.5 h-3.5 mr-2" />
                                             <span>Diagram</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => {
+                                            const input = document.createElement('input');
+                                            input.type = 'file';
+                                            input.accept = 'image/*';
+                                            input.onchange = (e) => {
+                                                const file = (e.target as HTMLInputElement).files?.[0];
+                                                if (file) {
+                                                    const reader = new FileReader();
+                                                    reader.onload = () => {
+                                                        const result = reader.result as string;
+                                                        editor?.chain().focus().setImage({ src: result }).run();
+                                                    };
+                                                    reader.readAsDataURL(file);
+                                                }
+                                            };
+                                            input.click();
+                                        }}>
+                                            <ImageIcon className="w-3.5 h-3.5 mr-2" />
+                                            <span>Image</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => {
                                             // Check if cursor is in a link
@@ -2133,13 +1816,13 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                                 }
                                             }
                                         }}>
-                                            <Link className="w-4 h-4 mr-2" />
+                                            <Link className="w-3.5 h-3.5 mr-2" />
                                             <span>Link</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => {
                                             editor?.chain().focus().setHorizontalRule().run();
                                         }}>
-                                            <Minus className="w-4 h-4 mr-2" />
+                                            <Minus className="w-3.5 h-3.5 mr-2" />
                                             <span>Divider</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
@@ -2153,19 +1836,19 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                             Alignment
                                         </div>
                                         <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('left').run()}>
-                                            <AlignLeft className="w-4 h-4 mr-2" />
+                                            <AlignLeft className="w-3.5 h-3.5 mr-2" />
                                             <span>Left</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('center').run()}>
-                                            <AlignCenter className="w-4 h-4 mr-2" />
+                                            <AlignCenter className="w-3.5 h-3.5 mr-2" />
                                             <span>Center</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('right').run()}>
-                                            <AlignRight className="w-4 h-4 mr-2" />
+                                            <AlignRight className="w-3.5 h-3.5 mr-2" />
                                             <span>Right</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('justify').run()}>
-                                            <AlignJustify className="w-4 h-4 mr-2" />
+                                            <AlignJustify className="w-3.5 h-3.5 mr-2" />
                                             <span>Justify</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
@@ -2201,7 +1884,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                                 }
                                             }
                                         }}>
-                                            <IndentIncrease className="w-4 h-4 mr-2" />
+                                            <IndentIncrease className="w-3.5 h-3.5 mr-2" />
                                             <span>Indent</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => {
@@ -2213,7 +1896,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                                 }
                                             }
                                         }}>
-                                            <IndentDecrease className="w-4 h-4 mr-2" />
+                                            <IndentDecrease className="w-3.5 h-3.5 mr-2" />
                                             <span>Outdent</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
@@ -2227,15 +1910,15 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                             List
                                         </div>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
-                                            <CheckSquare className="w-4 h-4 mr-2" />
+                                            <CheckSquare className="w-3.5 h-3.5 mr-2" />
                                             <span>Task List</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleBulletList().run()}>
-                                            <List className="w-4 h-4 mr-2" />
+                                            <List className="w-3.5 h-3.5 mr-2" />
                                             <span>Bullet List</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleOrderedList().run()}>
-                                            <ListOrdered className="w-4 h-4 mr-2" />
+                                            <ListOrdered className="w-3.5 h-3.5 mr-2" />
                                             <span>Ordered List</span>
                                         </DropdownMenuItem>
                                     </>
@@ -2252,7 +1935,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                                 editor.chain().focus().clearNodes().unsetAllMarks().run();
                                             }
                                         }}>
-                                            <Eraser className="w-4 h-4 mr-2" />
+                                            <Eraser className="w-3.5 h-3.5 mr-2" />
                                             <span>Clear Formatting</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
@@ -2268,3 +1951,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 }
 
 export default ToolBar;
+
+
+

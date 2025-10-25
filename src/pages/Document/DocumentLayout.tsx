@@ -16,7 +16,6 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import DocumentMenu from "@/components/Document/DocumentMenu";
 import NavigationPane from "@/components/Document/NavigationPane";
 import ChatSidebar from "@/components/Document/ChatSidebar";
-import SimpleShare from "@/components/Document/SimpleShare";
 import ProjectDocumentsDropdown from "@/components/Document/ProjectDocumentsDropdown";
 import { useDocument } from "@/context/DocumentContext";
 import { updateToolPreference } from "@/utils/documentToolsPreferences";
@@ -329,8 +328,6 @@ export default function DocumentLayout({
                             currentDocumentId={documentId}
                         />
 
-                        <div className="w-px h-5 bg-gray-300 mx-1 border-b"></div>
-
                         <Button
                             variant="outline"
                             size="sm"
@@ -340,10 +337,6 @@ export default function DocumentLayout({
                             <History className="w-4 h-4 mr-2" />
                             History
                         </Button>
-                        <SimpleShare
-                            documentTitle={documentTitle}
-                            documentId={documentId}
-                        />
                     </div>
                 </div>
             </div>

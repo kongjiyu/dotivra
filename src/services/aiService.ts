@@ -1,8 +1,9 @@
 // src/services/aiService.ts
 import { repositoryContextService } from './repositoryContextService';
 import type { User } from 'firebase/auth';
+import { buildApiUrl } from '@/lib/apiConfig';
 
-const GENERATE_API = '/api/gemini/generate';
+const GENERATE_API = buildApiUrl('api/gemini/generate');
 
 class AIService {
     private defaultModel = 'gemini-2.5-pro';
@@ -93,38 +94,197 @@ Please provide only the summary without any explanations.
     }
 
     async generateFromPrompt(prompt: string, documentContext?: string): Promise<string> {
-        let fullPrompt = `
-Generate professional content based on this request: "${prompt}"
+        let fullPrompt = `You are an intelligent AI content generator with document manipulation capabilities.
 
-The content should be:
-- Well-structured and professional
-- In plain text with minimal formatting (use simple HTML tags only: <h1>, <h2>, <h3>, <p>, <strong>, <em>, <ul>, <ol>, <li>)
+**AVAILABLE TOOLS:**
+You have access to document editing tools:
+- scan_document_content: Analyze document structure
+- search_document_content: Find specific content
+- append_document_content: Add content to end
+- insert_document_content: Insert at position
+- replace_document_content: Replace text range
+- remove_document_content: Delete text range
+
+**USER REQUEST:** "${prompt}"
+
+**GENERATION GUIDELINES:**
+- Create well-structured and professional content
+- Use plain text with simple HTML tags only: <h1>, <h2>, <h3>, <p>, <strong>, <em>, <ul>, <ol>, <li>
 - Include appropriate headings and paragraphs
 - Be comprehensive but concise
 - Do not use complex HTML structures, tables, or nested elements
+- If the request involves document editing, explain which tools would be appropriate
         `;
 
         if (documentContext) {
-            fullPrompt += `\n\nDocument context for reference:\n${documentContext}`;
+            fullPrompt += `\n\n**DOCUMENT CONTEXT:**\n\`\`\`\n${documentContext}\n\`\`\``;
         }
 
-        fullPrompt += '\n\nProvide only the content without any explanations or additional text.';
+        fullPrompt += '\n\n**YOUR RESPONSE:**\nProvide only the content without any explanations or additional text. If document manipulation is needed, explain the approach first.';
 
         return this.generateContent(fullPrompt);
     }
 
     async chatResponse(message: string, documentContent?: string): Promise<string> {
-        let prompt = `
-You are an AI assistant helping with document editing and writing. Respond to this message: "${message}"
+        const systemPrompt = `You are an intelligent AI assistant with advanced document editing and manipulation capabilities.
 
-Be helpful, concise, and professional. If the user asks for content generation or editing, provide specific actionable suggestions.
-        `;
+**YOUR CAPABILITIES:**
+
+You have access to powerful document manipulation tools that allow you to:
+
+1. **Read & Analyze Documents:**
+   - scan_document_content: Read and analyze document structure (lines, words, headings)
+   - get_document_content: Retrieve the full content of a document
+   - search_document_content: Search for specific text or patterns in documents
+
+2. **Edit & Modify Documents:**
+   - append_document_content: Add new content to the end of a document
+   - insert_document_content: Insert text at a specific character position
+   - replace_document_content: Replace text in a given range with new content
+   - remove_document_content: Delete text from a specified range
+
+**WHEN TO USE TOOLS:**
+
+- When a user asks to "add", "append", or "insert" content → Use append_document_content or insert_document_content
+- When a user asks to "change", "update", or "replace" text → Use replace_document_content
+- When a user asks to "delete", "remove", or "cut" text → Use remove_document_content
+- When a user asks about document structure or wants an overview → Use scan_document_content
+- When a user asks to "find" or "search" for something → Use search_document_content
+- When you need to understand document content before making changes → Use get_document_content
+
+**HOW TO RESPOND:**
+
+1. **Understand the Request:** Analyze what the user wants to accomplish
+2. **Determine the Right Tool:** Choose the appropriate document manipulation tool(s)
+3. **Explain Your Action:** Tell the user what you're about to do
+4. **Execute & Confirm:** Trigger the tool and confirm the result
+
+**RESPONSE STYLE:**
+
+- Be conversational and helpful
+- Explain what you're doing in simple terms
+- Provide context for your decisions
+- Confirm actions after completing them
+- If you can't do something, explain why and suggest alternatives
+
+**IMPORTANT:**
+
+- Always explain what tool you're using and why
+- Provide clear feedback on what was changed
+- Be proactive in suggesting improvements
+- Ask for clarification if the request is ambiguous
+- Think step-by-step for complex multi-step edits
+
+---
+
+**USER MESSAGE:** "${message}"
+`;
+
+        let fullPrompt = systemPrompt;
 
         if (documentContent) {
-            prompt += `\n\nCurrent document content for context:\n${documentContent.substring(0, 2000)}`;
+            fullPrompt += `
+
+**CURRENT DOCUMENT CONTEXT:**
+\`\`\`
+${documentContent.substring(0, 2000)}${documentContent.length > 2000 ? '\n... (truncated)' : ''}
+\`\`\`
+
+Character count: ${documentContent.length}
+`;
         }
 
-        return this.generateContent(prompt);
+        fullPrompt += `
+
+Now respond to the user's message. If their request requires document manipulation, explain which tool you would use and how you would accomplish their goal.`;
+
+        return this.generateContent(fullPrompt);
+    }
+
+    /**
+     * Advanced chat with MCP tool calling capabilities
+     * This method uses the backend MCP integration to actually execute tools
+     */
+    async chatWithToolCalling(
+        message: string, 
+        documentId?: string,
+        documentContent?: string
+    ): Promise<{
+        text: string;
+        toolsUsed: number;
+        toolCalls: Array<{
+            name: string;
+            args: Record<string, any>;
+            result?: any;
+            success: boolean;
+        }>;
+    }> {
+        try {
+            const systemPrompt = `You are an intelligent AI assistant with active document manipulation capabilities.
+
+**ACTIVE TOOL ACCESS:**
+
+You can directly execute these document operations:
+- scan_document_content(reason): Analyze document structure
+- get_document_content(documentId): Retrieve full content
+- search_document_content(query, reason): Find specific text
+- append_document_content(content, reason): Add to document end
+- insert_document_content(position, content, reason): Insert at position
+- replace_document_content(position{from, to}, content, reason): Replace text
+- remove_document_content(position{from, to}, reason): Delete text
+
+**WORKFLOW:**
+1. Understand what the user wants
+2. Execute the appropriate tool(s) automatically
+3. Provide clear feedback on what was done
+
+**EXAMPLES:**
+- "Add a conclusion section" → Use append_document_content
+- "Find all mentions of AI" → Use search_document_content
+- "Replace the intro" → Use replace_document_content with appropriate positions
+- "Delete the last paragraph" → Use remove_document_content
+
+Be proactive and execute tools when needed!`;
+
+            const response = await fetch(buildApiUrl('api/gemini/generate-with-tools'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    prompt: message,
+                    documentId,
+                    documentContent,
+                    systemPrompt,
+                    model: this.defaultModel,
+                    generationConfig: {
+                        maxOutputTokens: 4096,
+                        temperature: 0.7
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData?.error || `Tool calling failed: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            return {
+                text: data.text || '',
+                toolsUsed: data.toolsUsed || 0,
+                toolCalls: data.toolCalls || []
+            };
+        } catch (error) {
+            console.error('❌ Chat with tool calling error:', error);
+            
+            // Fallback to regular chat without tool execution
+            const fallbackText = await this.chatResponse(message, documentContent);
+            return {
+                text: fallbackText,
+                toolsUsed: 0,
+                toolCalls: []
+            };
+        }
     }
 
     async analyzeAndSuggest(selectedText: string, documentContext: string): Promise<{
@@ -182,31 +342,44 @@ Format your response as JSON with the structure:
                 repositoryInfo.repo
             );
 
-            let fullPrompt = `You are an AI assistant with access to the repository: ${repositoryInfo.owner}/${repositoryInfo.repo}
+            let fullPrompt = `You are an advanced AI assistant with:
+1. Access to the repository: ${repositoryInfo.owner}/${repositoryInfo.repo}
+2. Document manipulation tools for editing and analyzing content
 
-USER REQUEST: "${prompt}"
+**AVAILABLE DOCUMENT TOOLS:**
+- scan_document_content: Analyze document structure (lines, words, headings)
+- get_document_content: Retrieve full document content
+- search_document_content: Find specific text or patterns
+- append_document_content: Add content to document end
+- insert_document_content: Insert text at specific position
+- replace_document_content: Replace text in a range
+- remove_document_content: Delete text from a range
+
+**USER REQUEST:** "${prompt}"
 `;
 
             if (repoContext) {
                 const contextFormatted = repositoryContextService.formatContextForAI(repoContext);
-                fullPrompt += `\n${contextFormatted}`;
+                fullPrompt += `\n### Repository Context\n${contextFormatted}`;
             }
 
             if (documentContext) {
-                fullPrompt += `\n### Current Document Context\n${documentContext.substring(0, 1500)}`;
+                fullPrompt += `\n### Current Document Context\n\`\`\`\n${documentContext.substring(0, 1500)}${documentContext.length > 1500 ? '\n... (truncated)' : ''}\n\`\`\``;
             }
 
             fullPrompt += `
 
-INSTRUCTIONS:
+**INSTRUCTIONS:**
 - Use the repository context to provide accurate, specific suggestions
 - Reference actual files, code patterns, and project structure when relevant
+- If document editing is needed, explain which tool(s) you would use
 - If suggesting code changes, show specific file paths and line references
 - Maintain consistency with the existing codebase style and patterns
 - Provide actionable, implementable suggestions
 - Use markdown formatting for code snippets with appropriate language tags
 
-Generate a helpful response that leverages the repository knowledge:`;
+**YOUR RESPONSE:**
+Analyze the request, leverage the repository knowledge, and provide a comprehensive response. If document manipulation is needed, explain which tools you'd use and how.`;
 
             return await this.generateContent(fullPrompt);
         } catch (error) {

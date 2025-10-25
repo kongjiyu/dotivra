@@ -379,12 +379,12 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
                             {isPreviewMode ? (
                                 <>
                                     <Code className="w-4 h-4" />
-                                    <span className="text-xs">Code</span>
+                                    <span contentEditable="false" className="text-xs">Code</span>
                                 </>
                             ) : (
                                 <>
                                     <Eye className="w-4 h-4" />
-                                    <span className="text-xs">Preview</span>
+                                    <span contentEditable="false" className="text-xs">Preview</span>
                                 </>
                             )}
                         </Button>
@@ -392,6 +392,7 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
 
                     {/* Copy button */}
                     <Button
+                        contentEditable="false"
                         type="button"
                         variant="ghost"
                         size="sm"
@@ -424,7 +425,7 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
                 {node.attrs.language === 'mermaid' && isPreviewMode ? (
                     <div className="p-4">
                         {mermaidError ? (
-                            <div className={cx(
+                            <div contentEditable="false" data-mermaid-error="true" className={cx(
                                 "mermaid-error p-3 rounded-md text-sm font-mono",
                                 isDarkTheme
                                     ? "bg-red-900/20 border border-red-600 text-red-400"
@@ -434,7 +435,7 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
                                 <div>{mermaidError}</div>
                             </div>
                         ) : mermaidSvg ? (
-                            <div
+                            <div data-mermaid-preview="true"
                                 ref={mermaidRef}
                                 className={cx(
                                     "mermaid-preview flex justify-center items-start p-4 rounded-md overflow-auto",
@@ -445,7 +446,7 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
                                 dangerouslySetInnerHTML={{ __html: mermaidSvg }}
                             />
                         ) : (
-                            <div className={cx(
+                            <div contentEditable="false" data-mermaid-preview="true" className={cx(
                                 "flex items-center justify-center p-8 text-gray-500 text-sm",
                                 isDarkTheme ? "text-gray-400" : "text-gray-600"
                             )}>

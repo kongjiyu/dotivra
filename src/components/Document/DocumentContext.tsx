@@ -6,22 +6,30 @@ import ContextMenu from "../Document/ContextMenu";
 interface DocumentContextProps {
     editor: Editor | null;
     children?: React.ReactNode;
-    onOpenChat?: (message?: string) => void;
 }
 
-const DocumentContext = memo(({ editor, children, onOpenChat }: DocumentContextProps) => {
+const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
     const [contextMenu, setContextMenu] = useState({
         isVisible: false,
         position: { x: 0, y: 0 },
         isTableContext: false
     });
     const editorContentRef = useRef<HTMLDivElement>(null);
+    const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
 
     useEffect(() => {
         if (!editor || !editorContentRef.current) return;
 
         const handleContextMenu = (event: MouseEvent) => {
             event.preventDefault();
+
+            // Save the current selection before showing context menu
+            if (editor && !editor.state.selection.empty) {
+                savedSelectionRef.current = {
+                    from: editor.state.selection.from,
+                    to: editor.state.selection.to
+                };
+            }
 
             const selection = window.getSelection();
             let x = event.clientX;
@@ -104,15 +112,37 @@ const DocumentContext = memo(({ editor, children, onOpenChat }: DocumentContextP
             }
         };
 
+        // Handle mouseup to restore selection after context menu interaction
+        const handleMouseUp = () => {
+            if (savedSelectionRef.current && contextMenu.isVisible) {
+                // Use requestAnimationFrame twice to ensure the context menu interaction is complete
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        if (savedSelectionRef.current) {
+                            editor.chain()
+                                .focus()
+                                .setTextSelection({
+                                    from: savedSelectionRef.current.from,
+                                    to: savedSelectionRef.current.to
+                                })
+                                .run();
+                        }
+                    });
+                });
+            }
+        };
+
         const editorElement = editorContentRef.current;
         editorElement.addEventListener('contextmenu', handleContextMenu);
         editorElement.addEventListener('click', handleClick);
+        editorElement.addEventListener('mouseup', handleMouseUp);
 
         return () => {
             editorElement.removeEventListener('contextmenu', handleContextMenu);
             editorElement.removeEventListener('click', handleClick);
+            editorElement.removeEventListener('mouseup', handleMouseUp);
         };
-    }, [editor]);
+    }, [editor, contextMenu.isVisible]);
 
     const closeContextMenu = () => {
         setContextMenu(prev => ({ ...prev, isVisible: false }));
@@ -163,7 +193,6 @@ const DocumentContext = memo(({ editor, children, onOpenChat }: DocumentContextP
                 position={contextMenu.position}
                 onClose={closeContextMenu}
                 isTableContext={contextMenu.isTableContext}
-                onOpenChat={onOpenChat}
             />
         </div>
     );

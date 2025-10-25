@@ -12,7 +12,6 @@ interface TiptapProps {
     onUpdate?: (content: string) => void;
     onEditorReady?: (editor: any) => void;
     className?: string;
-    onOpenChat?: (message?: string) => void;
     showToolbar?: boolean;
 }
 
@@ -22,7 +21,6 @@ const Tiptap = ({
     onUpdate,
     onEditorReady,
     className = "",
-    onOpenChat,
     showToolbar = true,
 }: TiptapProps) => {
     const [isReady, setIsReady] = useState(false);
@@ -220,7 +218,7 @@ const Tiptap = ({
                 <div className="mx-auto w-[1000px] max-w-[95vw] min-w-[320px] space-y-0 h-full min-h-0 pt-20">
                     {/* Document Content */}
                     <div className="min-h-0">
-                        <DocumentContext editor={editor} onOpenChat={onOpenChat}>
+                        <DocumentContext editor={editor} >
                             {/* Any additional overlay content can be passed as children */}
                         </DocumentContext>
                     </div>

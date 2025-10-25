@@ -1,3 +1,12 @@
+// Firestore will be passed in from the main server file
+let firestore = null;
+
+// Initialize firestore reference
+export const initFirestore = (firestoreInstance) => {
+    firestore = firestoreInstance;
+    console.log('✅ Firestore initialized in toolService');
+};
+
 // Track tool usage for chat sidebar
 const toolUsageLog = [];
 
@@ -135,16 +144,24 @@ export const getToolsRegistry = async () => {
             },
             {
                 name: 'remove_document_content',
-                description: 'Remove text in a specified character range.',
+                description: 'Remove text in a specified range or by matching a query string.',
                 inputSchema: {
                     type: 'object',
                     properties: {
                         position: {
-                            type: 'object',
-                            properties: { from: { type: 'number' }, to: { type: 'number' } },
-                            required: ['from', 'to']
+                            oneOf: [
+                                {
+                                    type: 'object',
+                                    properties: { from: { type: 'number' }, to: { type: 'number' } },
+                                    required: ['from', 'to']
+                                },
+                                {
+                                    type: 'string',
+                                    description: 'Optional text pattern or heading name to locate and remove automatically.'
+                                }
+                            ]
                         },
-                        reason: { type: 'string', description: 'Why removal is needed' }
+                        reason: { type: 'string', description: 'Why the removal is performed' }
                     },
                     required: ['position', 'reason']
                 },
@@ -174,6 +191,17 @@ export const getToolsRegistry = async () => {
                     required: ['query']
                 },
                 annotations: { title: 'Search Document', readOnlyHint: true, idempotentHint: true }
+            },
+            {
+                name: 'verify_document_change',
+                description: 'Compare pre- and post-operation states to confirm successful modification.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        reason: { type: 'string' }
+                    },
+                    required: ['reason']
+                }
             }
         ]
     }
@@ -192,18 +220,34 @@ export const setCurrentDocument = async (documentId) => {
             return { success: true, content: '' };
         }
 
-        const docRef = firestore.collection('Documents').doc(documentId);
-        const docSnap = await docRef.get();
+        if (!firestore) {
+            throw new Error('Firestore not initialized in toolService');
+        }
 
-        if (!docSnap.exists) {
-            throw new Error(`Document ${documentId} not found`);
+        console.log(`📄 Attempting to load document: ${documentId}`);
+
+        // For regular Firebase SDK
+        const { doc, getDoc } = await import('firebase/firestore');
+
+        // Add timeout to prevent hanging
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('Document fetch timeout (10s)')), 10000);
+        });
+
+        const docRef = doc(firestore, 'Documents', documentId);
+        console.log(`📄 Fetching from Firestore collection: Documents/${documentId}`);
+
+        const docSnap = await Promise.race([getDoc(docRef), timeoutPromise]);
+
+        if (!docSnap.exists()) {
+            throw new Error(`Document ${documentId} not found in Firestore collection`);
         }
 
         const docData = docSnap.data();
         currentDocumentId = documentId;
         currentDocumentContent = docData.Content || '';
 
-        console.log(`📄 Set current document: ${documentId} (${currentDocumentContent.length} chars)`);
+        console.log(`✅ Document loaded successfully: ${documentId} (${currentDocumentContent.length} chars)`);
 
         return {
             success: true,
@@ -219,19 +263,22 @@ export const setCurrentDocument = async (documentId) => {
 
 // Sync document content back to Firebase
 const syncToFirebase = async () => {
-    if (!currentDocumentId) {
-        console.warn('⚠️ No current document set, skipping Firebase sync');
-        return { success: false, error: 'No document set' };
+    if (!currentDocumentId || !firestore) {
+        // This is OK for testing or read-only operations
+        console.log('ℹ️  No document context set - changes will not be persisted to Firebase');
+        return { success: false, error: 'No document set or firestore not initialized' };
     }
 
     try {
-        const docRef = firestore.collection('Documents').doc(currentDocumentId);
-        await docRef.update({
+        // For regular Firebase SDK, use doc() and updateDoc()
+        const { doc, updateDoc, Timestamp } = await import('firebase/firestore');
+        const docRef = doc(firestore, 'Documents', currentDocumentId);
+        await updateDoc(docRef, {
             Content: currentDocumentContent,
-            Updated_Time: admin.firestore.Timestamp.now()
+            Updated_Time: Timestamp.now()
         });
 
-        console.log(`💾 Synced to Firebase: ${currentDocumentId}`);
+        console.log(`💾 Synced to Firebase: ${currentDocumentId} (${currentDocumentContent.length} chars)`);
         return { success: true };
     } catch (error) {
         console.error('❌ Firebase sync error:', error);
@@ -393,10 +440,15 @@ export const replace_document_content = async ({ position, content, reason }) =>
 }
 
 export const remove_document_content = async ({ position, reason }) => {
+    console.log('🗑️  remove_document_content called:', { position, reason, docId: currentDocumentId });
+
     const { from, to } = position;
     const oldContent = currentDocumentContent;
+    const oldLength = currentDocumentContent.length;
     const removedText = currentDocumentContent.slice(from, to);
     currentDocumentContent = currentDocumentContent.slice(0, from) + currentDocumentContent.slice(to);
+
+    console.log(`🗑️  Removed ${removedText.length} chars (${from}-${to}). Length: ${oldLength} → ${currentDocumentContent.length}`);
 
     const result = {
         success: true,
@@ -412,7 +464,8 @@ export const remove_document_content = async ({ position, reason }) => {
     logToolUsage('remove_document_content', { position, reason }, result, currentDocumentId);
 
     // Sync to Firebase
-    await syncToFirebase();
+    const syncResult = await syncToFirebase();
+    console.log('🗑️  Firebase sync result:', syncResult);
 
     return result;
 }

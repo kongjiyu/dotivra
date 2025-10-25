@@ -326,15 +326,23 @@ export class GeminiBalancer {
 				}
 				const client = new GoogleGenAI({ apiKey: keyState.key });
 
-				// New API: use client.models.generateContent()
+				// Debug logging for tools
+				if (tools) {
+					console.log(`🔧 Tools being passed to Gemini:`, tools.length > 0 ? tools[0]?.functionDeclarations?.length : 0, 'function declarations');
+					console.log(`🔧 Tool config:`, JSON.stringify(toolConfig, null, 2));
+				}
+
+				// Use the official Google GenAI SDK format with config parameter
 				const resp = await client.models.generateContent({
 					model,
 					contents,
-					config: generationConfig,
-					safetySettings,
-					tools,
-					toolConfig,
-					systemInstruction
+					systemInstruction,
+					config: {
+						...generationConfig,
+						tools,
+						toolConfig,
+						safetySettings
+					}
 				});
 
 				const metadata = resp?.usageMetadata || {};
@@ -345,8 +353,12 @@ export class GeminiBalancer {
 				// Extract text from response
 				const text = resp?.candidates?.[0]?.content?.parts?.[0]?.text || null;
 
+				// Extract function calls if any - check both possible locations
+				const functionCalls = resp?.functionCalls || [];
+
 				return {
 					text,
+					functionCalls,
 					raw: resp,
 					usage: {
 						promptTokens: metadata.promptTokenCount ?? null,

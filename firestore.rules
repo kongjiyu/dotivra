@@ -26,8 +26,8 @@ service cloud.firestore {
     match /DocumentHistory/{historyId} {
       allow read, write: if true; // In production, add proper authentication
     }
-    
-    // Chatbox History collection - escaped names
+
+    // Chatbox History collection - collection name with space requires proper escaping
     match /ChatboxHistory/{chatboxId} {
       allow read, write: if true; // In production, add proper authentication
     }
