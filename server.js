@@ -963,17 +963,46 @@ app.put('/api/documents/:documentId', async (req, res) => {
 		const updateData = req.body;
 		console.log('📝 PUT /api/documents/' + documentId, 'Updates:', Object.keys(updateData));
 
-		// Add timestamp for update
-		updateData.Updated_Time = Timestamp.now();
-
 		const docRef = doc(firestore, 'Documents', documentId);
+		const docSnap = await getDoc(docRef);
+		
+		if (!docSnap.exists()) {
+			return res.status(404).json({ error: 'Document not found' });
+		}
+		
+		const docData = docSnap.data();
+		const currentVersion = docData?.version || 0;
+		const newVersion = currentVersion + 1;
+
+		// Add timestamp and version for update
+		updateData.Updated_Time = Timestamp.now();
+		updateData.version = newVersion;
+
 		await updateDoc(docRef, updateData);
+
+		// ✅ Save version to DocumentHistory if content changed
+		if (updateData.Content !== undefined) {
+			try {
+				await addDoc(collection(firestore, 'DocumentHistory'), {
+					Document_Id: documentId,
+					Content: updateData.Content,
+					Version: newVersion,
+					CreatedAt: Timestamp.now(),
+					EditedBy: updateData.EditedBy || docData?.EditedBy || 'anonymous',
+					Channel: 'content',
+				});
+				console.log(`📚 Version ${newVersion} saved to DocumentHistory for document ${documentId}`);
+			} catch (historyError) {
+				console.error('❌ Failed to save version history:', historyError);
+			}
+		}
 
 		console.log('📝 Document updated successfully');
 
 		res.json({
 			success: true,
-			message: 'Document updated successfully'
+			message: 'Document updated successfully',
+			version: newVersion
 		});
 	} catch (error) {
 		console.error('Error updating document:', error);
@@ -1264,17 +1293,45 @@ app.get("/api/document/editor/content/:docId", async (req, res) => {
 app.put("/api/document/editor/content/:docId", async (req, res) => {
 	try {
 		const { docId } = req.params;
-		const { content, isDraft } = req.body;
+		const { content, isDraft, EditedBy } = req.body;
 
-		await firestore.collection("Document").doc(docId).update({
+		const docRef = doc(firestore, 'Documents', docId);
+		const docSnap = await getDoc(docRef);
+		
+		if (!docSnap.exists()) {
+			return res.status(404).json({ error: 'NOT_FOUND' });
+		}
+		
+		const docData = docSnap.data();
+		const currentVersion = docData?.version || 0;
+		const newVersion = currentVersion + 1;
+
+		await updateDoc(docRef, {
 			Content: content,
 			IsDraft: isDraft,
-			UpdatedAt: new Date().toISOString(),
+			Updated_Time: Timestamp.now(),
 			Hash: hashJSON(content),
+			version: newVersion,
 		});
 
-		res.json({ status: "ok" });
+		// ✅ Save version to DocumentHistory
+		try {
+			await addDoc(collection(firestore, 'DocumentHistory'), {
+				Document_Id: docId,
+				Content: content,
+				Version: newVersion,
+				CreatedAt: Timestamp.now(),
+				EditedBy: EditedBy || docData?.EditedBy || 'anonymous',
+				Channel: 'content',
+			});
+			console.log(`📚 Version ${newVersion} saved to DocumentHistory for document ${docId}`);
+		} catch (historyError) {
+			console.error('❌ Failed to save version history:', historyError);
+		}
+
+		res.json({ status: "ok", version: newVersion });
 	} catch (err) {
+		console.error('Error updating document content:', err);
 		res.status(500).json({ error: "SERVER_ERROR" });
 	}
 });

@@ -8,7 +8,6 @@ import helmet from "helmet";
 import {createAppAuth} from "@octokit/auth-app";
 import {Octokit} from "@octokit/rest";
 import crypto from "crypto";
-import {WebSocketServer} from "ws";
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -282,15 +281,21 @@ class GeminiBalancer {
       try {
         const client = new GoogleGenAI({apiKey: keyState.key});
         
-        // New API: use client.models.generateContent()
-        const resp = await client.models.generateContent({
+        // Build the request parameters
+        const requestParams: any = {
           model: options.model,
           contents: options.contents,
-          config: options.generationConfig,
-          safetySettings: options.safetySettings,
-          tools: options.tools,
-          systemInstruction: options.systemInstruction,
-        });
+        };
+        
+        // Add optional parameters only if they exist
+        if (options.generationConfig) requestParams.config = options.generationConfig;
+        if (options.tools) requestParams.tools = options.tools;
+        if (options.systemInstruction) requestParams.systemInstruction = options.systemInstruction;
+        
+        // Note: safetySettings is handled differently in the new SDK
+        // It may need to be part of generationConfig or not supported in this version
+        
+        const resp = await client.models.generateContent(requestParams);
         
         const metadata: any = resp?.usageMetadata || {};
         const usedTokens = Number(metadata.totalTokenCount || 0) || estimatedTokens;
@@ -1287,7 +1292,7 @@ app.get('/api/documents/:documentId', async (req, res) => {
 app.put('/api/documents/:documentId', async (req, res) => {
   try {
     const { documentId } = req.params;
-    const { content, title } = req.body;
+    const { content, title, EditedBy } = req.body;
     
     const docRef = db.collection('Documents').doc(documentId);
     const doc = await docRef.get();
@@ -1296,14 +1301,37 @@ app.put('/api/documents/:documentId', async (req, res) => {
       return res.status(404).json({ error: 'Document not found' });
     }
     
+    const docData = doc.data();
+    const currentVersion = docData?.version || 0;
+    const newVersion = currentVersion + 1;
+    
     const updateData: any = {
-      UpdatedAt: admin.firestore.Timestamp.now()
+      Updated_Time: admin.firestore.Timestamp.now(),
+      version: newVersion
     };
     
     if (content !== undefined) updateData.Content = content;
     if (title !== undefined) updateData.Title = title;
+    if (EditedBy !== undefined) updateData.EditedBy = EditedBy;
     
     await docRef.update(updateData);
+    
+    // ✅ Save version to DocumentHistory if content changed
+    if (content !== undefined) {
+      try {
+        await db.collection('DocumentHistory').add({
+          Document_Id: documentId,
+          Content: content,
+          Version: newVersion,
+          CreatedAt: admin.firestore.Timestamp.now(),
+          EditedBy: EditedBy || docData?.EditedBy || 'anonymous',
+          Channel: 'content',
+        });
+        logger.info(`📚 Version ${newVersion} saved to DocumentHistory for document ${documentId}`);
+      } catch (historyError) {
+        logger.error('❌ Failed to save version history:', historyError);
+      }
+    }
     
     const updatedDoc = await docRef.get();
     const data = updatedDoc.data();
@@ -1311,8 +1339,8 @@ app.put('/api/documents/:documentId', async (req, res) => {
     res.json({
       id: updatedDoc.id,
       ...data,
-      CreatedAt: data?.CreatedAt?.toDate?.()?.toISOString() || new Date().toISOString(),
-      UpdatedAt: data?.UpdatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+      Created_Time: data?.Created_Time?.toDate?.()?.toISOString() || new Date().toISOString(),
+      Updated_Time: data?.Updated_Time?.toDate?.()?.toISOString() || new Date().toISOString()
     });
   } catch (error) {
     logger.error('Error updating document:', error);
@@ -1357,12 +1385,18 @@ app.get('/api/documents/project/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
     
+    logger.info(`📄 Fetching documents for project: ${projectId}`);
+    
+    // Try both field names for backwards compatibility
     const querySnapshot = await db.collection('Documents')
-      .where('ProjectId', '==', projectId)
+      .where('Project_Id', '==', projectId)
       .get();
+    
+    logger.info(`📊 Found ${querySnapshot.size} documents for project ${projectId}`);
     
     const documents = querySnapshot.docs.map(doc => {
       const data = doc.data();
+      logger.info(`  📄 Document: ${doc.id}, Name: ${data.DocumentName}, Category: ${data.DocumentCategory}`);
       return {
         id: doc.id,
         ...data,
@@ -1491,289 +1525,593 @@ app.post('/api/documents', async (req, res) => {
 });
 
 // ============================================================================
-// WEBSOCKET SERVER FOR REAL-TIME DOCUMENT COLLABORATION
+// DOCUMENT HISTORY & CHAT ENDPOINTS
 // ============================================================================
 
-// Initialize WebSocket server with noServer mode for Firebase Functions
-const wss = new WebSocketServer({ noServer: true });
+// Utility function for hashing
+function hashJSON(obj: any): string {
+  return "sha256:" + crypto.createHash("sha256").update(JSON.stringify(obj)).digest("hex");
+}
 
-// Store document rooms: documentId -> Set<WebSocket>
-const documentRooms = new Map<string, Set<any>>();
+// Get document version history
+app.get('/api/document/editor/history/:docId', async (req, res) => {
+  try {
+    const { docId } = req.params;
+    logger.info('📜 Fetching version history for document:', docId);
 
-wss.on("connection", (ws: any) => {
-  logger.info("WebSocket client connected ✅");
-  let currentDocumentId: string | null = null;
+    const historyRef = db.collection('DocumentHistory');
+    
+    // Get all documents in the collection for debugging
+    const allSnapshot = await historyRef.get();
+    logger.info('🔍 Total documents in DocumentHistory collection:', allSnapshot.size);
+    
+    allSnapshot.docs.forEach(doc => {
+      const data = doc.data();
+      logger.info('  📄 Doc ID:', doc.id);
+      logger.info('     Document_Id:', data.Document_Id);
+      logger.info('     Version:', data.Version);
+    });
 
-  ws.on("message", async (msg: any) => {
-    try {
-      const data = JSON.parse(msg.toString());
-      logger.info("WebSocket received:", data.type, data.documentId);
+    // Query filtered by Document_Id
+    const snapshot = await historyRef
+      .where('Document_Id', '==', docId)
+      .orderBy('Version', 'desc')
+      .get();
 
-      switch (data.type) {
-        case 'join':
-          // Join document room
-          currentDocumentId = data.documentId;
-          if (!documentRooms.has(currentDocumentId)) {
-            documentRooms.set(currentDocumentId, new Set());
-          }
-          documentRooms.get(currentDocumentId)!.add(ws);
-          logger.info(`📄 Client joined document: ${currentDocumentId}`);
-          ws.send(JSON.stringify({ type: 'joined', documentId: currentDocumentId }));
-          break;
-
-        case 'sync_request':
-          // Client requesting current document state (for reconnection)
-          try {
-            const syncDocId = data.documentId;
-            const syncChannel = data.channel; // 'content' or 'summary'
-            const docRef = db.collection('Documents').doc(syncDocId);
-            const docSnap = await docRef.get();
-            
-            if (docSnap.exists) {
-              const docData = docSnap.data();
-              
-              // Ensure Summary field exists, add if missing
-              if (!docData?.Summary) {
-                await docRef.update({ Summary: '' });
-                logger.info(`➕ Added missing Summary field to document: ${syncDocId}`);
-              }
-              
-              // Send appropriate content based on channel
-              let content = '';
-              if (syncChannel === 'summary') {
-                content = docData?.Summary || '';
-              } else {
-                content = docData?.Content || '';
-              }
-              
-              ws.send(JSON.stringify({
-                type: 'sync_response',
-                documentId: syncDocId,
-                content: content,
-                version: docData?.version || 0,
-                channel: syncChannel,
-              }));
-              logger.info(`🔄 Sync response sent for document: ${syncDocId}, channel: ${syncChannel}, version: ${docData?.version || 0}`);
-            } else {
-              ws.send(JSON.stringify({
-                type: 'error',
-                message: 'Document not found',
-                documentId: syncDocId
-              }));
-            }
-          } catch (error) {
-            logger.error('Error handling sync_request:', error);
-            ws.send(JSON.stringify({
-              type: 'error',
-              message: 'Failed to sync document',
-              documentId: data.documentId
-            }));
-          }
-          break;
-
-        case 'edit':
-          // OT protocol: Handle edit with version checking
-          const { documentId: editDocId, content: editContent, baseVersion, seq, channel: editChannel } = data;
-          const editIsSummary = editChannel === 'summary';
-          
-          logger.info(`📝 Processing edit. DocId: ${editDocId}, Seq: ${seq}, BaseVersion: ${baseVersion}, Channel: ${editChannel}`);
-          
-          try {
-            const docRef = db.collection('Documents').doc(editDocId);
-            const docSnap = await docRef.get();
-            
-            if (!docSnap.exists) {
-              logger.error(`❌ Document not found: ${editDocId}`);
-              ws.send(JSON.stringify({
-                type: 'error',
-                message: 'Document not found',
-                documentId: editDocId
-              }));
-              break;
-            }
-            
-            const docData = docSnap.data();
-            const currentVersion = docData?.version || 0;
-            
-            // Ensure Summary field exists if we're editing summary
-            if (editIsSummary && !docData?.Summary) {
-              await docRef.update({ Summary: '' });
-              logger.info(`➕ Added missing Summary field to document: ${editDocId}`);
-            }
-            
-            logger.info(`📊 Current document version: ${currentVersion}, Incoming baseVersion: ${baseVersion}`);
-            
-            // Check if baseVersion matches current version
-            if (baseVersion !== currentVersion) {
-              // Reject stale edit
-              logger.info(`⚠️ Rejecting stale edit. Base: ${baseVersion}, Current: ${currentVersion}`);
-              ws.send(JSON.stringify({
-                type: 'reject',
-                documentId: editDocId,
-                seq,
-                currentVersion,
-                reason: 'stale_base_version'
-              }));
-              break;
-            }
-            
-            // Version matches, apply edit
-            const newVersion = currentVersion + 1;
-            const updateData: any = {
-              Updated_Time: admin.firestore.Timestamp.now(),
-              version: newVersion
-            };
-            
-            if (editIsSummary) {
-              updateData.Summary = editContent;
-              logger.info(`💾 Updating Summary field (channel: ${editChannel})`);
-            } else {
-              updateData.Content = editContent;
-              logger.info(`💾 Updating Content field (channel: ${editChannel})`);
-            }
-            
-            logger.info(`🔄 Saving to Firestore...`);
-            await docRef.update(updateData);
-            logger.info(`💾 Firestore updated successfully`);
-            
-            // Send acknowledgment to sender
-            const ackMessage = {
-              type: 'ack',
-              documentId: editDocId,
-              seq,
-              newVersion,
-              channel: editChannel
-            };
-            logger.info(`📤 Sending ACK:`, ackMessage);
-            ws.send(JSON.stringify(ackMessage));
-            
-            logger.info(`✅ Edit applied. Seq: ${seq}, New version: ${newVersion}, Channel: ${editChannel}`);
-            
-            // Broadcast to other clients in the same document room
-            if (documentRooms.has(editDocId)) {
-              const clients = documentRooms.get(editDocId)!;
-              clients.forEach(client => {
-                if (client !== ws && client.readyState === 1) { // 1 = OPEN
-                  client.send(JSON.stringify({
-                    type: 'update',
-                    documentId: editDocId,
-                    content: editContent,
-                    version: newVersion,
-                    channel: editChannel
-                  }));
-                }
-              });
-            }
-          } catch (error) {
-            logger.error('Error handling edit:', error);
-            ws.send(JSON.stringify({
-              type: 'error',
-              message: 'Failed to save edit',
-              documentId: editDocId,
-              seq
-            }));
-          }
-          break;
-
-        case 'update':
-          // Legacy: Save document update and broadcast to other clients
-          const { documentId, content, isSummary } = data;
-          
-          try {
-            const docRef = db.collection('Documents').doc(documentId);
-            const docSnap = await docRef.get();
-            const currentVersion = docSnap.exists ? (docSnap.data()?.version || 0) : 0;
-            const newVersion = currentVersion + 1;
-            
-            const updateData: any = {
-              Updated_Time: admin.firestore.Timestamp.now(),
-              version: newVersion
-            };
-            
-            if (isSummary) {
-              updateData.Summary = content;
-            } else {
-              updateData.Content = content;
-            }
-            
-            await docRef.update(updateData);
-            
-            // Send acknowledgment to sender
-            ws.send(JSON.stringify({ 
-              type: 'synced', 
-              documentId 
-            }));
-            
-            // Broadcast to other clients in the same document room
-            if (documentRooms.has(documentId)) {
-              const clients = documentRooms.get(documentId)!;
-              clients.forEach(client => {
-                if (client !== ws && client.readyState === 1) {
-                  client.send(JSON.stringify({
-                    type: 'update',
-                    documentId,
-                    content,
-                    version: newVersion,
-                    isSummary
-                  }));
-                }
-              });
-            }
-            
-            logger.info(`💾 Document ${documentId} saved and synced (legacy mode)`);
-          } catch (error) {
-            logger.error('Error saving document:', error);
-            ws.send(JSON.stringify({ 
-              type: 'error', 
-              message: 'Failed to save document',
-              documentId
-            }));
-          }
-          break;
-
-        default:
-          logger.info("Unknown message type:", data.type);
-      }
-    } catch (error) {
-      logger.error('Error processing WebSocket message:', error);
-      ws.send(JSON.stringify({ 
-        type: 'error', 
-        message: 'Invalid message format' 
-      }));
-    }
-  });
-
-  ws.on('close', () => {
-    // Remove client from document room
-    if (currentDocumentId && documentRooms.has(currentDocumentId)) {
-      documentRooms.get(currentDocumentId)!.delete(ws);
-      if (documentRooms.get(currentDocumentId)!.size === 0) {
-        documentRooms.delete(currentDocumentId);
-      }
-      logger.info(`📄 Client left document: ${currentDocumentId}`);
-    }
-    logger.info("WebSocket client disconnected ❌");
-  });
-
-  ws.send(JSON.stringify({ type: "connected" }));
+    logger.info('📊 Found', snapshot.size, 'versions matching docId:', docId);
+    
+    const versions = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        CreatedAt: data.CreatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+      };
+    });
+    
+    res.json({ versions });
+  } catch (error) {
+    logger.error('❌ Error fetching version history:', error);
+    res.status(500).json({ 
+      error: 'SERVER_ERROR', 
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
 });
 
-// Wrap Express app to handle WebSocket upgrades
-const requestHandler = (req: any, res: any) => {
-  // Check if this is a WebSocket upgrade request
-  if (req.headers.upgrade === 'websocket') {
-    logger.info('🔌 WebSocket upgrade request detected');
-    // Handle WebSocket upgrade
-    wss.handleUpgrade(req, req.socket, Buffer.alloc(0), (ws) => {
-      wss.emit('connection', ws, req);
-    });
-  } else {
-    // Normal HTTP request - pass to Express
-    app(req, res);
-  }
-};
+// Get latest summary (assistant reply)
+app.get('/api/document/editor/summary/:docId', async (req, res) => {
+  try {
+    const { docId } = req.params;
+    
+    const snapshot = await db.collection('ChatHistory')
+      .where('DocID', '==', docId)
+      .where('Role', '==', 'assistant')
+      .orderBy('CreatedAt', 'desc')
+      .limit(1)
+      .get();
 
-// Export the wrapped handler as a Firebase Function with secrets
+    if (snapshot.empty) {
+      return res.json({ summary: null });
+    }
+
+    const summaryData = snapshot.docs[0].data();
+    res.json({ summary: summaryData.Message });
+  } catch (error) {
+    logger.error('Error fetching summary:', error);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
+// Get chat history
+app.get('/api/document/chat/history/:docId', async (req, res) => {
+  try {
+    const { docId } = req.params;
+    
+    const snapshot = await db.collection('ChatHistory')
+      .where('DocID', '==', docId)
+      .orderBy('CreatedAt', 'asc')
+      .get();
+
+    const messages = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        CreatedAt: data.CreatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+      };
+    });
+    
+    res.json({ messages });
+  } catch (error) {
+    logger.error('Error fetching chat history:', error);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
+// Add chat message (user/assistant)
+app.post('/api/document/chat/prompt', async (req, res) => {
+  try {
+    const { userId, docId, message, role } = req.body;
+
+    const newMsg = {
+      UserID: userId || null,
+      DocID: docId,
+      Message: message,
+      Role: role || 'user',
+      CreatedAt: admin.firestore.Timestamp.now(),
+    };
+
+    const ref = await db.collection('ChatHistory').add(newMsg);
+    
+    res.status(201).json({ 
+      id: ref.id, 
+      ...newMsg,
+      CreatedAt: newMsg.CreatedAt.toDate().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error adding chat message:', error);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
+// Get AI agent workflow messages
+app.get('/api/document/chat/agent/:docId', async (req, res) => {
+  try {
+    const { docId } = req.params;
+    
+    const snapshot = await db.collection('ChatHistory')
+      .where('DocID', '==', docId)
+      .orderBy('CreatedAt', 'asc')
+      .get();
+
+    const messages = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        CreatedAt: data.CreatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+      };
+    });
+    
+    res.json({ workflow: messages });
+  } catch (error) {
+    logger.error('Error fetching agent workflow:', error);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
+// Add AI agent step
+app.post('/api/document/chat/agent', async (req, res) => {
+  try {
+    const { docId, stage, message, userId } = req.body;
+
+    if (!['reasoning', 'thinking', 'action', 'user'].includes(stage)) {
+      return res.status(400).json({ error: 'INVALID_STAGE' });
+    }
+
+    const newMsg = {
+      UserID: userId || null,
+      DocID: docId,
+      Stage: stage,
+      Message: message,
+      Role: stage === 'user' ? 'user' : 'assistant',
+      CreatedAt: admin.firestore.Timestamp.now(),
+    };
+
+    const ref = await db.collection('ChatHistory').add(newMsg);
+
+    // Auto-log Action step to DocumentHistory
+    if (stage === 'action') {
+      await db.collection('DocumentHistory').add({
+        Document_Id: docId,
+        ActionID: ref.id,
+        Content: message,
+        CreatedAt: admin.firestore.Timestamp.now(),
+        Version: Date.now(),
+      });
+    }
+
+    res.status(201).json({ 
+      id: ref.id, 
+      ...newMsg,
+      CreatedAt: newMsg.CreatedAt.toDate().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error adding agent step:', error);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
+// Get latest Action only
+app.get('/api/document/chat/agent/action/:docId', async (req, res) => {
+  try {
+    const { docId } = req.params;
+    
+    const snapshot = await db.collection('ChatHistory')
+      .where('DocID', '==', docId)
+      .where('Stage', '==', 'action')
+      .orderBy('CreatedAt', 'desc')
+      .limit(1)
+      .get();
+
+    if (snapshot.empty) {
+      return res.json({ action: null });
+    }
+
+    const actionData = snapshot.docs[0].data();
+    res.json({ 
+      action: {
+        ...actionData,
+        CreatedAt: actionData.CreatedAt?.toDate?.()?.toISOString() || new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Error fetching latest action:', error);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
+// Get single document content
+app.get('/api/document/editor/content/:docId', async (req, res) => {
+  try {
+    const { docId } = req.params;
+    
+    const docSnap = await db.collection('Documents').doc(docId).get();
+    
+    if (!docSnap.exists) {
+      return res.status(404).json({ error: 'NOT_FOUND' });
+    }
+    
+    const data = docSnap.data();
+    res.json({ 
+      id: docSnap.id, 
+      ...data,
+      Created_Time: data?.Created_Time?.toDate?.()?.toISOString() || new Date().toISOString(),
+      Updated_Time: data?.Updated_Time?.toDate?.()?.toISOString() || new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error('Error fetching document content:', error);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
+// Update document content
+app.put('/api/document/editor/content/:docId', async (req, res) => {
+  try {
+    const { docId } = req.params;
+    const { content, isDraft, EditedBy } = req.body;
+
+    const docRef = db.collection('Documents').doc(docId);
+    const doc = await docRef.get();
+    
+    if (!doc.exists) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    
+    const docData = doc.data();
+    const currentVersion = docData?.version || 0;
+    const newVersion = currentVersion + 1;
+
+    await docRef.update({
+      Content: content,
+      IsDraft: isDraft,
+      Updated_Time: admin.firestore.Timestamp.now(),
+      Hash: hashJSON(content),
+      version: newVersion,
+    });
+
+    // ✅ Save version to DocumentHistory
+    try {
+      await db.collection('DocumentHistory').add({
+        Document_Id: docId,
+        Content: content,
+        Version: newVersion,
+        CreatedAt: admin.firestore.Timestamp.now(),
+        EditedBy: EditedBy || docData?.EditedBy || 'anonymous',
+        Channel: 'content',
+      });
+      logger.info(`📚 Version ${newVersion} saved to DocumentHistory for document ${docId}`);
+    } catch (historyError) {
+      logger.error('❌ Failed to save version history:', historyError);
+    }
+
+    res.json({ status: 'ok', version: newVersion });
+  } catch (error) {
+    logger.error('Error updating document content:', error);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
+// Get all documents for a project
+app.get('/api/project/:projectId/documents', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+    
+    const snapshot = await db.collection('Documents')
+      .where('Project_Id', '==', projectId)
+      .get();
+
+    const documents = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        Created_Time: data?.Created_Time?.toDate?.()?.toISOString() || new Date().toISOString(),
+        Updated_Time: data?.Updated_Time?.toDate?.()?.toISOString() || new Date().toISOString()
+      };
+    });
+    
+    res.json({ documents });
+  } catch (error) {
+    logger.error('Error fetching project documents:', error);
+    res.status(500).json({ error: 'SERVER_ERROR' });
+  }
+});
+
+// ============================================================================
+// PROFILE MANAGEMENT ENDPOINTS
+// ============================================================================
+
+// Edit user profile
+app.put('/api/profile/edit', async (req, res) => {
+  try {
+    const { userId, UserName, UserEmail } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    // Find user document
+    const querySnapshot = await db.collection('Users')
+      .where('User_Id', '==', userId)
+      .get();
+
+    if (querySnapshot.empty) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userDoc = querySnapshot.docs[0];
+    const updateData: any = {};
+
+    if (UserName !== undefined) updateData.UserName = UserName;
+    if (UserEmail !== undefined) updateData.UserEmail = UserEmail;
+
+    await userDoc.ref.update(updateData);
+
+    const updatedUser = await userDoc.ref.get();
+    const userData = updatedUser.data();
+    const { UserPw: _, ...userResponse } = userData as any;
+
+    res.json({
+      success: true,
+      user: userResponse,
+    });
+  } catch (error) {
+    logger.error('Error updating profile:', error);
+    res.status(500).json({
+      error: 'Failed to update profile',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// Delete user profile
+app.delete('/api/profile/delete', async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    // Find and delete user
+    const querySnapshot = await db.collection('Users')
+      .where('User_Id', '==', userId)
+      .get();
+
+    if (querySnapshot.empty) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const userDoc = querySnapshot.docs[0];
+    await userDoc.ref.delete();
+
+    // Delete user's projects
+    const projectsSnapshot = await db.collection('Projects')
+      .where('User_Id', '==', userId)
+      .get();
+
+    const batch = db.batch();
+    projectsSnapshot.docs.forEach(doc => {
+      batch.delete(doc.ref);
+    });
+    await batch.commit();
+
+    res.json({
+      success: true,
+      message: 'Profile and associated data deleted successfully',
+    });
+  } catch (error) {
+    logger.error('Error deleting profile:', error);
+    res.status(500).json({
+      error: 'Failed to delete profile',
+      details: error instanceof Error ? error.message : 'Unknown error',
+    });
+  }
+});
+
+// ============================================================================
+// LINK PREVIEW ENDPOINT
+// ============================================================================
+
+app.get('/api/link-preview', async (req, res) => {
+  try {
+    const { url } = req.query;
+
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'URL parameter is required' });
+    }
+
+    // Validate URL
+    let validUrl: URL;
+    try {
+      validUrl = new URL(url);
+      if (!['http:', 'https:'].includes(validUrl.protocol)) {
+        return res.status(400).json({ error: 'Only HTTP and HTTPS URLs are supported' });
+      }
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    // Fetch webpage
+    const response = await fetch(validUrl.href, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Dotivra-Bot/1.0 (+https://dotivra.com)',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('text/html')) {
+      return res.json({
+        url: validUrl.href,
+        title: validUrl.hostname,
+        error: 'Content is not HTML'
+      });
+    }
+
+    const html = await response.text();
+
+    // Helper function to extract meta content
+    const extractMetaContent = (htmlText: string, regex: RegExp): string | null => {
+      const match = htmlText.match(regex);
+      return match ? match[1].trim() : null;
+    };
+
+    // Parse HTML metadata
+    const metadata = {
+      url: validUrl.href,
+      title: extractMetaContent(html, /<title[^>]*>([^<]+)<\/title>/i) ||
+        extractMetaContent(html, /<meta[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i) ||
+        validUrl.hostname,
+      description: extractMetaContent(html, /<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+        extractMetaContent(html, /<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i),
+      image: extractMetaContent(html, /<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i),
+      siteName: extractMetaContent(html, /<meta[^>]*property=["']og:site_name["'][^>]*content=["']([^"']+)["']/i),
+      favicon: `${validUrl.protocol}//${validUrl.hostname}/favicon.ico`
+    };
+
+    // Clean up title
+    if (metadata.title) {
+      metadata.title = metadata.title.trim().replace(/\s+/g, ' ')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>');
+    }
+
+    // Limit description length
+    if (metadata.description && metadata.description.length > 200) {
+      metadata.description = metadata.description.substring(0, 200) + '...';
+    }
+
+    res.json(metadata);
+  } catch (error) {
+    logger.error('Link preview error:', error);
+
+    const urlParam = req.query.url;
+    let hostname = 'Unknown';
+    if (typeof urlParam === 'string') {
+      try {
+        const urlObj = new URL(urlParam);
+        hostname = urlObj.hostname;
+      } catch {}
+    }
+
+    res.json({
+      url: urlParam,
+      title: hostname,
+      error: error instanceof Error ? error.message : 'Failed to fetch preview'
+    });
+  }
+});
+
+// ============================================================================
+// DOCUMENT VERSION SAVE ENDPOINT
+// ============================================================================
+
+/**
+ * Save a new version to document history
+ * Called by frontend after each document update
+ */
+app.post('/api/document/save-version/:documentId', async (req, res) => {
+  try {
+    const {documentId} = req.params;
+    const {content, channel, editedBy} = req.body;
+
+    logger.info(`📝 Received save-version request for document ${documentId}, channel: ${channel}, contentLength: ${content?.length || 0}`);
+
+    if (!documentId || content === undefined || !channel) {
+      logger.error('❌ Missing required fields:', { documentId: !!documentId, hasContent: content !== undefined, channel: !!channel });
+      return res.status(400).json({
+        error: 'Missing required fields: documentId, content, channel'
+      });
+    }
+
+    // Get current document to get version number
+    const docRef = db.collection('Documents').doc(documentId);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      logger.error('❌ Document not found:', documentId);
+      return res.status(404).json({error: 'Document not found'});
+    }
+
+    const docData = docSnap.data();
+    const version = docData?.version || 0;
+
+    logger.info(`📊 Current document version: ${version}`);
+
+    // Save to DocumentHistory with Edited_Time (not CreatedAt!)
+    await db.collection('DocumentHistory').add({
+      Document_Id: documentId,
+      Content: content,
+      Version: version,
+      Edited_Time: admin.firestore.Timestamp.now(), // ✅ Use Edited_Time to match frontend
+      EditedBy: editedBy || docData?.EditedBy || docData?.Created_by || 'anonymous',
+      Channel: channel,
+    });
+
+    logger.info(`✅ Version ${version} saved to DocumentHistory for document ${documentId}, channel: ${channel}`);
+
+    res.json({
+      success: true,
+      version,
+      message: 'Version saved successfully'
+    });
+  } catch (error) {
+    logger.error('❌ Error saving version:', error);
+    res.status(500).json({
+      error: 'Failed to save version',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// ============================================================================
+// EXPORT FIREBASE FUNCTION
+// ============================================================================
+// Real-time collaboration now handled by Firestore onSnapshot listeners
+// on the client side. No WebSocket needed.
+
 export const api = onRequest(
   {
     secrets: [
@@ -1787,5 +2125,5 @@ export const api = onRequest(
     memory: '1GiB',
     timeoutSeconds: 540,
   },
-  requestHandler
+  app
 );
