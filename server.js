@@ -15,27 +15,27 @@ import { createBalancerFromEnv } from './server/gemini/balancer.js';
 
 // Simple retry helper for transient upstream errors (e.g., 503)
 async function fetchWithRetry(input, init, opts) {
-  const retries = (opts && opts.retries !== undefined) ? opts.retries : 2;
-  const baseBackoff = (opts && opts.backoffMs !== undefined) ? opts.backoffMs : 300;
-  let attempt = 0;
-  while (true) {
-    try {
-      const res = await fetch(input, init);
-      if ([502, 503, 504].includes(res.status) && attempt < retries) {
-        const delay = baseBackoff * Math.pow(2, attempt) + Math.floor(Math.random() * 100);
-        await new Promise((r) => setTimeout(r, delay));
-        attempt++;
-        continue;
-      }
-      return res;
-    } catch (err) {
-      if (attempt >= retries) throw err;
-      const delay = baseBackoff * Math.pow(2, attempt) + Math.floor(Math.random() * 100);
-      await new Promise((r) => setTimeout(r, delay));
-      attempt++;
-      continue;
-    }
-  }
+	const retries = (opts && opts.retries !== undefined) ? opts.retries : 2;
+	const baseBackoff = (opts && opts.backoffMs !== undefined) ? opts.backoffMs : 300;
+	let attempt = 0;
+	while (true) {
+		try {
+			const res = await fetch(input, init);
+			if ([502, 503, 504].includes(res.status) && attempt < retries) {
+				const delay = baseBackoff * Math.pow(2, attempt) + Math.floor(Math.random() * 100);
+				await new Promise((r) => setTimeout(r, delay));
+				attempt++;
+				continue;
+			}
+			return res;
+		} catch (err) {
+			if (attempt >= retries) throw err;
+			const delay = baseBackoff * Math.pow(2, attempt) + Math.floor(Math.random() * 100);
+			await new Promise((r) => setTimeout(r, delay));
+			attempt++;
+			continue;
+		}
+	}
 }
 
 
@@ -132,7 +132,7 @@ try {
 }
 
 // Import toolService and AIAgent
-import { initFirestore, getToolService } from './server/services/toolService.js';
+import { initFirestore , getToolService } from './server/services/toolService.js';
 import { AIAgent } from './server/aiAgent.js';
 
 // Initialize firestore in toolService

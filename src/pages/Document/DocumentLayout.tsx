@@ -1,4 +1,4 @@
-import { useState, type ReactNode, useEffect, createContext } from "react";
+import { useState, type ReactNode, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -51,6 +51,7 @@ export default function DocumentLayout({
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [isAIGenerating, setIsAIGenerating] = useState(false);
     const [initialChatMessage, setInitialChatMessage] = useState<string>('');
+    const [selectedTextForChat, setSelectedTextForChat] = useState<string>('');
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -111,13 +112,23 @@ export default function DocumentLayout({
 
     useEffect(() => {
         const chatFunction = (message?: string, isReply: boolean = false) => {
+            console.log('📝 Chat function called:', { message: message?.substring(0, 50), isReply });
+
             if (isReply) {
-                // If it's a reply, open chat sidebar and append the content at the reply container
+                // If it's a reply, store the selected text and open chat sidebar
+                if (message && message.trim()) {
+                    console.log('✅ Setting selected text for chat:', message.substring(0, 50));
+                    setSelectedTextForChat(message);
+                    setInitialChatMessage(''); // Don't set initial message for replies
+                }
+                setChatSidebarOpen(true);
                 return;
             }
 
             if (message && message.trim()) {
+                console.log('✅ Setting initial message:', message.substring(0, 50));
                 setInitialChatMessage(message);
+                setSelectedTextForChat(''); // Clear selected text for regular messages
 
                 // Clear the initial message after a delay to prevent re-sending
                 setTimeout(() => {
@@ -453,10 +464,13 @@ export default function DocumentLayout({
                                     onClose={() => {
                                         setChatSidebarOpen(false);
                                         setInitialChatMessage('');
+                                        setSelectedTextForChat('');
                                     }}
                                     editor={currentEditor}
                                     initialMessage={initialChatMessage}
                                     repositoryInfo={repositoryInfo}
+                                    selectedText={selectedTextForChat}
+                                    onClearSelection={() => setSelectedTextForChat('')}
                                     suggestions={repositoryInfo ? [
                                         "Analyze repository structure",
                                         "Explain codebase patterns",

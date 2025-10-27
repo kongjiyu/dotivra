@@ -71,6 +71,7 @@
     "firebase-functions": "^6.6.0",
     "highlight.js": "^11.11.1",
     "html-docx-js": "^0.1.0",
+    "jsdom": "^27.0.1",
     "lowlight": "^3.3.0",
     "lucide-react": "^0.542.0",
     "mammoth": "^1.11.0",

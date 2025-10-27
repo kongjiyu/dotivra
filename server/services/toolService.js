@@ -1,11 +1,12 @@
+
 // Firestore will be passed in from the main server file
 let firestore = null;
-
 // Initialize firestore reference
 export const initFirestore = (firestoreInstance) => {
     firestore = firestoreInstance;
     console.log('✅ Firestore initialized in toolService');
 };
+
 
 // Track tool usage for chat sidebar
 const toolUsageLog = [];
@@ -105,9 +106,11 @@ export const getToolService = () => {
             try {
                 return await tool(parameters);
             } catch (err) {
+                console.error(`❌ Error executing tool ${toolName}:`, err);
                 return {
                     success: false,
-                    html: `<div class="error-message">Sorry, something went wrong. Please try again with a different request.</div>`
+                    html: `<div class="error-message">Error: ${err.message || 'Something went wrong'}. Please try again.</div>`,
+                    error: err.message
                 };
             }
         }
@@ -466,31 +469,114 @@ export const scan_document_content = async ({ reason }) => {
 }
 
 export const search_document_content = async ({ query, reason }) => {
-    const lines = currentDocumentContent.split('\n');
     console.log(`🔍 Searching document for query: "${query}"`);
-    console.log(`Current Document Content: ${currentDocumentContent}`);
-    const matches = [];
 
-    lines.forEach((line, index) => {
-        if (line.toLowerCase().includes(query.toLowerCase())) {
-            matches.push({
-                line_number: index + 1,
-                line_content: line,
-                match_position: line.toLowerCase().indexOf(query.toLowerCase())
-            });
+    try {
+        // Validate inputs
+        if (!query || typeof query !== 'string') {
+            throw new Error('Search query is required and must be a string');
         }
-    });
 
-    const result = {
-        success: true,
-        query,
-        reason: reason || 'Search requested',
-        matches_count: matches.length,
-        matches: matches.slice(0, 10) // Limit to first 10 matches
-    };
+        if (!currentDocumentContent || currentDocumentContent.trim().length === 0) {
+            console.warn('⚠️ Document content is empty');
+            return {
+                success: true,
+                query,
+                reason: reason || 'Search requested',
+                matches_count: 0,
+                matches: [],
+                total_matches: 0,
+                note: 'No content to search (document is empty).'
+            };
+        }
 
-    logToolUsage('search_document_content', { query, reason }, result, currentDocumentId);
-    return result;
+        const matches = [];
+        const lowerQuery = query.toLowerCase();
+        const lowerContent = currentDocumentContent.toLowerCase();
+
+        console.log(`📄 Document content length: ${currentDocumentContent.length} characters`);
+
+        // Parse HTML elements using regex (no JSDOM needed)
+        // Match HTML elements: p, h1-h6, blockquote, li, td, th, code, pre
+        const elementRegex = /<(p|h[1-6]|blockquote|li|td|th|code|pre)(?:\s[^>]*)?>[\s\S]*?<\/\1>/gi;
+
+        let elementMatch;
+        let elementIndex = 0;
+        const processedPositions = new Set(); // Avoid duplicate matches
+
+        console.log(`🔎 Searching for HTML elements...`);
+
+        while ((elementMatch = elementRegex.exec(currentDocumentContent)) !== null) {
+            try {
+                const elementHTML = elementMatch[0];
+                const elementTag = elementMatch[1].toLowerCase();
+                const elementPosition = elementMatch.index;
+
+                // Skip if we already processed this position
+                if (processedPositions.has(elementPosition)) {
+                    continue;
+                }
+
+                // Extract text content from HTML (remove tags)
+                const textContent = elementHTML.replace(/<[^>]+>/g, '').trim();
+
+                // Check if this element contains the search query
+                if (textContent.toLowerCase().includes(lowerQuery)) {
+                    // Get context (50 chars before and after element)
+                    const contextStart = Math.max(0, elementPosition - 50);
+                    const contextEnd = Math.min(currentDocumentContent.length, elementPosition + elementHTML.length + 50);
+                    const context = currentDocumentContent.substring(contextStart, contextEnd);
+
+                    matches.push({
+                        element_index: elementIndex,
+                        element_tag: elementTag,
+                        element_html: elementHTML,
+                        element_position: elementPosition,
+                        element_length: elementHTML.length,
+                        text_content: textContent.substring(0, 200),
+                        context: context,
+                        context_start: contextStart,
+                        context_end: contextEnd
+                    });
+
+                    processedPositions.add(elementPosition);
+                    elementIndex++;
+                }
+            } catch (elementError) {
+                console.error('❌ Error processing element:', elementError);
+                // Continue with next element
+            }
+        }
+
+        console.log(`✅ Search complete: found ${matches.length} matches`);
+
+        const result = {
+            success: true,
+            query,
+            reason: reason || 'Search requested',
+            matches_count: matches.length,
+            matches: matches.slice(0, 10), // Limit to first 10 matches
+            total_matches: matches.length,
+            note: 'Results show HTML element details. Use element_position for precise operations.'
+        };
+
+        logToolUsage('search_document_content', { query, reason }, result, currentDocumentId);
+        return result;
+    } catch (error) {
+        console.error('❌ Error in search_document_content:', error);
+        console.error('Stack trace:', error.stack);
+
+        const result = {
+            success: false,
+            error: error.message || 'Unknown error occurred',
+            query,
+            reason: reason || 'Search requested',
+            note: 'Search failed. Check server logs for details.'
+        };
+
+        logToolUsage('search_document_content', { query, reason }, result, currentDocumentId);
+        throw error; // Re-throw to be caught by executeTool
+    }
 }
 
 export const append_document_content = async ({ content, reason }) => {
@@ -547,11 +633,31 @@ export const replace_document_content = async ({ position, content, reason }) =>
         };
     }
     const { from, to } = position;
-    const removedText = currentDocumentContent.slice(from, to);
-    currentDocumentContent = currentDocumentContent.slice(0, from) + content + currentDocumentContent.slice(to);
+
+    // Validate and sanitize positions
+    const safeFrom = Math.max(0, Math.min(from, currentDocumentContent.length));
+    const safeTo = Math.max(safeFrom, Math.min(to, currentDocumentContent.length));
+
+    // Safety check: prevent replacing too much content accidentally
+    const replacementLength = safeTo - safeFrom;
+    const totalLength = currentDocumentContent.length;
+
+    if (replacementLength > totalLength * 0.8 && content.length < replacementLength * 0.1) {
+        console.warn(`⚠️ Attempted to replace ${replacementLength} chars with ${content.length} chars (>80% removal)`);
+        return {
+            success: false,
+            html: `<div class="error-message">Cannot replace more than 80% of document with significantly smaller content. This looks like accidental deletion. Please be more specific.</div>`
+        };
+    }
+
+    const removedText = currentDocumentContent.slice(safeFrom, safeTo);
+    currentDocumentContent = currentDocumentContent.slice(0, safeFrom) + content + currentDocumentContent.slice(safeTo);
     const result = {
         success: true,
-        html: `<div class="tool-success">Replaced <b>${to - from}</b> characters with <b>${content.length}</b> new characters.</div>`
+        html: `<div class="tool-success">Replaced <b>${safeTo - safeFrom}</b> characters with <b>${content.length}</b> new characters.</div>`,
+        removed_length: safeTo - safeFrom,
+        inserted_length: content.length,
+        position: { from: safeFrom, to: safeTo }
     };
     logToolUsage('replace_document_content', { position, content, reason }, result, currentDocumentId);
     await syncToFirebase();
@@ -566,11 +672,31 @@ export const remove_document_content = async ({ position, reason }) => {
         };
     }
     const { from, to } = position;
-    const removedText = currentDocumentContent.slice(from, to);
-    currentDocumentContent = currentDocumentContent.slice(0, from) + currentDocumentContent.slice(to);
+
+    // Validate position bounds
+    const safeFrom = Math.max(0, Math.min(from, currentDocumentContent.length));
+    const safeTo = Math.max(safeFrom, Math.min(to, currentDocumentContent.length));
+
+    // Safety check: prevent removing too much content accidentally
+    const removalLength = safeTo - safeFrom;
+    const totalLength = currentDocumentContent.length;
+
+    if (removalLength > totalLength * 0.8) {
+        console.warn(`⚠️ Attempted to remove ${removalLength} chars from ${totalLength} total (>80%)`);
+        return {
+            success: false,
+            html: `<div class="error-message">Cannot remove more than 80% of document content in a single operation. Please be more specific about what you want to remove.</div>`
+        };
+    }
+
+    const removedText = currentDocumentContent.slice(safeFrom, safeTo);
+    currentDocumentContent = currentDocumentContent.slice(0, safeFrom) + currentDocumentContent.slice(safeTo);
     const result = {
         success: true,
-        html: `<div class="tool-success">Removed <b>${to - from}</b> characters from your document.</div>`
+        html: `<div class="tool-success">Removed <b>${safeTo - safeFrom}</b> characters from your document.</div>`,
+        removed_length: safeTo - safeFrom,
+        position: { from: safeFrom, to: safeTo },
+        removedContent: removedText.substring(0, 100) + (removedText.length > 100 ? '...' : '') // Preview of removed content
     };
     logToolUsage('remove_document_content', { position, reason }, result, currentDocumentId);
     await syncToFirebase();
@@ -694,14 +820,77 @@ export const search_document_summary = async ({ query, reason }) => {
     const docRef = doc(firestore, 'Documents', currentDocumentId);
     const docSnap = await getDoc(docRef);
     const summary = docSnap.exists() ? (docSnap.data().Summary || '') : '';
-    const lines = summary.split('\n');
+
     const matches = [];
-    lines.forEach((line, index) => {
-        if (line.toLowerCase().includes((query || '').toLowerCase())) {
-            matches.push({ line_number: index + 1, line_content: line });
+    const lowerQuery = (query || '').toLowerCase();
+
+    // Parse HTML to find element-level matches in summary using regex (no JSDOM)
+    try {
+        if (!summary || summary.trim().length === 0) {
+            return {
+                success: true,
+                query,
+                matches_count: 0,
+                matches: [],
+                total_matches: 0,
+                note: 'No summary content to search.'
+            };
         }
-    });
-    return { success: true, query, matches_count: matches.length, matches };
+
+        // Match HTML elements using regex
+        const elementRegex = /<(p|h[1-6]|blockquote|li|td|th|code|pre)(?:\s[^>]*)?>[\s\S]*?<\/\1>/gi;
+
+        let elementMatch;
+        let elementIndex = 0;
+        const processedPositions = new Set();
+
+        while ((elementMatch = elementRegex.exec(summary)) !== null) {
+            const elementHTML = elementMatch[0];
+            const elementTag = elementMatch[1].toLowerCase();
+            const elementPosition = elementMatch.index;
+
+            // Skip if we already processed this position
+            if (processedPositions.has(elementPosition)) {
+                continue;
+            }
+
+            // Extract text content from HTML (remove tags)
+            const textContent = elementHTML.replace(/<[^>]+>/g, '').trim();
+
+            // Check if this element contains the search query
+            if (textContent.toLowerCase().includes(lowerQuery)) {
+                const contextStart = Math.max(0, elementPosition - 50);
+                const contextEnd = Math.min(summary.length, elementPosition + elementHTML.length + 50);
+                const context = summary.substring(contextStart, contextEnd);
+
+                matches.push({
+                    element_index: elementIndex,
+                    element_tag: elementTag,
+                    element_html: elementHTML,
+                    element_position: elementPosition,
+                    element_length: elementHTML.length,
+                    text_content: textContent.substring(0, 200),
+                    context: context,
+                    context_start: contextStart,
+                    context_end: contextEnd
+                });
+
+                processedPositions.add(elementPosition);
+                elementIndex++;
+            }
+        }
+    } catch (e) {
+        console.error('Error parsing summary HTML:', e);
+    }
+
+    return {
+        success: true,
+        query,
+        matches_count: matches.length,
+        matches: matches.slice(0, 10),
+        total_matches: matches.length,
+        note: 'Results show HTML element details. Use element_position for precise operations.'
+    };
 };
 export const get_all_documents_metadata_within_project = async ({ documentId, reason }) => {
     console.log(`📚 get_all_documents_metadata_within_project called for documentId: ${documentId}`);
@@ -713,8 +902,20 @@ export const get_all_documents_metadata_within_project = async ({ documentId, re
 
         const { doc, getDoc, collection, query, where, getDocs } = await import('firebase/firestore');
 
+        // Use provided documentId or fall back to currentDocumentId
+        const targetDocId = documentId || currentDocumentId;
+
+        if (!targetDocId) {
+            return {
+                success: false,
+                reason,
+                error: 'No document ID provided',
+                documents: []
+            };
+        }
+
         // First, get the current document to find its ProjectID
-        const docRef = doc(firestore, 'Documents', documentId);
+        const docRef = doc(firestore, 'Documents', targetDocId);
         const docSnap = await getDoc(docRef);
 
         if (!docSnap.exists()) {
@@ -726,14 +927,25 @@ export const get_all_documents_metadata_within_project = async ({ documentId, re
             };
         }
 
-        const projectId = docSnap.data().ProjectID;
+        const docData = docSnap.data();
+        const projectId = docData.ProjectID || docData.Project_Id;
+
+        console.log(`📚 Document data:`, {
+            documentId: targetDocId,
+            projectId,
+            allFields: Object.keys(docData)
+        });
 
         if (!projectId) {
             return {
                 success: false,
                 reason,
                 error: 'Document does not belong to a project',
-                documents: []
+                documents: [],
+                debugInfo: {
+                    documentId: targetDocId,
+                    availableFields: Object.keys(docData)
+                }
             };
         }
 

@@ -16,8 +16,11 @@ class AIService {
         prompt: string,
         documentId?: string,
         conversationHistory?: Array<{role: string; content: string}>,
-        selectedText?: string
-    ): AsyncGenerator<{stage: string; content: any; thought?: string}> {
+        selectedText?: string,
+        signal?: AbortSignal
+    ): AsyncGenerator<{stage: string; content: any; thought?: string; toolExecutions?: any[]}> {
+        const toolExecutions: any[] = []; // Track all tool executions with input/output
+        
         try {
             // Build system prompt with tool descriptions and stage format
             const systemPrompt = `You are a helpful AI assistant that helps users work with their documents. You can read, search, modify, and organize document content.
@@ -62,11 +65,11 @@ You will be called MULTIPLE TIMES. Each call should return ONE stage. Track your
 
 4. **SUMMARY STAGE** (Final call - wrap up)
    - Provide a clear summary with a title (use ## for markdown heading)
-   - **IMPORTANT: Always start summary content with "## Summary" as the heading**
+   - **IMPORTANT: Always start summary content with "Summary" as the heading in html**
    - Explain what was accomplished
    - Content: Full summary in natural language with formatting
    - **Set nextStage: "done"**
-   - Example: {"stage":"summary","thought":"Done","content":"## Summary\\n\\nI've added the introduction section to your document!","nextStage":"done"}
+   - Example: {"stage":"summary","thought":"Done","content":"Summary\\n\\nI've added the introduction section to your document!","nextStage":"done"}
 
 **YOUR TOOLS (use exact arg shapes):**
 - get_document_content: Read the entire document (args: {documentId, reason})
@@ -84,6 +87,43 @@ You will be called MULTIPLE TIMES. Each call should return ONE stage. Track your
 - replace_doument_summary: Replace summary range (args: {position:{from:number, to:number}, content, reason})
 - remove_document_summary: Remove summary range (args: {position:{from:number, to:number}, reason})
 - search_document_summary: Search within summary (args: {query, reason})
+
+**CRITICAL: ACCURATE POSITION CALCULATION FOR remove_document_content and replace_document_content**
+
+When using remove_document_content or replace_document_content, you MUST:
+
+1. **ALWAYS call search_document_content FIRST** to find the EXACT position of the text to remove/replace
+   - Example: If user says "remove the introduction", first search for "introduction" to get its exact location
+   
+2. **Use the search result positions** to calculate accurate from/to values
+   - search_document_content returns: matches array with element_index, character_position, match_length, context
+   - element_index: nth occurrence of the match (0-based)
+   - character_position: absolute position in document where match starts
+   - match_length: length of the matched text
+   - Use character_position as 'from' and (character_position + match_length) as 'to'
+   
+3. **NEVER guess or estimate positions** - always search first, then use character_position
+   
+4. **For multi-line content or sections:**
+   - Search for the starting marker (e.g., "## Introduction")
+   - Search for the ending marker (e.g., "## Conclusion" or end of section)
+   - Use character_position from search results
+   - Calculate range: from = start_position, to = end_position
+   
+5. **Verify your calculation:**
+   - The from position should be the start of the text to remove
+   - The to position should be the end of the text to remove
+   - Double-check: to - from = length of text being removed
+
+**Example workflow for "remove the conclusion section":**
+Step 1: search_document_content with query "## Conclusion"
+Step 2: Get character_position from search result (e.g., 5000)
+Step 3: Search for the next section header or end marker
+Step 4: Calculate range using character positions
+Step 5: Call remove_document_content with {from: 5000, to: 6500}
+Step 6: Never remove text without first searching for its exact location
+
+**Search Result Example:** matches array contains {element_index: 0, character_position: 145, match_length: 15, context: "...surrounding text..."}
 
 **IMPORTANT - MESSAGE PRIORITY:**
 Always prioritize the user's current message first. Only analyze earlier conversation messages if they are necessary to accomplish the request. Keep references to prior context minimal and relevant.
@@ -124,7 +164,7 @@ Call 2 - Reasoning: {"stage":"reasoning","thought":"Based on planning: need to f
 Call 3 - ToolUsed: {"stage":"toolUsed","thought":"Executing search for intro","content":{"tool":"search_document_content","args":{"documentId":"123","query":"introduction","reason":"Finding intro section"},"description":"Looking for the introduction section..."},"nextStage":"reasoning"}
 Call 4 - Reasoning: {"stage":"reasoning","thought":"Found intro, now insert content","content":"Great! I found the introduction. Now I'll add your content right after it.","nextStage":"toolUsed"}
 Call 5 - ToolUsed: {"stage":"toolUsed","thought":"Inserting content","content":{"tool":"insert_document_content","args":{"documentId":"123","content":"New content here","position":"after-intro","reason":"Adding user content"},"description":"Adding your content after the introduction..."},"nextStage":"summary"}
-Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"## Summary\\n\\nI've added your content right after the introduction section!","nextStage":"done"}`;
+Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"Summary\\n\\nI've added your content right after the introduction section!","nextStage":"done"}`;
 
             // Build full prompt with selected text
             let fullPrompt = prompt;
@@ -167,6 +207,18 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"## Sum
                     `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
                 ).join('\n\n') + stageContext + '\n\nSystem: ' + systemPromptWithDocId;
 
+                // Dynamic token allocation based on stage
+                let maxTokens = 2048; // Default
+                if (currentStage === 'summary') {
+                    maxTokens = 8192; // More tokens for detailed summary
+                } else if (currentStage === 'planning') {
+                    maxTokens = 1024; // Less tokens for planning
+                } else if (currentStage === 'reasoning') {
+                    maxTokens = 2048; // Standard for reasoning
+                } else if (currentStage === 'toolUsed') {
+                    maxTokens = 1024; // Tool requests are usually short
+                }
+
                 // Call Gemini API TEMP - USE LOCALHOST
                 const response = await fetch('http://localhost:3001/api/gemini/generate', {
                     method: 'POST',
@@ -176,9 +228,10 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"## Sum
                         model: 'gemini-2.0-flash-exp',
                         generationConfig: {
                             temperature: 0.3,
-                            maxOutputTokens: 2048
+                            maxOutputTokens: maxTokens
                         }
-                    })
+                    }),
+                    signal: signal // Add abort signal
                 });
 
                 if (!response.ok) {
@@ -288,8 +341,8 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"## Sum
                     content: JSON.stringify(parsed)
                 });
 
-                // Yield the stage to client
-                yield parsed;
+                // Yield the stage to client with tool executions
+                yield { ...parsed, toolExecutions: [...toolExecutions] };
 
                 // Update currentStage based on nextStage
                 // If nextStage is 'done', trigger summary stage first
@@ -344,13 +397,23 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"## Sum
                             };
                         }
 
+                        // Track this tool execution with input and output
+                        toolExecutions.push({
+                            tool: toolData.tool,
+                            args: toolData.args,
+                            result: toolResult.result,
+                            success: toolResult.success,
+                            timestamp: Date.now()
+                        });
+
                         // Store the result for validation
                         lastToolResult = toolResult;
                         
-                        // Yield tool result to client
+                        // Yield tool result to client with tool executions history
                         yield {
                             stage: 'toolResult',
-                            content: toolResult
+                            content: toolResult,
+                            toolExecutions: [...toolExecutions] // Send copy of executions
                         };
 
                         // Add complete tool result to conversation for next reasoning stage
@@ -403,6 +466,16 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"## Sum
             yield { stage: 'done', content: null };
 
         } catch (error) {
+            // Check if it's an abort error
+            if (error instanceof Error && error.name === 'AbortError') {
+                console.log('AI Agent execution aborted by user');
+                yield { 
+                    stage: 'stopped', 
+                    content: 'Generation stopped by user.'
+                };
+                return;
+            }
+            
             console.error('AI Agent execution error:', error);
             yield { 
                 stage: 'error', 

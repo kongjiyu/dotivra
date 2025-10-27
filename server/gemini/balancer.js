@@ -332,42 +332,55 @@ export class GeminiBalancer {
 					console.log(`🔧 Tool config:`, JSON.stringify(toolConfig, null, 2));
 				}
 
-				// Use the official Google GenAI SDK format with config parameter
-				const resp = await client.models.generateContentStream({
+
+				// Resolve tool config if not provided
+				const resolvedToolConfig = toolConfig ?? (tools && tools.length > 0 ? {
+					functionCallingConfig: {
+						mode: FunctionCallingConfigMode.ANY,
+						allowedFunctionNames: tools[0]?.functionDeclarations?.map((fd) => fd.name) || [],
+					}
+				} : undefined);
+
+				// Non-streaming generate; newer SDKs expose response on resp.response
+				const resp = await client.models.generateContent({
 					model,
 					contents,
 					systemInstruction,
-					config: {
-						...generationConfig,
-						tools,
-						toolConfig: tools && tools.length > 0 ? {
-							functionCallingConfig: {
-								mode: FunctionCallingConfigMode.ANY,
-								allowedFunctionNames: tools[0]?.functionDeclarations?.map((fd) => fd.name) || [],
-							}
-						} : undefined,
-						safetySettings
-					}
+					generationConfig,
+					tools,
+					toolConfig: resolvedToolConfig,
+					safetySettings,
 				});
 
-				const metadata = resp?.usageMetadata || {};
-				const usedTokens = Number(metadata.totalTokenCount || metadata.candidatesTokenCount || 0) + Number(metadata.promptTokenCount || 0);
+				const metaSrc = resp?.response?.usageMetadata || resp?.usageMetadata || {};
+				const usedTokens = Number(metaSrc.totalTokenCount || metaSrc.candidatesTokenCount || 0) + Number(metaSrc.promptTokenCount || 0);
 				const effectiveTokens = usedTokens > 0 ? usedTokens : estimatedTokens;
 				this._markUsage(keyState, effectiveTokens);
 
-				// Extract text from response
-				const text = resp?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+				// Extract text from response (handle multiple SDK shapes)
+				const responseObj = resp?.response ?? resp;
+				let text = null;
+				try {
+					if (typeof responseObj?.text === 'function') {
+						text = responseObj.text();
+					}
+				} catch { }
+				if (!text) {
+					const cands = responseObj?.candidates || [];
+					const parts = cands?.[0]?.content?.parts || [];
+					text = parts.map((p) => p?.text).filter(Boolean).join(' ') || null;
+				}
 
-				// Extract function calls if any - check both possible locations
-				const functionCalls = resp?.functionCalls || [];
+				// Extract function calls if any
+				const functionCalls = (responseObj?.candidates?.[0]?.functionCalls) || resp?.functionCalls || [];
 
 				return {
 					text,
 					functionCalls,
-					raw: resp,
+					raw: resp?.response ?? resp,
 					usage: {
-						promptTokens: metadata.promptTokenCount ?? null,
-						candidatesTokens: metadata.candidatesTokenCount ?? null,
+						promptTokens: metaSrc.promptTokenCount ?? null,
+						candidatesTokens: metaSrc.candidatesTokenCount ?? null,
 						totalTokens: usedTokens || null,
 						estimatedTokens,
 					},
@@ -378,12 +391,23 @@ export class GeminiBalancer {
 				lastError = e;
 				const msg = (e && (e.message || String(e))) || '';
 				const isRateLimit = e?.status === 429 || e?.status === 403 || /rate/i.test(msg);
+				const isOverloaded = e?.status === 503 || /overloaded|model is overloaded/i.test(msg);
+
 				if (isRateLimit) {
+					console.log(`⚠️  Rate limit hit for key ${keyState.id.substring(0, 12)}, cooling down for 1 minute`);
 					const now = this._now();
 					const minuteEnd = Math.floor(now / 60000) * 60000 + 60000;
 					keyState.cooldownUntil = minuteEnd;
 					this._debouncedSave();
+				} else if (isOverloaded) {
+					console.log(`⚠️  Model overloaded (503) for key ${keyState.id.substring(0, 12)}, switching to next key`);
+					// Put this key in cooldown for 30 seconds
+					keyState.cooldownUntil = this._now() + 30000;
+					this._debouncedSave();
+				} else {
+					console.error(`❌ Error with key ${keyState.id.substring(0, 12)}:`, msg);
 				}
+
 				await sleep(100);
 				continue;
 			}
@@ -513,12 +537,21 @@ export class GeminiBalancer {
 				lastError = e;
 				const msg = (e && (e.message || String(e))) || '';
 				const isRateLimit = e?.status === 429 || e?.status === 403 || /rate/i.test(msg);
+				const isOverloaded = e?.status === 503 || /overloaded|model is overloaded/i.test(msg);
 
 				if (isRateLimit) {
+					console.log(`⚠️  Rate limit hit for key ${keyState.id.substring(0, 12)}, cooling down for 1 minute`);
 					const now = this._now();
 					const minuteEnd = Math.floor(now / 60000) * 60000 + 60000;
 					keyState.cooldownUntil = minuteEnd;
 					this._debouncedSave();
+				} else if (isOverloaded) {
+					console.log(`⚠️  Model overloaded (503) for key ${keyState.id.substring(0, 12)}, switching to next key`);
+					// Put this key in cooldown for 30 seconds
+					keyState.cooldownUntil = this._now() + 30000;
+					this._debouncedSave();
+				} else {
+					console.error(`❌ Error with key ${keyState.id.substring(0, 12)}:`, msg);
 				}
 
 				console.error(`❌ Gemini attempt ${attempt + 1} failed with key ${keyState.id}:`, msg);

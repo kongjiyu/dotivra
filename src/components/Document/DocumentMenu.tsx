@@ -6,6 +6,7 @@ import { marked } from 'marked';
 import mammoth from 'mammoth';
 import mermaid from 'mermaid';
 import { Input } from "@/components/ui/input";
+import { addDividersAfterHeadings } from "@/utils/addDividersAfterHeadings";
 import {
 	Popover,
 	PopoverContent,
@@ -1045,7 +1046,6 @@ export default function DocumentMenu({
 				// Add dividers after H1/H2 headings after a short delay to ensure content is loaded
 				setTimeout(() => {
 					if (editor) {
-						const { addDividersAfterHeadings } = require('@/utils/addDividersAfterHeadings');
 						addDividersAfterHeadings(editor);
 					}
 				}, 100);
@@ -1059,7 +1059,6 @@ export default function DocumentMenu({
 				// Add dividers after H1/H2 headings after a short delay
 				setTimeout(() => {
 					if (editor) {
-						const { addDividersAfterHeadings } = require('@/utils/addDividersAfterHeadings');
 						addDividersAfterHeadings(editor);
 					}
 				}, 100);

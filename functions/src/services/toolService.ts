@@ -1,6 +1,6 @@
 /**
- * Document Manipulation Tools Service
- * Provides 7 MCP tools for AI-powered document editing
+ * Document Manipulation Tools Service - Firebase Cloud Functions Version
+ * Updated with character-position search format
  */
 
 import * as admin from 'firebase-admin';
@@ -30,6 +30,26 @@ interface ToolLogEntry {
 
 const toolUsageLog: ToolLogEntry[] = [];
 
+// Get human-readable summary of tool result
+const getResultSummary = (toolName: string, result: any): string => {
+  switch (toolName) {
+    case 'scan_document_content':
+      return `Scanned: ${result.analysis?.total_lines || 0} lines, ${result.analysis?.total_words || 0} words`;
+    case 'search_document_content':
+      return `Found ${result.matches_count || 0} matches for "${result.query}"`;
+    case 'append_document_content':
+      return `Appended ${result.appended_length || 0} characters`;
+    case 'insert_document_content':
+      return `Inserted ${result.inserted_length || 0} characters at position ${result.position}`;
+    case 'replace_document_content':
+      return `Replaced ${result.removed_length || 0} characters with ${result.inserted_length || 0} characters`;
+    case 'remove_document_content':
+      return `Removed ${result.removed_length || 0} characters`;
+    default:
+      return 'Operation completed';
+  }
+};
+
 // Helper to log tool usage
 const logToolUsage = (toolName: string, args: Record<string, any>, result: any, documentId: string | null = null): ToolLogEntry => {
   const logEntry: ToolLogEntry = {
@@ -56,26 +76,6 @@ const logToolUsage = (toolName: string, args: Record<string, any>, result: any, 
   return logEntry;
 };
 
-// Get human-readable summary of tool result
-const getResultSummary = (toolName: string, result: any): string => {
-  switch (toolName) {
-    case 'scan_document_content':
-      return `Scanned: ${result.analysis?.total_lines || 0} lines, ${result.analysis?.total_words || 0} words, ${result.analysis?.headings_count || 0} headings`;
-    case 'search_document_content':
-      return `Found ${result.matches_count || 0} matches for "${result.query}"`;
-    case 'append_document_content':
-      return `Appended ${result.appended_length || 0} characters`;
-    case 'insert_document_content':
-      return `Inserted ${result.inserted_length || 0} characters at position ${result.position}`;
-    case 'replace_document_content':
-      return `Replaced ${result.removed_length || 0} characters with ${result.inserted_length || 0} characters`;
-    case 'remove_document_content':
-      return `Removed ${result.removed_length || 0} characters`;
-    default:
-      return 'Operation completed';
-  }
-};
-
 // Export tool usage log getter
 export const getToolUsageLog = (): ToolLogEntry[] => {
   return [...toolUsageLog];
@@ -86,12 +86,49 @@ export const clearToolUsageLog = (): void => {
   toolUsageLog.length = 0;
 };
 
+// Execute tool by name
+export const executeTool = async (toolName: string, parameters: Record<string, any>): Promise<any> => {
+  const toolMap: Record<string, Function> = {
+    'get_document_content': get_document_content,
+    'scan_document_content': scan_document_content,
+    'search_document_content': search_document_content,
+    'append_document_content': append_document_content,
+    'insert_document_content': insert_document_content,
+    'replace_document_content': replace_document_content,
+    'remove_document_content': remove_document_content,
+    'append_document_summary': append_document_summary,
+    'insert_document_summary': insert_document_summary,
+    'replace_doument_summary': replace_doument_summary,
+    'remove_document_summary': remove_document_summary,
+    'search_document_summary': search_document_summary,
+    'get_all_documents_metadata_within_project': get_all_documents_metadata_within_project,
+    'get_document_summary': get_document_summary,
+  };
+
+  const tool = toolMap[toolName];
+  if (!tool) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, I couldn't find the requested tool. Please try again with a different request.</div>`
+    };
+  }
+
+  try {
+    return await tool(parameters);
+  } catch (err: any) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, something went wrong. Please try again with a different request.</div>`
+    };
+  }
+};
+
 // Global document state
 let currentDocumentId: string | null = null;
 let currentDocumentContent: string = '';
 
 // Set current document from Firebase
-export const setCurrentDocument = async (documentId: string): Promise<{ success: boolean; documentId?: string; content?: string; documentName?: string }> => {
+export const setCurrentDocument = async (documentId: string): Promise<any> => {
   try {
     if (!documentId) {
       currentDocumentId = null;
@@ -103,24 +140,20 @@ export const setCurrentDocument = async (documentId: string): Promise<{ success:
       throw new Error('Firestore not initialized in toolService');
     }
 
-    logger.info(`📄 Loading document: ${documentId}`);
+    logger.info(`📄 Attempting to load document: ${documentId}`);
 
     const docRef = firestore.collection('Documents').doc(documentId);
     const docSnap = await docRef.get();
 
     if (!docSnap.exists) {
-      throw new Error(`Document ${documentId} not found`);
+      throw new Error(`Document ${documentId} not found in Firestore collection`);
     }
 
-    const docData = docSnap.data();
-    if (!docData) {
-      throw new Error(`Document ${documentId} has no data`);
-    }
-
+    const docData = docSnap.data()!;
     currentDocumentId = documentId;
     currentDocumentContent = docData.Content || '';
 
-    logger.info(`✅ Document loaded: ${documentId} (${currentDocumentContent.length} chars)`);
+    logger.info(`✅ Document loaded successfully: ${documentId} (${currentDocumentContent.length} chars)`);
 
     return {
       success: true,
@@ -128,16 +161,16 @@ export const setCurrentDocument = async (documentId: string): Promise<{ success:
       content: currentDocumentContent,
       documentName: docData.DocumentName
     };
-  } catch (error) {
+  } catch (error: any) {
     logger.error('❌ Error setting current document:', error);
     throw error;
   }
 };
 
 // Sync document content back to Firebase
-const syncToFirebase = async (): Promise<{ success: boolean; error?: string }> => {
+const syncToFirebase = async (): Promise<any> => {
   if (!currentDocumentId || !firestore) {
-    logger.info('ℹ️  No document context set - changes will not be persisted');
+    logger.info('ℹ️  No document context set - changes will not be persisted to Firebase');
     return { success: false, error: 'No document set or firestore not initialized' };
   }
 
@@ -145,60 +178,53 @@ const syncToFirebase = async (): Promise<{ success: boolean; error?: string }> =
     const docRef = firestore.collection('Documents').doc(currentDocumentId);
     await docRef.update({
       Content: currentDocumentContent,
-      Updated_Time: admin.firestore.Timestamp.now()
+      Updated_Time: admin.firestore.FieldValue.serverTimestamp()
     });
 
     logger.info(`💾 Synced to Firebase: ${currentDocumentId} (${currentDocumentContent.length} chars)`);
     return { success: true };
-  } catch (error) {
+  } catch (error: any) {
     logger.error('❌ Firebase sync error:', error);
-    return { success: false, error: (error as Error).message };
+    return { success: false, error: error.message };
   }
 };
 
-// Tool 1: Get Document Content
-export const get_document_content = async ({ documentId }: { documentId: string }): Promise<any> => {
-  logger.info('📖 get_document_content called:', { 
-    documentId, 
-    currentDocId: currentDocumentId,
-    needsLoad: documentId !== currentDocumentId
-  });
-
+// Tool implementations
+export const get_document_content = async ({ documentId, reason }: any): Promise<any> => {
   try {
+    logger.info(`📖 get_document_content called: ${reason || 'No reason provided'}`);
+
     if (documentId && documentId !== currentDocumentId) {
-      logger.info(`📖 Loading new document: ${documentId}`);
       await setCurrentDocument(documentId);
     }
 
-    logger.info(`📖 Returning document content: ${currentDocumentContent.length} chars`);
-
     const result = {
       success: true,
+      reason: reason || 'Getting document content',
+      operation: 'get_content',
       documentId: currentDocumentId,
       content: currentDocumentContent,
       length: currentDocumentContent.length
     };
 
-    logToolUsage('get_document_content', { documentId }, result, currentDocumentId);
+    logToolUsage('get_document_content', { documentId, reason }, result, currentDocumentId);
     return result;
-  } catch (error) {
-    logger.error('❌ get_document_content failed:', error);
+  } catch (error: any) {
     const result = {
       success: false,
-      error: (error as Error).message
+      reason: reason || 'Getting document content',
+      error: error.message
     };
-    logToolUsage('get_document_content', { documentId }, result, currentDocumentId);
+    logToolUsage('get_document_content', { documentId, reason }, result, currentDocumentId);
     throw error;
   }
 };
 
-// Tool 2: Scan Document Content
-export const scan_document_content = async ({ reason }: { reason: string }): Promise<any> => {
+export const scan_document_content = async ({ reason }: any): Promise<any> => {
   const lines = currentDocumentContent.split('\n');
   const words = currentDocumentContent.split(/\s+/).filter(w => w.length > 0);
   const characters = currentDocumentContent.length;
 
-  // Extract headings
   const headings = lines
     .filter(line => line.trim().startsWith('#'))
     .map(line => {
@@ -225,153 +251,434 @@ export const scan_document_content = async ({ reason }: { reason: string }): Pro
   return result;
 };
 
-// Tool 3: Search Document Content
-export const search_document_content = async ({ query, reason }: { query: string; reason?: string }): Promise<any> => {
-  const lines = currentDocumentContent.split('\n');
-  const matches: any[] = [];
+export const search_document_content = async ({ query, reason }: any): Promise<any> => {
+  logger.info(`🔍 Searching document for query: "${query}"`);
+  const matches = [];
+  const lowerQuery = (query || '').toLowerCase();
+  const lowerContent = currentDocumentContent.toLowerCase();
 
-  lines.forEach((line, index) => {
-    if (line.toLowerCase().includes(query.toLowerCase())) {
-      matches.push({
-        line_number: index + 1,
-        line_content: line,
-        match_position: line.toLowerCase().indexOf(query.toLowerCase())
-      });
-    }
-  });
+  let searchIndex = 0;
+  let elementIndex = 0;
+
+  while (searchIndex < lowerContent.length) {
+    const matchIndex = lowerContent.indexOf(lowerQuery, searchIndex);
+    if (matchIndex === -1) break;
+
+    const contextStart = Math.max(0, matchIndex - 50);
+    const contextEnd = Math.min(currentDocumentContent.length, matchIndex + query.length + 50);
+    const context = currentDocumentContent.substring(contextStart, contextEnd);
+
+    matches.push({
+      element_index: elementIndex,
+      character_position: matchIndex,
+      match_length: query.length,
+      context: context,
+      context_start: contextStart,
+      context_end: contextEnd
+    });
+
+    elementIndex++;
+    searchIndex = matchIndex + 1;
+  }
 
   const result = {
     success: true,
     query,
     reason: reason || 'Search requested',
     matches_count: matches.length,
-    matches: matches.slice(0, 10)
+    matches: matches.slice(0, 10),
+    total_matches: matches.length
   };
 
   logToolUsage('search_document_content', { query, reason }, result, currentDocumentId);
   return result;
 };
 
-// Tool 4: Append Document Content
-export const append_document_content = async ({ content, reason }: { content: string; reason: string }): Promise<any> => {
-  logger.info('📝 append_document_content called:', { 
-    contentLength: content.length, 
-    contentPreview: content.substring(0, 100),
-    reason, 
-    docId: currentDocumentId,
-    currentContentLength: currentDocumentContent.length
-  });
-
-  if (!currentDocumentId) {
-    logger.error('❌ No document ID set - cannot append content');
+export const append_document_content = async ({ content, reason }: any): Promise<any> => {
+  if (typeof content !== 'string' || !content.length) {
     return {
       success: false,
-      error: 'No document context set. Call setCurrentDocument first.',
-      operation: 'append'
+      html: `<div class="error-message">Sorry, no content was provided to append. Please try again.</div>`
     };
   }
-
-  const oldLength = currentDocumentContent.length;
   currentDocumentContent = currentDocumentContent + content;
-  const newLength = currentDocumentContent.length;
-
-  logger.info(`📝 Content appended. Length: ${oldLength} → ${newLength} (added ${content.length} chars)`);
-
-  const result: any = {
+  const result = {
     success: true,
-    reason,
-    operation: 'append',
-    appended_length: content.length,
-    new_total_length: currentDocumentContent.length,
-    updated_content: currentDocumentContent
+    html: `<div class="tool-success">Added <b>${content.length}</b> characters to your document.</div>`
   };
-
   logToolUsage('append_document_content', { content, reason }, result, currentDocumentId);
-  
-  const syncResult = await syncToFirebase();
-  logger.info('📝 Firebase sync result:', syncResult);
-  
-  if (!syncResult.success) {
-    logger.error('❌ Failed to sync to Firebase:', syncResult.error);
-    result.success = false;
-    result.error = syncResult.error;
-  }
-
+  await syncToFirebase();
   return result;
 };
 
-// Tool 5: Insert Document Content
-export const insert_document_content = async ({ position, content, reason }: { position: number; content: string; reason: string }): Promise<any> => {
+export const insert_document_content = async ({ position, content, reason }: any): Promise<any> => {
+  if (typeof position !== 'number' || position < 0 || position > currentDocumentContent.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, we couldn't find the right place to insert your text. Please try again with a different request.</div>`
+    };
+  }
+  if (typeof content !== 'string' || !content.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, no content was provided to insert. Please try again.</div>`
+    };
+  }
   currentDocumentContent = currentDocumentContent.slice(0, position) + content + currentDocumentContent.slice(position);
-
   const result = {
     success: true,
-    reason,
-    operation: 'insert',
-    position,
-    inserted_length: content.length,
-    new_total_length: currentDocumentContent.length,
-    updated_content: currentDocumentContent
+    html: `<div class="tool-success">Inserted <b>${content.length}</b> characters at position <b>${position}</b>.</div>`
   };
-
   logToolUsage('insert_document_content', { position, content, reason }, result, currentDocumentId);
   await syncToFirebase();
-
   return result;
 };
 
-// Tool 6: Replace Document Content
-export const replace_document_content = async ({ position, content, reason }: { position: { from: number; to: number }; content: string; reason: string }): Promise<any> => {
+export const replace_document_content = async ({ position, content, reason }: any): Promise<any> => {
+  if (!position || typeof position !== 'object' || typeof position.from !== 'number' || typeof position.to !== 'number') {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, we couldn't find the part of your document to replace. Please try again with a different request.</div>`
+    };
+  }
+  if (typeof content !== 'string') {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, no content was provided to replace. Please try again.</div>`
+    };
+  }
   const { from, to } = position;
-  const removedText = currentDocumentContent.slice(from, to);
   currentDocumentContent = currentDocumentContent.slice(0, from) + content + currentDocumentContent.slice(to);
-
   const result = {
     success: true,
-    reason,
-    operation: 'replace',
-    position: { from, to },
-    removed_text: removedText,
-    removed_length: to - from,
-    inserted_length: content.length,
-    new_total_length: currentDocumentContent.length,
-    updated_content: currentDocumentContent
+    html: `<div class="tool-success">Replaced <b>${to - from}</b> characters with <b>${content.length}</b> new characters.</div>`
   };
-
   logToolUsage('replace_document_content', { position, content, reason }, result, currentDocumentId);
   await syncToFirebase();
-
   return result;
 };
 
-// Tool 7: Remove Document Content
-export const remove_document_content = async ({ position, reason }: { position: { from: number; to: number }; reason: string }): Promise<any> => {
-  logger.info('🗑️  remove_document_content called:', { position, reason, docId: currentDocumentId });
-
+export const remove_document_content = async ({ position, reason }: any): Promise<any> => {
+  if (!position || typeof position !== 'object' || typeof position.from !== 'number' || typeof position.to !== 'number') {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, we couldn't find the part of your document to remove. Please try again with a different request.</div>`
+    };
+  }
   const { from, to } = position;
-  const oldLength = currentDocumentContent.length;
-  const removedText = currentDocumentContent.slice(from, to);
   currentDocumentContent = currentDocumentContent.slice(0, from) + currentDocumentContent.slice(to);
-
-  logger.info(`🗑️  Removed ${removedText.length} chars (${from}-${to}). Length: ${oldLength} → ${currentDocumentContent.length}`);
-
   const result = {
     success: true,
-    reason,
-    operation: 'remove',
-    position: { from, to },
-    removed_text: removedText,
-    removed_length: to - from,
-    new_total_length: currentDocumentContent.length,
-    updated_content: currentDocumentContent
+    html: `<div class="tool-success">Removed <b>${to - from}</b> characters from your document.</div>`
   };
-
   logToolUsage('remove_document_content', { position, reason }, result, currentDocumentId);
-
-  const syncResult = await syncToFirebase();
-  logger.info('🗑️  Firebase sync result:', syncResult);
-
+  await syncToFirebase();
   return result;
+};
+
+// Summary field operations
+export const append_document_summary = async ({ content, reason }: any): Promise<any> => {
+  if (!currentDocumentId || !firestore) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, we couldn't find your document summary. Please try again.</div>`
+    };
+  }
+  if (typeof content !== 'string' || !content.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, no summary content was provided to append. Please try again.</div>`
+    };
+  }
+  const docRef = firestore.collection('Documents').doc(currentDocumentId);
+  const docSnap = await docRef.get();
+  let summary = '';
+  if (docSnap.exists) {
+    summary = docSnap.data()?.Summary || '';
+  }
+  const newSummary = summary + content;
+  await docRef.update({ 
+    Summary: newSummary, 
+    Updated_Time: admin.firestore.FieldValue.serverTimestamp() 
+  });
+  return {
+    success: true,
+    html: `<div class="tool-success">Added <b>${content.length}</b> characters to your document summary.</div>`
+  };
+};
+
+export const insert_document_summary = async ({ position, content, reason }: any): Promise<any> => {
+  if (!currentDocumentId || !firestore) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, we couldn't find your document summary. Please try again.</div>`
+    };
+  }
+  const docRef = firestore.collection('Documents').doc(currentDocumentId);
+  const docSnap = await docRef.get();
+  let summary = '';
+  if (docSnap.exists) {
+    summary = docSnap.data()?.Summary || '';
+  }
+  if (typeof position !== 'number' || position < 0 || position > summary.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, we couldn't find the right place to insert your summary text. Please try again.</div>`
+    };
+  }
+  if (typeof content !== 'string' || !content.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, no summary content was provided to insert. Please try again.</div>`
+    };
+  }
+  const newSummary = summary.slice(0, position) + content + summary.slice(position);
+  await docRef.update({ 
+    Summary: newSummary, 
+    Updated_Time: admin.firestore.FieldValue.serverTimestamp() 
+  });
+  return {
+    success: true,
+    html: `<div class="tool-success">Inserted <b>${content.length}</b> characters into your document summary.</div>`
+  };
+};
+
+export const replace_doument_summary = async ({ position, content, reason }: any): Promise<any> => {
+  if (!currentDocumentId || !firestore) {
+    return { success: false, html: `<div class="error-message">Sorry, we couldn't find your document summary. Please try again.</div>` };
+  }
+  if (!position || typeof position !== 'object' || typeof position.from !== 'number' || typeof position.to !== 'number') {
+    return { success: false, html: `<div class="error-message">Missing or invalid position. Provide { position: { from, to } }.</div>` };
+  }
+  if (typeof content !== 'string') {
+    return { success: false, html: `<div class="error-message">Sorry, no summary content was provided to replace. Please try again.</div>` };
+  }
+  const docRef = firestore.collection('Documents').doc(currentDocumentId);
+  const docSnap = await docRef.get();
+  const currentSummary = docSnap.exists ? (docSnap.data()?.Summary || '') : '';
+  const { from, to } = position;
+  const safeFrom = Math.max(0, Math.min(from, currentSummary.length));
+  const safeTo = Math.max(safeFrom, Math.min(to, currentSummary.length));
+  const newSummary = currentSummary.slice(0, safeFrom) + content + currentSummary.slice(safeTo);
+  await docRef.update({ 
+    Summary: newSummary, 
+    Updated_Time: admin.firestore.FieldValue.serverTimestamp() 
+  });
+  return { success: true, html: `<div class="tool-success">Replaced <b>${safeTo - safeFrom}</b> characters in the summary.</div>` };
+};
+
+export const remove_document_summary = async ({ position, reason }: any): Promise<any> => {
+  if (!currentDocumentId || !firestore) {
+    return { success: false, html: `<div class="error-message">Sorry, we couldn't find your document summary. Please try again.</div>` };
+  }
+  if (!position || typeof position !== 'object' || typeof position.from !== 'number' || typeof position.to !== 'number') {
+    return { success: false, html: `<div class="error-message">Missing or invalid position. Provide { position: { from, to } }.</div>` };
+  }
+  const docRef = firestore.collection('Documents').doc(currentDocumentId);
+  const docSnap = await docRef.get();
+  const currentSummary = docSnap.exists ? (docSnap.data()?.Summary || '') : '';
+  const { from, to } = position;
+  const safeFrom = Math.max(0, Math.min(from, currentSummary.length));
+  const safeTo = Math.max(safeFrom, Math.min(to, currentSummary.length));
+  const newSummary = currentSummary.slice(0, safeFrom) + currentSummary.slice(safeTo);
+  await docRef.update({ 
+    Summary: newSummary, 
+    Updated_Time: admin.firestore.FieldValue.serverTimestamp() 
+  });
+  return { success: true, html: `<div class="tool-success">Removed <b>${safeTo - safeFrom}</b> characters from the summary.</div>` };
+};
+
+export const search_document_summary = async ({ query, reason }: any): Promise<any> => {
+  if (!currentDocumentId || !firestore) {
+    return { success: false, html: `<div class="error-message">Sorry, we couldn't access your document summary. Please try again.</div>` };
+  }
+  const docRef = firestore.collection('Documents').doc(currentDocumentId);
+  const docSnap = await docRef.get();
+  const summary = docSnap.exists ? (docSnap.data()?.Summary || '') : '';
+  
+  const matches = [];
+  const lowerQuery = (query || '').toLowerCase();
+  const lowerSummary = summary.toLowerCase();
+
+  let searchIndex = 0;
+  let elementIndex = 0;
+
+  while (searchIndex < lowerSummary.length) {
+    const matchIndex = lowerSummary.indexOf(lowerQuery, searchIndex);
+    if (matchIndex === -1) break;
+
+    const contextStart = Math.max(0, matchIndex - 50);
+    const contextEnd = Math.min(summary.length, matchIndex + query.length + 50);
+    const context = summary.substring(contextStart, contextEnd);
+
+    matches.push({
+      element_index: elementIndex,
+      character_position: matchIndex,
+      match_length: query.length,
+      context: context,
+      context_start: contextStart,
+      context_end: contextEnd
+    });
+
+    elementIndex++;
+    searchIndex = matchIndex + 1;
+  }
+
+  return { 
+    success: true, 
+    query, 
+    matches_count: matches.length, 
+    matches: matches.slice(0, 10),
+    total_matches: matches.length
+  };
+};
+
+export const get_all_documents_metadata_within_project = async ({ documentId, reason }: any): Promise<any> => {
+  logger.info(`📚 get_all_documents_metadata_within_project called for documentId: ${documentId}`);
+
+  try {
+    if (!firestore) {
+      throw new Error('Firestore not initialized');
+    }
+
+    const targetDocId = documentId || currentDocumentId;
+    
+    if (!targetDocId) {
+      return {
+        success: false,
+        reason,
+        error: 'No document ID provided',
+        documents: []
+      };
+    }
+
+    const docRef = firestore.collection('Documents').doc(targetDocId);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return {
+        success: false,
+        reason,
+        error: 'Document not found',
+        documents: []
+      };
+    }
+
+    const docData = docSnap.data()!;
+    const projectId = docData.ProjectID || docData.Project_Id;
+
+    logger.info(`📚 Document data:`, { 
+      documentId: targetDocId, 
+      projectId, 
+      allFields: Object.keys(docData)
+    });
+
+    if (!projectId) {
+      return {
+        success: false,
+        reason,
+        error: 'Document does not belong to a project',
+        documents: [],
+        debugInfo: {
+          documentId: targetDocId,
+          availableFields: Object.keys(docData)
+        }
+      };
+    }
+
+    const querySnapshot = await firestore.collection('Documents').where('ProjectID', '==', projectId).get();
+
+    const documents: any[] = [];
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      documents.push({
+        documentId: doc.id,
+        documentName: data.DocumentName || 'Untitled',
+        description: data.Description || '',
+        createdAt: data.CreatedAt?.toDate?.()?.toISOString() || null,
+        updatedAt: data.UpdatedAt?.toDate?.()?.toISOString() || null,
+      });
+    });
+
+    const result = {
+      success: true,
+      reason,
+      operation: 'get_project_metadata',
+      projectId,
+      documentsCount: documents.length,
+      documents
+    };
+
+    logToolUsage('get_all_documents_metadata_within_project', { documentId, reason }, result, currentDocumentId);
+    return result;
+
+  } catch (error: any) {
+    logger.error('❌ Error getting project documents metadata:', error);
+    return {
+      success: false,
+      reason,
+      error: error.message,
+      documents: []
+    };
+  }
+};
+
+export const get_document_summary = async ({ documentId, reason }: any): Promise<any> => {
+  logger.info(`📝 get_document_summary called for documentId: ${documentId}`);
+
+  try {
+    if (!firestore) {
+      throw new Error('Firestore not initialized');
+    }
+
+    const docRef = firestore.collection('Documents').doc(documentId);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return {
+        success: false,
+        reason,
+        error: 'Document not found',
+        summary: ''
+      };
+    }
+
+    const data = docSnap.data()!;
+    const summary = data.Summary || '';
+
+    if (!summary) {
+      return {
+        success: true,
+        reason,
+        operation: 'get_summary',
+        documentId,
+        summary: '',
+        message: 'No summary available for this document'
+      };
+    }
+
+    const result = {
+      success: true,
+      reason,
+      operation: 'get_summary',
+      documentId,
+      documentName: data.DocumentName || 'Untitled',
+      summary,
+      summaryLength: summary.length
+    };
+
+    logToolUsage('get_document_summary', { documentId, reason }, result, currentDocumentId);
+    return result;
+
+  } catch (error: any) {
+    logger.error('❌ Error getting document summary:', error);
+    return {
+      success: false,
+      reason,
+      error: error.message,
+      summary: ''
+    };
+  }
 };
 
 // Helper functions for testing

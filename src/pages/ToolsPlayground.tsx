@@ -4,6 +4,7 @@ import { useDocument } from '@/context/DocumentContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 type ToolDef = {
   name: string;
@@ -39,6 +40,9 @@ export default function ToolsPlayground() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [originalContent, setOriginalContent] = useState<string>('');
+  const [modifiedContent, setModifiedContent] = useState<string>('');
 
   // Prefill documentId from context
   useEffect(() => {
@@ -86,18 +90,57 @@ export default function ToolsPlayground() {
     }
   }, [tool, tools, documentId]);
 
-  const execEndpoint = useMemo(() => buildApiUrl('api/tools/execute'), []);
+  const execEndpoint = useMemo(() => 'http://localhost:3001/api/tools/execute', []);
+
+  // Fetch original content before modification
+  const fetchOriginalContent = async () => {
+    if (!documentId) return '';
+    try {
+      const res = await fetch(execEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tool: 'get_document_content',
+          args: { documentId, reason: 'Preview before change' },
+          documentId,
+        }),
+      });
+      const data = await res.json();
+      return data?.content || '';
+    } catch {
+      return '';
+    }
+  };
 
   const run = async () => {
     setRunning(true);
     setError(null);
     setResult(null);
+    setShowPreview(false);
     try {
       let args: any = {};
       try {
         args = JSON.parse(argsText || '{}');
       } catch (e: any) {
         throw new Error('Args must be valid JSON');
+      }
+
+      // Check if this is a modifying tool
+      const isModifyingTool = [
+        'append_document_content',
+        'insert_document_content',
+        'replace_document_content',
+        'remove_document_content',
+        'append_document_summary',
+        'insert_document_summary',
+        'replace_doument_summary',
+        'remove_document_summary',
+      ].includes(tool);
+
+      // Fetch original content if modifying
+      if (isModifyingTool && documentId) {
+        const original = await fetchOriginalContent();
+        setOriginalContent(original);
       }
 
       const body = {
@@ -116,6 +159,13 @@ export default function ToolsPlayground() {
         throw new Error(data?.error || `Request failed: ${res.status}`);
       }
       setResult(data);
+
+      // Fetch modified content for preview
+      if (isModifyingTool && documentId && data.success) {
+        const modified = await fetchOriginalContent();
+        setModifiedContent(modified);
+        setShowPreview(true);
+      }
     } catch (e: any) {
       setError(e?.message || 'Execution failed');
     } finally {
@@ -124,9 +174,9 @@ export default function ToolsPlayground() {
   };
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 max-w-7xl mx-auto">
       <h1 className="text-2xl font-semibold mb-2">Tools Playground</h1>
-      <p className="text-sm text-gray-600 mb-6">Manually call existing document tools without changing any API endpoints.</p>
+      <p className="text-sm text-gray-600 mb-6">Manually call existing document tools with preview mode for modifications.</p>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <label className="flex flex-col gap-1">
@@ -167,17 +217,67 @@ export default function ToolsPlayground() {
       </div>
 
       {error && (
-        <div className="text-red-600 text-sm mb-4">{error}</div>
+        <div className="text-red-600 text-sm mb-4 p-3 border border-red-300 rounded bg-red-50">{error}</div>
       )}
 
       {result && (
         <div className="mt-4">
           <h2 className="text-lg font-medium mb-2">Result</h2>
           {typeof result.html === 'string' ? (
-            <div className="border rounded p-3 bg-white" dangerouslySetInnerHTML={{ __html: result.html }} />
+            <div className="border rounded p-3 bg-white mb-4" dangerouslySetInnerHTML={{ __html: result.html }} />
           ) : (
-            <pre className="border rounded p-3 bg-gray-50 text-sm overflow-x-auto">{JSON.stringify(result, null, 2)}</pre>
+            <pre className="border rounded p-3 bg-gray-50 text-sm overflow-x-auto mb-4">{JSON.stringify(result, null, 2)}</pre>
           )}
+        </div>
+      )}
+
+      {showPreview && (
+        <div className="mt-6 border-t pt-6">
+          <h2 className="text-lg font-medium mb-4">📊 Content Comparison (Before → After)</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h3 className="text-sm font-semibold mb-2 text-blue-700 bg-blue-100 p-2 rounded flex items-center gap-2">
+                <span>📄</span> Original Content
+              </h3>
+              <ScrollArea className="h-96 border-2 border-blue-200 rounded bg-blue-50/30">
+                <div className="p-4">
+                  <pre className="whitespace-pre-wrap font-mono text-xs text-gray-800">{originalContent}</pre>
+                </div>
+              </ScrollArea>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold mb-2 text-green-700 bg-green-100 p-2 rounded flex items-center gap-2">
+                <span>✅</span> Modified Content
+              </h3>
+              <ScrollArea className="h-96 border-2 border-green-200 rounded bg-green-50/30">
+                <div className="p-4">
+                  <pre className="whitespace-pre-wrap font-mono text-xs text-gray-800">{modifiedContent}</pre>
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+          <div className="mt-4 p-4 bg-gray-50 rounded border border-gray-200">
+            <h4 className="font-semibold text-sm mb-2 text-gray-700">📈 Statistics</h4>
+            <div className="grid grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="text-gray-600">Original length:</span>
+                <span className="ml-2 font-mono font-semibold">{originalContent.length}</span>
+                <span className="ml-1 text-gray-500">chars</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Modified length:</span>
+                <span className="ml-2 font-mono font-semibold">{modifiedContent.length}</span>
+                <span className="ml-1 text-gray-500">chars</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Difference:</span>
+                <span className={`ml-2 font-mono font-semibold ${modifiedContent.length - originalContent.length > 0 ? 'text-green-600' : modifiedContent.length - originalContent.length < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                  {modifiedContent.length - originalContent.length > 0 ? '+' : ''}{modifiedContent.length - originalContent.length}
+                </span>
+                <span className="ml-1 text-gray-500">chars</span>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

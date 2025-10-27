@@ -338,24 +338,45 @@ class GeminiBalancer {
       try {
         const client = new GoogleGenAI({apiKey: keyState.key});
         
-        // New API: use client.models.generateContent()
-        const resp = await client.models.generateContent({
+        // Use client.models.generateContent with robust field mapping
+        const generateParams: any = {
           model: options.model,
           contents: options.contents,
-          config: options.generationConfig
-        });
+          generationConfig: options.generationConfig,
+          tools: options.tools,
+          toolConfig: options.toolConfig,
+          safetySettings: options.safetySettings,
+        };
 
-        const metadata: any = resp?.usageMetadata || {};
-        const usedTokens = Number(metadata.totalTokenCount || 0) || estimatedTokens;
+        // Add systemInstruction if provided
+        if (options.systemInstruction) {
+          generateParams.systemInstruction = options.systemInstruction;
+        }
+
+        const resp = await client.models.generateContent(generateParams);
+
+        const metaSrc: any = (resp as any)?.usageMetadata || {};
+        const usedTokens = Number(metaSrc.totalTokenCount || metaSrc.candidatesTokenCount || 0) + Number(metaSrc.promptTokenCount || 0) || estimatedTokens;
         
         this.markUsage(keyState, usedTokens);
         
-        // Extract text from response
-        const text = resp?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+        // Extract text from response (handle multiple SDK shapes)
+        const responseObj: any = (resp as any)?.response ?? resp;
+        let text: string | null = null;
+        try {
+          if (typeof responseObj?.text === 'function') {
+            text = responseObj.text();
+          }
+        } catch {}
+        if (!text) {
+          const cands = responseObj?.candidates || [];
+          const parts = cands?.[0]?.content?.parts || [];
+          text = (parts.map((p: any) => p?.text).filter(Boolean).join(' ')) || null;
+        }
         
         return {
           text,
-          usage: metadata,
+          usage: metaSrc,
           keyId: keyState.id,
           keyIdShort: keyState.id.slice(0, 12),
         };
@@ -2172,13 +2193,68 @@ CRITICAL RULES:
 3. DO NOT ask for confirmation - JUST DO IT
 4. DO NOT suggest alternatives - USE THE TOOLS
 
+DOCUMENT EDITOR HTML FORMATTING RULES:
+When creating or replacing content, you MUST follow these strict HTML formatting rules:
+
+**Text Elements:**
+- Paragraphs: Use <p> tag with font-size: 18px, font-family: "Times New Roman"
+  Example: <p style="font-size: 18px; font-family: 'Times New Roman', Times, serif;">Your text here</p>
+- Headings: Use <h1> through <h6> with appropriate sizes:
+  * <h1>: 2rem (32px), font-weight: 700
+  * <h2>: 1.5rem (24px), font-weight: 600
+  * <h3>: 1.17rem, font-weight: 600
+  * <h4>: 1rem (16px), font-weight: 600
+  * <h5>: 0.83rem, font-weight: 600
+  * <h6>: 0.67rem, font-weight: 600
+
+**Inline Formatting:**
+- Bold: <strong>text</strong>
+- Italic: <em>text</em>
+- Underline: <u>text</u>
+- Strikethrough: <s>text</s>
+- Inline code: <code>text</code> (styled as kbd with gray background)
+- Highlight: <mark data-color="[color]">text</mark> (colors: gray, yellow, green, blue, red, purple, pink, orange)
+
+**Block Elements:**
+- Blockquote: <blockquote><p>Quote text</p></blockquote> (with blue left border)
+- Horizontal rule: <hr> (2px solid line)
+- Code block: <pre><code class="language-[type]">code here</code></pre>
+  Supported languages: javascript, typescript, python, java, html, css, json, markdown, plaintext
+
+**Lists:**
+- Ordered list: <ol><li>Item 1</li><li>Item 2</li></ol>
+- Unordered list: <ul><li>Item 1</li><li>Item 2</li></ul>
+- Task list: <ul data-type="taskList"><li data-type="taskItem" data-checked="false"><label><input type="checkbox"/></label><div><p>Task text</p></div></li></ul>
+
+**Links:**
+- Link: <a href="url" class="tiptap-link">link text</a> (black text with underline)
+
+**Images:**
+- Image: <img src="url" alt="description" class="tiptap-image" style="width: [width]px; height: auto;" />
+
+**Tables:**
+- Table: <table><thead><tr><th>Header</th></tr></thead><tbody><tr><td>Data</td></tr></tbody></table>
+- Apply custom background colors: style="background-color: #color;"
+
+**Indentation:**
+- Use data-indent attribute: <p data-indent="1">Indented text</p>
+- Maximum 21 levels, each level = 2rem margin-left
+- Works on paragraphs and headings
+
+**CRITICAL:** Always generate complete, valid HTML with proper closing tags and attributes. Never use plain text without HTML tags.
+
 Available tools and when to use them:
 - scan_document_content(reason) → User says: "scan", "analyze", "check", "review", "examine" the document
 - search_document_content(query, reason) → User says: "find", "search", "locate", "look for" + text
+  Returns: element_index, element_tag, element_html (complete HTML), element_position, text_content
 - append_document_content(content, reason) → User says: "add", "append", "put at end", "add to bottom"
+  Content MUST be valid HTML following formatting rules above
 - insert_document_content(position, content, reason) → User says: "insert at", "add at position", "put at line"
+  Content MUST be valid HTML. Use element_position from search results for accurate insertion
 - replace_document_content(position, content, reason) → User says: "replace", "change", "update", "modify" + text
+  Content MUST be valid HTML. Use element_position and element_length from search results
 - remove_document_content(position, reason) → User says: "delete", "remove", "erase", "clear" + text
+  Use element_position and element_length from search results for accurate removal
 
 ${documentId ? `\nCurrent document ID: ${documentId}\nDocument is loaded and ready. EXECUTE OPERATIONS IMMEDIATELY.` : '\nNo document loaded. If user asks for operations, tell them to open a document first.'}`;
 
@@ -2263,6 +2339,131 @@ app.get('/api/mcp/health', (req, res) => {
     },
     timestamp: new Date().toISOString()
   });
+});
+
+// ============================================================================
+// DOCUMENT TOOLS EXECUTION API
+// ============================================================================
+
+// POST /api/tools/execute - Execute document manipulation tools
+app.post('/api/tools/execute', async (req, res) => {
+  try {
+    logger.info('🔧 Tool execution request received');
+
+    const { tool, args, documentId } = req.body;
+
+    if (!tool) {
+      return res.status(400).json({
+        success: false,
+        html: `<div class="error-message">Sorry, no tool was specified. Please try again.</div>`
+      });
+    }
+
+    if (!args || typeof args !== 'object') {
+      return res.status(400).json({
+        success: false,
+        html: `<div class="error-message">Sorry, the tool arguments are missing or invalid. Please try again.</div>`
+      });
+    }
+
+    // Pre-validate required args for known tools to provide clearer errors
+    const needsRange = tool === 'replace_document_content' || tool === 'remove_document_content' || tool === 'replace_doument_summary' || tool === 'remove_document_summary';
+    if (needsRange) {
+      const pos = args?.position;
+      if (!pos || typeof pos.from !== 'number' || typeof pos.to !== 'number') {
+        const errorHtml = `<div class="error-message">Missing required position range. Provide { position: { from: number, to: number } }.</div>`;
+        // Log system error to ChatHistory when we have a document context
+        try {
+          if (documentId) {
+            await db.collection('ChatHistory').add({
+              DocID: documentId,
+              Role: 'system-error',
+              Message: 'Tool argument error: position.from/to is required',
+              CreatedAt: new Date().toISOString(),
+            });
+          }
+        } catch (e: any) {
+          logger.warn('⚠️ Failed to log system-error:', e?.message || e);
+        }
+        return res.status(400).json({ success: false, html: errorHtml, tool });
+      }
+    }
+
+    logger.info(`🔧 Executing tool: ${tool}`);
+    logger.info(`📄 Document ID: ${documentId || 'NOT_SET'}`);
+    logger.info(`📋 Args:`, JSON.stringify(args, null, 2));
+
+    // Import toolService
+    const toolService = await import('./services/toolService.js');
+
+    // Set document context if documentId provided
+    if (documentId && documentId !== 'NOT_SET') {
+      try {
+        logger.info(`📂 Setting current document context: ${documentId}`);
+        await toolService.setCurrentDocument(documentId);
+        logger.info(`✅ Document context set successfully`);
+      } catch (error: any) {
+        logger.error(`❌ Failed to set document context:`, error);
+        return res.status(500).json({
+          success: false,
+          html: `<div class="error-message">Sorry, we couldn't load your document. Please try again.</div>`
+        });
+      }
+    }
+
+    // Execute the tool
+    let result;
+    try {
+      result = await toolService.executeTool(tool, args);
+      logger.info(`✅ Tool executed successfully: ${tool}`);
+      logger.info(`📊 Result:`, JSON.stringify(result, null, 2));
+    } catch (toolError: any) {
+      logger.error(`❌ Tool execution error:`, toolError);
+      // Log system error
+      try {
+        if (documentId) {
+          await db.collection('ChatHistory').add({
+            DocID: documentId,
+            Role: 'system-error',
+            Message: `Tool execution error for ${tool}: ${toolError?.message || toolError}`,
+            CreatedAt: new Date().toISOString(),
+          });
+        }
+      } catch (e: any) {
+        logger.warn('⚠️ Failed to log system-error:', e?.message || e);
+      }
+      return res.status(500).json({
+        success: false,
+        html: `<div class="error-message">Sorry, something went wrong while running the tool. Please try again.</div>`,
+        tool: tool
+      });
+    }
+
+    // If tool returned an error, store it as system-error
+    if (!result?.success && documentId) {
+      try {
+        await db.collection('ChatHistory').add({
+          DocID: documentId,
+          Role: 'system-error',
+          Message: typeof result?.html === 'string' ? result.html.replace(/<[^>]*>/g, '') : (result?.error || 'Tool returned an error'),
+          CreatedAt: new Date().toISOString(),
+        });
+      } catch (e: any) {
+        logger.warn('⚠️ Failed to log system-error:', e?.message || e);
+      }
+    }
+
+    // Return the result
+    res.json(result);
+
+  } catch (error: any) {
+    logger.error('❌ Tool execution endpoint error:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Tool execution failed',
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
 });
 
 

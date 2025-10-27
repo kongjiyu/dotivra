@@ -1,8 +1,7 @@
-﻿import { useEffect, useMemo, useRef, useState, type JSX } from "react";
-import { renderToStaticMarkup } from 'react-dom/server';
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { X, Sparkles, SendHorizonal, Wand2, Loader2, Eraser, RotateCcw, Loader, Check, CircleX } from "lucide-react";
+import { X, Sparkles, SendHorizonal, Loader2, Eraser, RotateCcw, CircleX, CircleStop } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 import { useDocument } from "@/context/DocumentContext";
 import { EnhancedAIContentWriter } from "@/utils/enhancedAIContentWriter";
@@ -13,6 +12,9 @@ import { chatHistoryService } from "@/services/chatHistoryService";
 import { fetchDocument } from "@/services/apiService";
 import { buildApiUrl } from "@/lib/apiConfig";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { AIChangesPreviewModal } from "./AIChangesPreviewModal";
+import { generatePreviewWithHighlights, type ToolExecution } from "@/utils/previewGenerator";
+import { buildAIInteractionHTML, getAIInteractionStyles, type AIInteractionStage, type AIInteractionSession } from "@/utils/aiInteractionHtmlBuilder";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -83,8 +85,13 @@ export default function ChatSidebar({
     // AI change review modal state
     const [showAiChanges, setShowAiChanges] = useState(false);
     const [aiBeforeContent, setAiBeforeContent] = useState<string>("");
-    const [aiAfterContent, setAiAfterContent] = useState<string>("");
     const lastUserPromptRef = useRef<string>("");
+    const abortControllerRef = useRef<AbortController | null>(null);
+
+    // Preview modal state
+    const [showPreviewModal, setShowPreviewModal] = useState(false);
+    const [previewHtml, setPreviewHtml] = useState<string>("");
+    const [previewChanges, setPreviewChanges] = useState<any[]>([]);
 
     // Get document ID from context for MCP operations
     const { documentId } = useDocument();
@@ -170,12 +177,10 @@ export default function ChatSidebar({
     // Function to render markdown content as HTML with custom code block handling
     const renderMarkdown = (content: string): string => {
         try {
-            // First, parse markdown to HTML
-            // If the content is already HTML (tool result or error), just return it
-            if (content.startsWith('<div class="tool-success"') || content.startsWith('<div class="error-message"')) {
-                return content;
-            }
+            // Parse markdown to HTML
             let html = marked.parse(content) as string;
+
+            // Handle code blocks with language tags
             html = html.replace(
                 /<pre><code(?:\s+class="language-([^"]*)")?>([\s\S]*?)<\/code><\/pre>/g,
                 (match, language, code) => {
@@ -188,6 +193,7 @@ export default function ChatSidebar({
                     return match;
                 }
             );
+
             return html;
         } catch (error) {
             console.error('Markdown parsing error:', error);
@@ -411,6 +417,113 @@ From structure improvements to real-time content updates, I ensure your work rem
     };
 
 
+    // Preview modal handlers
+    const handleAcceptChanges = async () => {
+        console.log('✅ User accepted changes');
+        setShowPreviewModal(false);
+
+        // Save the current editor content to Firebase
+        if (editor && documentId) {
+            try {
+                // Clear highlights before saving
+                editor.chain()
+                    .focus()
+                    .unsetHighlight()
+                    .run();
+
+                const currentContent = editor.getHTML();
+
+                // Update Firebase with current editor content
+                await fetch(buildApiUrl(`api/documents/${documentId}`), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ Content: currentContent })
+                });
+
+                console.log('✅ Document updated in Firebase with accepted changes');
+
+                // Reload to ensure sync
+                const doc = await fetchDocument(documentId);
+                if (doc.Content) {
+                    editor.commands.setContent(doc.Content);
+                    console.log('Document reloaded to confirm changes');
+                }
+            } catch (err) {
+                console.error('Failed to update document:', err);
+            }
+        }
+    };
+
+    const handleRejectChanges = async () => {
+        console.log('❌ User rejected changes');
+        setShowPreviewModal(false);
+
+        // Restore original content before AI changes
+        if (editor && aiBeforeContent) {
+            // Clear all highlights first
+            editor.chain()
+                .focus()
+                .unsetHighlight()
+                .run();
+
+            // Restore original content
+            editor.commands.setContent(aiBeforeContent);
+            console.log('Document restored to original state');
+
+            // Also update Firebase to revert changes
+            if (documentId) {
+                try {
+                    await fetch(buildApiUrl(`api/documents/${documentId}`), {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ Content: aiBeforeContent })
+                    });
+                    console.log('Document reverted in Firebase');
+                } catch (err) {
+                    console.error('Failed to revert document in Firebase:', err);
+                }
+            }
+        }
+    };
+
+    const handleRegenerateChanges = () => {
+        console.log('🔄 User requested regeneration');
+        setShowPreviewModal(false);
+
+        // Restore original content first
+        if (editor && aiBeforeContent) {
+            editor.commands.setContent(aiBeforeContent);
+        }
+
+        // Re-run the last prompt
+        if (lastUserPromptRef.current) {
+            setTimeout(() => handleSend(lastUserPromptRef.current), 100);
+        }
+    };
+
+    const handleStopGeneration = () => {
+        console.log('🛑 User requested to stop generation');
+
+        // Abort the ongoing request
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            abortControllerRef.current = null;
+        }
+
+        // Reset generating state
+        setIsGenerating(false);
+
+        // Add a system message to indicate generation was stopped
+        const stopMsg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            content: "Generation stopped by user.",
+            timestamp: Date.now()
+        };
+
+        setInternalMessages(prev => [...prev, stopMsg]);
+    };
+
     const handleSend = async (messageText?: string, isReply: boolean = false) => {
         const text = (messageText || input).trim();
         if (!text) return;
@@ -488,10 +601,8 @@ From structure improvements to real-time content updates, I ensure your work rem
 
                 const timestamp = Date.now();
                 let toolsUsed = 0;
-                let lastSummary = '';
                 let currentProgressMessageId: string | null = null;
-                let progressElement: JSX.Element[] = [];
-                let currentStage: string = '';
+                let progressContent: string[] = []; // Store plain text content instead of JSX
 
                 console.log('Starting AI Agent execution...');
 
@@ -509,13 +620,36 @@ From structure improvements to real-time content updates, I ensure your work rem
                 }
 
                 // Use new AI Agent with streaming stages
+                const allToolExecutions: ToolExecution[] = [];
+                const allStages: AIInteractionStage[] = [];
+                const sessionStartTime = Date.now();
+
+                // Create abort controller for this generation
+                abortControllerRef.current = new AbortController();
+
                 for await (const stage of aiService.executeAIAgent(
                     fullPrompt,
                     documentId,
                     recentHistory,
-                    selectedText
+                    selectedText,
+                    abortControllerRef.current.signal
                 )) {
                     console.log('Received stage:', stage.stage, stage);
+
+                    // Collect all stages for HTML generation
+                    allStages.push({
+                        stage: stage.stage as any,
+                        content: stage.content,
+                        thought: stage.thought,
+                        timestamp: Date.now()
+                    });
+
+                    // Track tool executions if provided
+                    if (stage.toolExecutions && Array.isArray(stage.toolExecutions)) {
+                        // Update our local tracking with new executions
+                        allToolExecutions.length = 0;
+                        allToolExecutions.push(...stage.toolExecutions);
+                    }
 
                     if (stage.stage === 'done') {
                         console.log('AI Agent completed');
@@ -541,46 +675,67 @@ From structure improvements to real-time content updates, I ensure your work rem
                         };
 
                         setInternalMessages(prev => [...prev, errorMsg]);
+
+                        // Save error message to Firebase with role "system-error"
+                        if (documentId && user?.uid) {
+                            try {
+                                const errorMsgForFirebase: ChatMessage = {
+                                    ...errorMsg,
+                                    role: "system-error" as "system-error"
+                                };
+                                await chatHistoryService.saveMessage(documentId, errorMsgForFirebase);
+                            } catch (saveError) {
+                                console.error('Failed to save error message:', saveError);
+                            }
+                        }
                         break;
                     }
 
                     // Create or update the combined progress message
                     switch (stage.stage) {
                         case 'planning':
-                        case 'reasoning':
-                            currentStage = stage.stage;
+                            // Add planning stage content
+                            progressContent.push(`**🎯 Planning**\n\n${stage.content}\n`);
 
-                            progressElement.push(
-                                <div className="stage-block">
-                                    <div className="stage-content">{stage.content}</div>
-                                    <div className="stage-indicator">
-                                        <span className="stage-label">{stage.stage}</span>
-                                    </div>
-                                </div>
-                            );
                             // Create or update combined message
                             if (!currentProgressMessageId) {
                                 currentProgressMessageId = `progress-${Date.now()}`;
                                 const newMsg: ChatMessage = {
                                     id: currentProgressMessageId,
                                     role: 'assistant',
-                                    content: progressElement.map(el => renderToStaticMarkup(el)).join(''),
+                                    content: progressContent.join('\n'),
                                     timestamp,
                                     type: 'progress',
                                     progressStage: stage.stage as any,
-                                    toolReason: stage.thought || stage.stage,
                                     isTemporary: true
                                 };
                                 setInternalMessages(prev => [...prev, newMsg]);
                             } else {
-                                // Update existing message with accumulated content
+                                // Update existing message
                                 setInternalMessages(prev => prev.map(msg =>
                                     msg.id === currentProgressMessageId
                                         ? {
                                             ...msg,
-                                            content: progressElement.map(el => renderToStaticMarkup(el)).join(''),
-                                            progressStage: stage.stage as any,
-                                            toolReason: stage.thought || stage.stage
+                                            content: progressContent.join('\n'),
+                                            progressStage: stage.stage as any
+                                        }
+                                        : msg
+                                ));
+                            }
+                            break;
+
+                        case 'reasoning':
+                            // Add reasoning stage content
+                            progressContent.push(`**💭 Reasoning**\n\n${stage.content}\n`);
+
+                            // Update existing message
+                            if (currentProgressMessageId) {
+                                setInternalMessages(prev => prev.map(msg =>
+                                    msg.id === currentProgressMessageId
+                                        ? {
+                                            ...msg,
+                                            content: progressContent.join('\n'),
+                                            progressStage: stage.stage as any
                                         }
                                         : msg
                                 ));
@@ -589,31 +744,20 @@ From structure improvements to real-time content updates, I ensure your work rem
 
                         case 'toolUsed':
                             toolsUsed++;
-                            currentStage = 'executing';
                             const toolData = typeof stage.content === 'object' ? stage.content : { description: stage.content };
-                            const description = toolData.description || 'Working on it...';
-                            const toolName = toolData.tool || 'processing';
+                            const toolDescription = toolData.description || 'Processing...';
 
-                            // Add tool execution HTML
-                            progressElement.push(
-                                <div className="tool-execution-block">
-                                    <div className="tool-header">
-                                        <span className="tool-tag">{toolName}</span>
-                                        <span className="tool-status loading"><Loader /></span>
-                                    </div>
+                            // Add tool execution indicator (simple text, no result)
+                            progressContent.push(`**⚙️ Action:** ${toolDescription}`);
 
-                                </div>
-                            );
-
-                            // Update message to show loading
+                            // Update message to show tool is being used
                             if (currentProgressMessageId) {
                                 setInternalMessages(prev => prev.map(msg =>
                                     msg.id === currentProgressMessageId
                                         ? {
                                             ...msg,
-                                            content: progressElement.map(el => renderToStaticMarkup(el)).join(''),
-                                            progressStage: 'execution',
-                                            toolReason: stage.thought || 'executing'
+                                            content: progressContent.join('\n'),
+                                            progressStage: 'execution'
                                         }
                                         : msg
                                 ));
@@ -621,46 +765,12 @@ From structure improvements to real-time content updates, I ensure your work rem
                             break;
 
                         case 'toolResult':
-                            const resultData = stage.content;
-                            const success = resultData.success;
-
-                            // Update the last tool execution block with result
-                            const lastToolIndex = progressElement.length - 1;
-                            if (lastToolIndex >= 0 && progressElement[lastToolIndex].props.className.includes('tool-execution-block')) {
-                                progressElement[lastToolIndex] =
-                                    <div className="tool-execution-block">
-                                        <div className="tool-header">
-                                            <span className="tool-tag">{resultData.tool || 'Tool'}</span>
-                                            <span className="tool-status">{success ? <Check /> : <CircleX />}</span>
-                                        </div>
-                                    </div>;
-                            }
-
-                            // Update message
-                            if (currentProgressMessageId) {
-                                setInternalMessages(prev => prev.map(msg =>
-                                    msg.id === currentProgressMessageId
-                                        ? {
-                                            ...msg,
-                                            content: progressElement.map(el => renderToStaticMarkup(el)).join('')
-                                        }
-                                        : msg
-                                ));
-                            }
+                            // Skip tool results - don't show them in the chat
                             break;
 
                         case 'summary':
-                            lastSummary = stage.content;
-
-                            // Add summary content with indicator at the end
-                            progressElement.push(
-                                <div className="stage-block">
-                                    <div className="stage-content">{stage.content}</div>
-                                    <div className="stage-indicator">
-                                        <span className="stage-label">summary</span>
-                                    </div>
-                                </div>
-                            );
+                            // Add summary content
+                            progressContent.push(`\n**✅ Complete**\n\n${stage.content}`);
 
                             // Finalize the progress message and make it permanent
                             if (currentProgressMessageId) {
@@ -668,9 +778,8 @@ From structure improvements to real-time content updates, I ensure your work rem
                                     msg.id === currentProgressMessageId
                                         ? {
                                             ...msg,
-                                            content: progressElement.map(el => renderToStaticMarkup(el)).join(''),
+                                            content: progressContent.join('\n'),
                                             progressStage: 'summary',
-                                            toolReason: '',
                                             isTemporary: false
                                         }
                                         : msg
@@ -680,7 +789,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                 const summaryMsg: ChatMessage = {
                                     id: `summary-${Date.now()}`,
                                     role: 'assistant',
-                                    content: progressElement.map(el => renderToStaticMarkup(el)).join(''),
+                                    content: progressContent.join('\n'),
                                     timestamp,
                                     type: 'progress',
                                     progressStage: 'summary',
@@ -694,24 +803,106 @@ From structure improvements to real-time content updates, I ensure your work rem
 
                 console.log(`Tools used: ${toolsUsed}`);
 
-                // Save final summary to Firebase
-                if (documentId && user?.uid && lastSummary) {
+                // Build complete HTML representation of the AI interaction
+                const sessionEndTime = Date.now();
+                const interactionSession: AIInteractionSession = {
+                    userPrompt: fullPrompt,
+                    stages: allStages,
+                    toolExecutions: allToolExecutions,
+                    startTime: sessionStartTime,
+                    endTime: sessionEndTime,
+                    success: true
+                };
+
+                const completeInteractionHTML = getAIInteractionStyles() + buildAIInteractionHTML(interactionSession);
+
+                // Save complete interaction HTML to Firebase
+                if (documentId && user?.uid) {
                     try {
                         await chatHistoryService.saveMessage(documentId, {
                             id: crypto.randomUUID(),
                             role: 'assistant',
-                            content: lastSummary,
+                            content: completeInteractionHTML,
                             timestamp,
                             type: 'progress',
                             progressStage: 'summary'
                         });
+                        console.log('✅ Saved complete AI interaction HTML to Firebase');
                     } catch (error) {
                         console.error('Failed to save assistant message:', error);
                     }
                 }
 
-                // If tools were used, reload the document to show changes
-                if (toolsUsed > 0 && editor && documentId) {
+                // If tools were used, apply highlights to editor and show preview modal
+                if (toolsUsed > 0 && allToolExecutions.length > 0 && documentId && editor) {
+                    try {
+                        console.log('🎨 Applying highlights for', allToolExecutions.length, 'tool executions');
+
+                        // Get current document content
+                        const currentDoc = await fetchDocument(documentId);
+
+                        // Apply the new content to editor first
+                        if (currentDoc.Content) {
+                            editor.commands.setContent(currentDoc.Content);
+                        }
+
+                        // Apply highlights directly to the editor content
+                        allToolExecutions.forEach(execution => {
+                            if (execution.result?.position) {
+                                const pos = execution.result.position;
+                                let from = pos.from;
+                                let to = pos.to || from;
+
+                                // Validate positions
+                                const docSize = editor.state.doc.content.size;
+                                from = Math.max(0, Math.min(from, docSize));
+                                to = Math.max(from, Math.min(to, docSize));
+
+                                // Apply highlight based on action type
+                                if (execution.toolName === 'remove_document_content') {
+                                    // For deletions, highlight in red (but content is already removed)
+                                    // We can't highlight removed content, so skip
+                                } else if (execution.toolName === 'insert_document_content' ||
+                                    execution.toolName === 'append_document_content') {
+                                    // For additions, highlight in green
+                                    editor.chain()
+                                        .setTextSelection({ from, to })
+                                        .setHighlight({ color: '#ccffcc' })
+                                        .run();
+                                } else if (execution.toolName === 'replace_document_content') {
+                                    // For replacements, highlight in yellow
+                                    editor.chain()
+                                        .setTextSelection({ from, to })
+                                        .setHighlight({ color: '#ffffcc' })
+                                        .run();
+                                }
+                            }
+                        });
+
+                        // Also generate preview for modal
+                        const baseContent = aiBeforeContent || currentDoc.Content || '';
+                        const { previewHtml: generatedPreview, changes } = generatePreviewWithHighlights(
+                            baseContent,
+                            allToolExecutions
+                        );
+
+                        setPreviewHtml(generatedPreview);
+                        setPreviewChanges(changes);
+                        setShowPreviewModal(true);
+
+                        console.log('✅ Highlights applied to editor content');
+                    } catch (err) {
+                        console.error('Failed to apply highlights:', err);
+                        // Fallback: just reload the document
+                        if (editor) {
+                            const doc = await fetchDocument(documentId);
+                            if (doc.Content) {
+                                editor.commands.setContent(doc.Content);
+                            }
+                        }
+                    }
+                } else if (toolsUsed > 0 && editor && documentId) {
+                    // No tool executions tracked, fallback to direct reload
                     try {
                         console.log('Reloading document after tool execution...');
                         const doc = await fetchDocument(documentId);
@@ -723,36 +914,39 @@ From structure improvements to real-time content updates, I ensure your work rem
                         console.error('Failed to reload document:', err);
                     }
                 }
-                // Open AI Changes review modal
-                if (toolsUsed > 0 && documentId) {
-                    try {
-                        const afterDoc = await fetchDocument(documentId);
-                        setAiAfterContent(afterDoc.Content || '');
-                        setShowAiChanges(true);
-                    } catch (err) {
-                        console.error('Failed to prepare AI changes review:', err);
-                    }
-                }
             } catch (error) {
+                // Check if it's an abort error (user stopped generation)
+                if (error instanceof Error && error.name === 'AbortError') {
+                    console.log('Generation stopped by user');
+                    // Don't show error message for user-initiated stops
+                    return;
+                }
+
                 console.error('Error processing request:', error);
                 const errorMsg: ChatMessage = {
                     id: crypto.randomUUID(),
                     role: "assistant",
+                    type: "error",
                     content: `🔴 Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}. Please try again.`,
                     timestamp: Date.now(),
                 };
                 setInternalMessages(prev => [...prev, errorMsg]);
 
-                // Save error message to Firebase
+                // Save error message to Firebase with role "system-error"
                 if (documentId && user?.uid) {
                     try {
-                        await chatHistoryService.saveMessage(documentId, errorMsg);
+                        const errorMsgForFirebase: ChatMessage = {
+                            ...errorMsg,
+                            role: "system-error" as "system-error" // Store as system-error in Firebase
+                        };
+                        await chatHistoryService.saveMessage(documentId, errorMsgForFirebase);
                     } catch (saveError) {
                         console.error('Failed to save error message:', saveError);
                     }
                 }
             } finally {
                 setIsGenerating(false);
+                abortControllerRef.current = null; // Clean up abort controller
 
                 // Clear reply state after sending (success or failure)
                 if (replyToMessage) {
@@ -1192,12 +1386,12 @@ From structure improvements to real-time content updates, I ensure your work rem
                                 }}
                             />
                             <Button
-                                onClick={() => handleSend()}
-                                disabled={isGenerating || !input.trim()}
+                                onClick={() => isGenerating ? handleStopGeneration() : handleSend()}
+                                disabled={!isGenerating && !input.trim()}
                                 className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:bg-gray-300 shadow-lg transition-all duration-200 hover:scale-105"
                             >
                                 {isGenerating ? (
-                                    <Wand2 className="w-4 h-4 animate-spin" />
+                                    <CircleStop className="w-4 h-4" />
                                 ) : (
                                     <SendHorizonal className="w-4 h-4" />
                                 )}
@@ -1224,7 +1418,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                 </div>
                                 <div>
                                     <div className="text-sm text-gray-500 mb-2">After</div>
-                                    <div className="p-3 rounded border bg-green-50 whitespace-pre-wrap break-words text-sm max-h=[50vh] overflow-auto">{aiAfterContent?.substring(0, 5000)}</div>
+                                    <div className="p-3 rounded border bg-green-50 whitespace-pre-wrap break-words text-sm max-h=[50vh] overflow-auto">{editor?.getHTML()?.substring(0, 5000) || ''}</div>
                                 </div>
                             </div>
                             <div className="px-5 py-3 border-t flex justify-end gap-2">
@@ -1238,7 +1432,8 @@ From structure improvements to real-time content updates, I ensure your work rem
                                 <Button variant="destructive" onClick={async () => {
                                     // Reject: revert server content to before version using replace_document_content
                                     try {
-                                        const toLen = (aiAfterContent || '').length;
+                                        const currentContent = editor?.getHTML() || '';
+                                        const toLen = currentContent.length;
                                         await fetch(buildApiUrl('api/tools/execute'), {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
@@ -1257,8 +1452,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                     }
                                 }}>Reject</Button>
                                 <Button onClick={() => {
-                                    // Accept: apply new content to editor (server already updated)
-                                    if (editor) editor.commands.setContent(aiAfterContent || '');
+                                    // Accept: keep current content (server already updated)
                                     setShowAiChanges(false);
                                 }}>Accept</Button>
                             </div>
@@ -1266,5 +1460,16 @@ From structure improvements to real-time content updates, I ensure your work rem
                     </div>
                 )
             }
+
+            {/* New Preview Modal with Highlighted Changes */}
+            <AIChangesPreviewModal
+                isOpen={showPreviewModal}
+                onClose={() => setShowPreviewModal(false)}
+                previewHtml={previewHtml}
+                changes={previewChanges}
+                onAccept={handleAcceptChanges}
+                onReject={handleRejectChanges}
+                onRegenerate={handleRegenerateChanges}
+            />
         </>);
 }
