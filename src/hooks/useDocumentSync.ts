@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { doc, onSnapshot, updateDoc, Timestamp } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, Timestamp, increment } from 'firebase/firestore';
 import { db } from '@/config/firebase';
+import { API_ENDPOINTS } from '@/lib/apiConfig';
 
 export type SyncStatus = 'synced' | 'syncing' | 'pending' | 'error';
 export type SyncChannel = 'content' | 'summary';
@@ -105,8 +106,10 @@ export function useDocumentSync({ documentId, channel, onUpdate, debounceMs = 20
         pendingSaveContentRef.current = content;
         
         const docRef = doc(db, 'Documents', documentId);
+        
         const updateData: any = {
           Updated_Time: Timestamp.now(),
+          version: increment(1), // Atomically increment version
         };
         
         if (channel === 'summary') {
@@ -116,6 +119,33 @@ export function useDocumentSync({ documentId, channel, onUpdate, debounceMs = 20
         }
         
         await updateDoc(docRef, updateData);
+        
+        // Save version history to backend
+        console.log('💾 Saving version history...', { documentId, channel, contentLength: content.length });
+        try {
+          const response = await fetch(API_ENDPOINTS.saveVersion(documentId), {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              content,
+              channel,
+              editedBy: 'current-user', // TODO: Get from auth context
+            }),
+          });
+          
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ Failed to save version history:', response.status, errorText);
+          } else {
+            const result = await response.json();
+            console.log('✅ Version history saved:', result);
+          }
+        } catch (versionError) {
+          // Don't fail the whole operation if version save fails
+          console.error('❌ Exception while saving version history:', versionError);
+        }
         
       } catch (error) {
         console.error(`Error saving ${channel}:`, error);

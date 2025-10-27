@@ -11,7 +11,7 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default
 
   useEffect(() => {
     mermaid.initialize({
-      startOnLoad: true,
+      startOnLoad: false, // Disable auto-rendering to prevent errors on dashboard
       theme,
       securityLevel: 'loose',
       // Suppress error rendering in DOM
@@ -68,24 +68,8 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default
 
         } catch (error) {
           console.error('Error rendering Mermaid diagram:', error);
-          // Display error ONLY inside our component
-          if (elementRef.current) {
-            elementRef.current.innerHTML = `
-              <div style="color: #dc2626; padding: 1rem; text-align: center; border: 1px solid #dc2626; border-radius: 0.5rem; background-color: #fef2f2;">
-                <p style="font-weight: 600; margin-bottom: 0.5rem;">⚠️ Diagram Rendering Error</p>
-                <p style="font-size: 0.875rem; color: #991b1b;">${error instanceof Error ? error.message : 'Invalid diagram syntax'}</p>
-              </div>
-            `;
-          }
-
-          // Clean up any error divs that Mermaid added
-          setTimeout(() => {
-            document.querySelectorAll('[id^="d"]').forEach(div => {
-              if (div.parentNode === document.body && div !== document.getElementById('root')) {
-                div.parentNode.removeChild(div);
-              }
-            });
-          }, 100);
+          // Don't show error UI - just fail silently
+          elementRef.current.innerHTML = '';
         }
       }
     };

@@ -41,11 +41,26 @@ export const API_ENDPOINTS = {
   document: (id: string) => buildApiUrl(`api/documents/${id}`),
   deleteDocument: (id: string) => buildApiUrl(`api/documents/${id}`),
   projectDocuments: (projectId: string) => buildApiUrl(`api/documents/project/${projectId}`),
-  documentHistory: (docId: string) => buildApiUrl(`api/document/editor/history/${docId}`, true), // Force localhost - not deployed to production yet
+  documentHistory: (docId: string) => buildApiUrl(`api/document/editor/history/${docId}`), // ✅ Now deployed to production
+  documentContent: (docId: string) => buildApiUrl(`api/document/editor/content/${docId}`),
+  documentSummary: (docId: string) => buildApiUrl(`api/document/editor/summary/${docId}`),
+  saveVersion: (docId: string) => buildApiUrl(`api/document/save-version/${docId}`),
+  chatHistory: (docId: string) => buildApiUrl(`api/document/chat/history/${docId}`),
+  chatPrompt: () => buildApiUrl('api/document/chat/prompt'),
+  agentWorkflow: (docId: string) => buildApiUrl(`api/document/chat/agent/${docId}`),
+  agentAction: (docId: string) => buildApiUrl(`api/document/chat/agent/action/${docId}`),
+  projectDocumentList: (projectId: string) => buildApiUrl(`api/project/${projectId}/documents`),
   
   // Templates
   templates: () => buildApiUrl('api/templates'),
   template: (id: string) => buildApiUrl(`api/templates/${id}`),
+  
+  // Profile
+  profileEdit: () => buildApiUrl('api/profile/edit'),
+  profileDelete: () => buildApiUrl('api/profile/delete'),
+  
+  // Link Preview
+  linkPreview: (url: string) => buildApiUrl(`api/link-preview?url=${encodeURIComponent(url)}`),
   
   // GitHub
   githubOauth: () => buildApiUrl('api/github/oauth/token'),

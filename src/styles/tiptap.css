@@ -1494,6 +1494,31 @@ kbd {
   font-family: inherit;
 }
 
+/* ============================================================================
+   VERSION HISTORY READ-ONLY VIEWER STYLES
+   ============================================================================ */
+
+/* Read-only TipTap editor for version history */
+.tiptap-readonly {
+  background-color: #f9fafb;
+  padding: 2rem;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+.tiptap-readonly .ProseMirror {
+  outline: none;
+  cursor: default;
+}
+
+/* Ensure all content in read-only mode is selectable but not editable */
+.tiptap-readonly * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
+  cursor: text !important;
+}
 /* Image styling with resize support and border */
 .tiptap img.tiptap-image {
   max-width: 100%;
