@@ -859,17 +859,17 @@ From structure improvements to real-time content updates, I ensure your work rem
                                 to = Math.max(from, Math.min(to, docSize));
 
                                 // Apply highlight based on action type
-                                if (execution.toolName === 'remove_document_content') {
+                                if (execution.tool === 'remove_document_content') {
                                     // For deletions, highlight in red (but content is already removed)
                                     // We can't highlight removed content, so skip
-                                } else if (execution.toolName === 'insert_document_content' ||
-                                    execution.toolName === 'append_document_content') {
+                                } else if (execution.tool === 'insert_document_content' ||
+                                    execution.tool === 'append_document_content') {
                                     // For additions, highlight in green
                                     editor.chain()
                                         .setTextSelection({ from, to })
                                         .setHighlight({ color: '#ccffcc' })
                                         .run();
-                                } else if (execution.toolName === 'replace_document_content') {
+                                } else if (execution.tool === 'replace_document_content') {
                                     // For replacements, highlight in yellow
                                     editor.chain()
                                         .setTextSelection({ from, to })
