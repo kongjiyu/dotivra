@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import html2pdf from '@digivorefr/html2pdf.js';
 import { marked } from 'marked';
 import mammoth from 'mammoth';
 import { Input } from "@/components/ui/input";
@@ -47,6 +46,9 @@ import {
 
 // Import document context
 import { useDocument } from "@/context/DocumentContext";
+
+// Import Mermaid export utilities
+import { processMermaidForExport } from "@/utils/mermaidExportUtils";
 
 // NEW: ProseMirror bits for decorations
 import { Plugin, PluginKey, TextSelection } from "prosemirror-state";
@@ -231,7 +233,7 @@ export default function DocumentMenu({
 		}
 	};
 
-	const handlePrint = () => {
+	const handlePrint = async () => {
 		// Get content from props first, then fallback to editor
 		let contentToPrint = documentContent;
 		if (!contentToPrint && editor) {
@@ -243,9 +245,15 @@ export default function DocumentMenu({
 		}
 
 		try {
+			console.log('[Print] Starting print process...');
+
+			// Process Mermaid diagrams first
+			const processedContent = await processMermaidForExport(contentToPrint);
+			console.log('[Print] Mermaid diagrams processed');
+
 			// --- STEP 1: Parse and modify HTML ---
 			const parser = new DOMParser();
-			const doc = parser.parseFromString(contentToPrint, "text/html");
+			const doc = parser.parseFromString(processedContent, "text/html");
 
 			// Add "avoid-break" class to block elements
 			doc.querySelectorAll("h1,h2,h3,table,ul,ol,pre,blockquote").forEach((el) => {
@@ -384,6 +392,37 @@ export default function DocumentMenu({
               color-adjust: exact !important;
             }
             
+            /* Mermaid diagram styles */
+            .mermaid-diagram-export {
+              margin: 16px 0;
+              padding: 16px;
+              background: white;
+              border: 1px solid #e5e7eb;
+              border-radius: 8px;
+              page-break-inside: avoid !important;
+              break-inside: avoid !important;
+              overflow-x: auto;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+              color-adjust: exact !important;
+            }
+            
+            .mermaid-diagram-export svg {
+              max-width: 100%;
+              height: auto;
+            }
+            
+            .mermaid-error-export {
+              margin: 16px 0;
+              padding: 12px;
+              background: #fef2f2;
+              border: 1px solid #ef4444;
+              border-radius: 6px;
+              color: #991b1b;
+              font-family: monospace;
+              page-break-inside: avoid;
+            }
+            
             pre {
               background-color: #000000 !important;
               color: #d4d4d4 !important;
@@ -441,223 +480,8 @@ export default function DocumentMenu({
 	};
 
 	const handleExportToPDF = async () => {
-		try {
-			// 1️⃣ Get content
-			let contentToExport = documentContent;
-			if (!contentToExport && editor) {
-				contentToExport = editor.getHTML();
-			}
-			if (!contentToExport) return;
-
-			// 2️⃣ Parse HTML
-			const parser = new DOMParser();
-			const doc = parser.parseFromString(contentToExport, "text/html");
-
-			// 3️⃣ Process code-blocks
-			doc.querySelectorAll(".code-block-wrapper, pre[class*='language-']").forEach((wrapper) => {
-				const pre = wrapper.tagName === "PRE" ? wrapper : wrapper.querySelector("pre");
-				if (!pre) return;
-
-				let language = wrapper.getAttribute("data-language");
-				if (!language) {
-					const match = pre.className.match(/language-(\w+)/);
-					language = match ? match[1] : "plaintext";
-				}
-
-				let container = wrapper.tagName === "PRE" ? null : wrapper;
-				if (!container) {
-					container = doc.createElement("div");
-					container.className = "code-block-wrapper";
-					pre.parentNode?.insertBefore(container, pre);
-					container.appendChild(pre);
-				}
-
-				const header = doc.createElement("div");
-				header.className = "code-block-header";
-				header.textContent = language;
-				container.insertBefore(header, pre);
-			});
-
-			// 4️⃣ Insert page-break divs before each <h1>, skipping the first one
-			const h1Headings = doc.querySelectorAll("h1");
-			console.log("[PDF Export] Found H1:", h1Headings.length);
-			h1Headings.forEach((heading, index) => {
-				if (index === 0) return;  // skip first h1
-				const pageBreak = doc.createElement("div");
-				pageBreak.className = "page-break";
-				pageBreak.setAttribute("data-page-break", "h1");
-				pageBreak.textContent = "\u200B";
-				heading.parentNode?.insertBefore(pageBreak, heading);
-			});
-
-			// 5️⃣ Create wrapper for padding
-			const wrapper = document.createElement("div");
-			wrapper.className = "pdf-wrapper";
-			wrapper.style.cssText = `
-      width: 100%;
-      max-width: 794px; /* approx A4 width in px at 96dpi, adjust if needed */
-      margin: 0 auto;
-      padding: 56px; /* 56px padding all around */
-      background-color: white;
-    `;
-
-			const element = document.createElement("div");
-			element.innerHTML = doc.body.innerHTML;
-			wrapper.appendChild(element);
-
-			// 6️⃣ Inject styles
-			const style = document.createElement("style");
-			style.textContent = `
-      * { box-sizing: border-box; }
-
-      /* Page-Break rules */
-      .page-break {
-        display: block !important;
-        height: 0 !important;
-        page-break-before: always !important;
-        break-before: page !important;
-		margin-bottom: 56px;
-      }
-
-      /* Headings and content */
-      h1 {
-        font-size: 28px;
-        font-weight: 700;
-        margin: 24px 0 12px;
-        border-bottom: 2px solid #ccc;
-        padding-bottom: 8px;
-        page-break-inside: avoid !important;
-      }
-      h2 {
-        font-size: 24px;
-        font-weight: 700;
-        margin: 20px 0 10px;
-        border-bottom: 1px solid #ccc;
-        padding-bottom: 6px;
-      }
-      h3 {
-        font-size: 20px;
-        font-weight: 700;
-        margin: 18px 0 9px;
-      }
-
-      p {
-        margin: 8px 0;
-        text-align: justify;
-        page-break-inside: auto !important;
-      }
-      ul, ol {
-        margin: 8px 0;
-        padding-left: 24px;
-        page-break-inside: auto !important;
-      }
-      li { margin: 4px 0; }
-
-      .code-block-wrapper {
-        margin: 16px 0;
-        page-break-inside: auto !important;
-      }
-      .code-block-header {
-        background-color: #000 !important;
-        color: #9cdcfe !important;
-        font-family: 'Consolas','Monaco','Courier New', monospace;
-        font-size: 12px;
-        font-weight: 600;
-        padding: 8px 12px;
-        border-radius: 6px 6px 0 0;
-        text-transform: capitalize;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-      pre {
-        background-color: #000 !important;
-        color: #d4d4d4 !important;
-        padding: 16px;
-        border-radius: 0 0 6px 6px;
-        overflow-x: auto;
-        margin: 0;
-        font-family: 'Consolas','Monaco','Courier New', monospace;
-        font-size: 13px;
-        line-height: 1.6;
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
-      }
-      pre code {
-        background: transparent;
-        border: none;
-        padding: 0;
-        color: inherit;
-      }
-
-      table {
-        border-collapse: collapse;
-        width: 100%;
-        page-break-inside: auto;
-      }
-      th, td {
-        border: 1px solid #ccc;
-        padding: 8px;
-        text-align: left;
-      }
-      th { background: #f5f5f5; font-weight: 600; }
-      img, figure, tr {
-        page-break-inside: avoid !important;
-        break-inside: avoid !important;
-        max-width: 100%;
-      }
-
-      hr {
-        border: none;
-        border-top: 2px solid #e5e7eb;
-        margin: 24px 0;
-        page-break-after: avoid !important;
-      }
-      a {
-        display: inline !important;
-        color: #2563eb;
-        text-decoration: underline;
-      }
-
-      @page {
-        size: A4;
-        margin: 0; /* We'll handle padding ourselves */
-      }
-    `;
-			wrapper.prepend(style);
-
-			// 7️⃣ Setup html2pdf options with spacing after page break (based on SO suggestion)
-			const options = {
-				margin: 0,
-				filename: "document.pdf",
-				image: { type: "jpeg", quality: 0.98 },
-				html2canvas: {
-					scale: 2,
-					useCORS: true,
-					allowTaint: true,
-					backgroundColor: "#ffffff",
-				},
-				jsPDF: {
-					unit: "mm",
-					format: "a4",
-					orientation: "portrait",
-					putTotalPages: true  // optional
-				},
-				pagebreak: {
-					mode: ["css", "legacy"],
-					before: ".page-break",   // selector where break happens
-					// after: "56px",         // <-- remove this, invalid
-					avoid: "pre, blockquote, table, .code-block-wrapper, tr, img, figure"
-				}
-			};
-
-
-			console.log("[PDF Export] Generating PDF...");
-			await html2pdf().set(options).from(wrapper).save();
-			console.log("[PDF Export] PDF generation complete.");
-
-		} catch (error) {
-			console.error("Error generating PDF:", error);
-		}
+		// Use the same print functionality as the print button
+		await handlePrint();
 	};
 
 

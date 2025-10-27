@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Header from '../components/header/Header';
 import { useNavigate } from 'react-router-dom';
 import TemplateGrid from '../components/dashboard/TemplateGrid';
@@ -35,6 +35,35 @@ const Dashboard: React.FC = () => {
   const [generationRepository, setGenerationRepository] = useState('');
   const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>([]);
   const [currentGenerationStep, setCurrentGenerationStep] = useState<string>('');
+
+  // Clean up any Mermaid error elements that appear on the dashboard
+  useEffect(() => {
+    const cleanupMermaidErrors = () => {
+      const errorSelectors = [
+        '.mermaid-error',
+        '[class*="mermaid"] > [style*="color: red"]',
+        '.syntax-error',
+        '.mermaid-parse-error',
+        '[id^="mermaid-"]' // Also clean up mermaid containers that might have errors
+      ];
+      
+      errorSelectors.forEach(selector => {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(el => {
+          // Check if the element contains error text
+          if (el.textContent?.includes('Syntax error') || el.textContent?.includes('mermaid')) {
+            el.remove();
+          }
+        });
+      });
+    };
+
+    // Run cleanup on mount and periodically
+    cleanupMermaidErrors();
+    const interval = setInterval(cleanupMermaidErrors, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   const handleTemplateClick = (template: Template) => {
     setSelectedTemplate(template);
@@ -317,7 +346,16 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 flex flex-col">
+    <div className="min-h-screen bg-gray-50 text-gray-800 flex flex-col dashboard-page">
+      <style>{`
+        /* Hide Mermaid errors on dashboard */
+        .dashboard-page .mermaid-error,
+        .dashboard-page [class*="mermaid"] > [style*="color: red"],
+        .dashboard-page .syntax-error,
+        .dashboard-page .mermaid-parse-error {
+          display: none !important;
+        }
+      `}</style>
       <Header
         userName={displayName}
         initials={initials}

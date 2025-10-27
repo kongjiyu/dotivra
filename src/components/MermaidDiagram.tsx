@@ -11,7 +11,7 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default
 
   useEffect(() => {
     mermaid.initialize({
-      startOnLoad: true,
+      startOnLoad: false, // Disable auto-rendering to prevent errors on dashboard
       theme,
       securityLevel: 'loose',
     });
@@ -32,12 +32,8 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default
           elementRef.current.innerHTML = svg;
         } catch (error) {
           console.error('Error rendering Mermaid diagram:', error);
-          elementRef.current.innerHTML = `
-            <div style="color: red; padding: 1rem; text-align: center; border: 1px solid red; border-radius: 0.5rem;">
-              <p style="font-weight: bold;">Error rendering diagram</p>
-              <p style="font-size: 0.875rem;">${error instanceof Error ? error.message : 'Unknown error'}</p>
-            </div>
-          `;
+          // Don't show error UI - just fail silently
+          elementRef.current.innerHTML = '';
         }
       }
     };
