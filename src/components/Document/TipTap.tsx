@@ -169,13 +169,26 @@ const Tiptap = ({
                 isFirstLoad: lastAppliedContentRef.current === null
             });
 
-            // false => do not emit update event, avoids extra history noise
+            // Set content without emitting update to avoid triggering onUpdate
             editor.commands.setContent(initialContent, { emitUpdate: false });
-            // Ensure no history entry for this transaction
-            if (editor.view) {
-                const tr = editor.state.tr.setMeta('addToHistory', false);
-                editor.view.dispatch(tr);
-            }
+
+            // Clear undo/redo history after loading initial content
+            // This ensures undo won't revert to empty state
+            requestAnimationFrame(() => {
+                // Clear history by clearing and resetting content
+                if (editor && !editor.isDestroyed) {
+                    editor.commands.clearContent(false);
+                    editor.commands.setContent(initialContent, { emitUpdate: false });
+                    // Clear the history stack completely
+                    if (editor.view && editor.view.state) {
+                        const tr = editor.view.state.tr;
+                        tr.setMeta('addToHistory', false);
+                        editor.view.dispatch(tr);
+                    }
+                    editor.commands.focus('end');
+                    console.log('🗑️ Cleared undo history after initial content load');
+                }
+            });
 
             // Mark this content as applied
             lastAppliedContentRef.current = initialContent;

@@ -8,6 +8,409 @@ const GENERATE_API = buildApiUrl('api/gemini/generate');
 class AIService {
     private defaultModel = 'gemini-2.5-pro';
 
+    /**
+     * AI Agent with multi-polling approach - sends to /api/gemini/generate
+     * Handles JSON parsing with retry logic
+     */
+    async *executeAIAgent(
+        prompt: string,
+        documentId?: string,
+        conversationHistory?: Array<{role: string; content: string}>,
+        selectedText?: string
+    ): AsyncGenerator<{stage: string; content: any; thought?: string}> {
+        try {
+            // Build system prompt with tool descriptions and stage format
+            const systemPrompt = `You are a helpful AI assistant that helps users work with their documents. You can read, search, modify, and organize document content.
+
+**IMPORTANT: You are assisting non-technical users. Always communicate in clear, natural language without technical jargon.**
+
+**CRITICAL: RESPONSE FORMAT - SINGLE LINE JSON ONLY**
+You MUST respond with EXACTLY ONE JSON object per response. NO NEWLINES, NO MULTIPLE OBJECTS.
+Format: {"stage": "STAGE_NAME", "thought": "your internal analysis", "content": "what you're doing in natural language", "nextStage": "NEXT_STAGE_NAME"}
+
+**STAGE PROGRESSION - FOLLOW THIS FLOW:**
+You will be called MULTIPLE TIMES. Each call should return ONE stage. Track your progress and move forward:
+
+1. **PLANNING STAGE** (First call - understand request)
+   - Analyze the user's intent, requirements, and constraints
+   - Identify what needs to be done
+   - Content: Explain what you understand from the request in friendly terms
+   - **MUST set nextStage: "reasoning"**
+   - Example: {"stage":"planning","thought":"User wants to add intro","content":"I understand you'd like to add an introduction section.","nextStage":"reasoning"}
+
+2. **REASONING STAGE** (Second call - decide approach)
+   - Review the planning stage analysis (look at conversation history)
+   - Think through the best way to accomplish the task
+   - Decide on necessary actions/tools
+   - Select the most appropriate tool to use FIRST
+   - Content: Explain your thinking process in natural language
+   - **If you need to use a tool, set nextStage: "toolUsed"**
+   - **If task is complete after tool execution, set nextStage: "done"** (this will trigger summary)
+   - **If task is simple and needs no tools, set nextStage: "summary"**
+   - Example: {"stage":"reasoning","thought":"Need to get document first","content":"I'll first read your document to see what's there.","nextStage":"toolUsed"}
+
+3. **TOOLUSED STAGE** (Third+ calls - execute actions)
+   - Use this stage when you need to perform an action
+   - Request tool execution with proper format
+   - Content format: {"tool": "tool_name", "args": {...}, "description": "What I'm doing in natural language"}
+   - The "description" should be user-friendly
+   - **After tool execution, you can either:**
+     - Set nextStage: "reasoning" (if you need to think about next action)
+     - Set nextStage: "toolUsed" (if you know the next tool to use)
+     - Set nextStage: "summary" (if task is complete)
+   - Example: {"stage":"toolUsed","thought":"Getting content","content":{"tool":"get_document_content","args":{"documentId":"123"},"description":"Reading your document..."},"nextStage":"reasoning"}
+
+4. **SUMMARY STAGE** (Final call - wrap up)
+   - Provide a clear summary with a title (use ## for markdown heading)
+   - **IMPORTANT: Always start summary content with "## Summary" as the heading**
+   - Explain what was accomplished
+   - Content: Full summary in natural language with formatting
+   - **Set nextStage: "done"**
+   - Example: {"stage":"summary","thought":"Done","content":"## Summary\\n\\nI've added the introduction section to your document!","nextStage":"done"}
+
+**YOUR TOOLS (use exact arg shapes):**
+- get_document_content: Read the entire document (args: {documentId, reason})
+- scan_document_content: Quick scan of document structure (args: {reason})
+- search_document_content: Find specific text (args: {query, reason})
+- append_document_content: Add content at the end (args: {content, reason})
+- insert_document_content: Add content at specific position (args: {position:number, content, reason})
+- replace_document_content: Replace a text range (args: {position:{from:number, to:number}, content, reason})
+- remove_document_content: Delete a text range (args: {position:{from:number, to:number}, reason})
+- verify_document_change: Confirm changes were made (args: {reason})
+- get_all_documents_metadata_within_project: List all documents (args: {documentId, reason})
+- get_document_summary: Get document overview (args: {documentId, reason})
+- append_document_summary: Append to summary (args: {content, reason})
+- insert_document_summary: Insert into summary (args: {position:number, content, reason})
+- replace_doument_summary: Replace summary range (args: {position:{from:number, to:number}, content, reason})
+- remove_document_summary: Remove summary range (args: {position:{from:number, to:number}, reason})
+- search_document_summary: Search within summary (args: {query, reason})
+
+**IMPORTANT - MESSAGE PRIORITY:**
+Always prioritize the user's current message first. Only analyze earlier conversation messages if they are necessary to accomplish the request. Keep references to prior context minimal and relevant.
+
+**IMPORTANT - DOCUMENT ID:**
+The current document ID is: {{DOCUMENT_ID}}
+When a tool accepts a documentId, ALWAYS use this exact value.
+Example: {"tool":"get_document_content","args":{"documentId":"{{DOCUMENT_ID}}"},"description":"Reading your document..."}
+
+**TOOL RESULT VALIDATION:**
+After a toolUsed stage, you will receive a toolResult with this structure:
+- {"success": true/false, "tool": "tool_name", "result": "detailed result or error"}
+- If success is false, you MUST retry with the same tool or try a different approach
+- If success is true, use the result data in your reasoning stage to decide next action
+- ALWAYS review the complete toolResult before proceeding
+
+**COMMUNICATION STYLE:**
+- Be conversational and friendly
+- No technical jargon or tool names in descriptions
+- Use "I'm" and speak naturally
+- Example: "I'm looking for that introduction section you mentioned" NOT "Using search_document_content"
+
+**CRITICAL RULES:**
+- Response must be EXACTLY ONE JSON object, NO newlines between objects
+- ALWAYS include "nextStage" field in your response
+- Use double quotes for all strings
+- Escape special characters in strings (\\n for newlines, \\" for quotes)
+- "thought" = your internal reasoning (for logging, carry context from previous stages)
+- "content" = what you tell the user OR tool execution object
+- "nextStage" = what stage should execute next (planning → reasoning → toolUsed/summary → done)
+- For toolUsed, content must be an object with "tool", "args", and "description" fields
+- Review conversation history to see what stages you've already completed
+- DO NOT repeat the same stage - always move forward unless reasoning about next action
+
+**EXAMPLE FLOW (ONE RESPONSE AT A TIME):**
+Call 1 - Planning: {"stage":"planning","thought":"User wants to add content after intro","content":"I understand you'd like to add some content after the introduction section.","nextStage":"reasoning"}
+Call 2 - Reasoning: {"stage":"reasoning","thought":"Based on planning: need to find intro location","content":"I'll first locate the introduction section in your document.","nextStage":"toolUsed"}
+Call 3 - ToolUsed: {"stage":"toolUsed","thought":"Executing search for intro","content":{"tool":"search_document_content","args":{"documentId":"123","query":"introduction","reason":"Finding intro section"},"description":"Looking for the introduction section..."},"nextStage":"reasoning"}
+Call 4 - Reasoning: {"stage":"reasoning","thought":"Found intro, now insert content","content":"Great! I found the introduction. Now I'll add your content right after it.","nextStage":"toolUsed"}
+Call 5 - ToolUsed: {"stage":"toolUsed","thought":"Inserting content","content":{"tool":"insert_document_content","args":{"documentId":"123","content":"New content here","position":"after-intro","reason":"Adding user content"},"description":"Adding your content after the introduction..."},"nextStage":"summary"}
+Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"## Summary\\n\\nI've added your content right after the introduction section!","nextStage":"done"}`;
+
+            // Build full prompt with selected text
+            let fullPrompt = prompt;
+            if (selectedText) {
+                fullPrompt = `Selected text from document: "${selectedText}"\n\nUser request: ${prompt}`;
+            }
+
+            // Inject documentId into system prompt
+            const systemPromptWithDocId = systemPrompt.replace(/\{\{DOCUMENT_ID\}\}/g, documentId || 'NOT_SET');
+
+            // Add conversation history (limit and prioritize current message)
+            const limitedHistory = (conversationHistory || []).slice(-6);
+            const messages = [...limitedHistory, { role: 'user', content: fullPrompt }];
+
+            let continueExecution = true;
+            let retryCount = 0;
+            const maxRetries = 3;
+            let toolExecutionCount = 0;
+            const maxToolExecutions = 15;
+            let currentStage = 'planning';
+            let stageHistory: string[] = []; // Track stages we've been through
+            let lastToolResult: any = null; // Track last tool execution result
+
+            // Don't yield the initial "Starting..." message - keep it
+            // yield { stage: 'planning', content: 'Starting AI agent execution...' };
+
+            while (continueExecution && toolExecutionCount < maxToolExecutions) {
+                await new Promise(resolve => setTimeout(resolve, 100)); // Small delay between polls
+
+                // Build context from previous stages for better continuity
+                let stageContext = '';
+                if (stageHistory.length > 0) {
+                    stageContext = `\n\nPREVIOUS STAGES COMPLETED: ${stageHistory.join(' → ')}`;
+                    stageContext += `\nCURRENT STAGE TO EXECUTE: ${currentStage}`;
+                    stageContext += '\nRemember: Review the conversation history to see what you analyzed in previous stages. Build on that analysis.';
+                }
+
+                // Prepare prompt for current iteration
+                const iterationPrompt = messages.map(m => 
+                    `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
+                ).join('\n\n') + stageContext + '\n\nSystem: ' + systemPromptWithDocId;
+
+                // Call Gemini API TEMP - USE LOCALHOST
+                const response = await fetch('http://localhost:3001/api/gemini/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: iterationPrompt,
+                        model: 'gemini-2.0-flash-exp',
+                        generationConfig: {
+                            temperature: 0.3,
+                            maxOutputTokens: 2048
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`Gemini API failed: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const aiResponse = data.text || '';
+
+                console.log('🤖 AI Response:', aiResponse.substring(0, 200));
+
+                // Try to parse JSON from response
+                // Handle case where AI returns multiple JSON objects on separate lines
+                let parsed: any;
+                try {
+                    // Split by newlines and try to parse each line as JSON
+                    const lines = aiResponse.trim().split('\n').filter((line: string) => line.trim());
+                    
+                    // Try to find the first valid JSON line
+                    for (const line of lines) {
+                        try {
+                            const trimmedLine = line.trim();
+                            if (trimmedLine.startsWith('{') && trimmedLine.endsWith('}')) {
+                                parsed = JSON.parse(trimmedLine);
+                                // If we found a valid JSON, break and use only the first one
+                                console.log('✅ Parsed JSON from line:', trimmedLine.substring(0, 100));
+                                break;
+                            }
+                        } catch (lineError) {
+                            // Skip invalid lines and try next
+                            continue;
+                        }
+                    }
+
+                    // If no valid JSON found in lines, try parsing whole response
+                    if (!parsed) {
+                        const jsonMatch = aiResponse.match(/\{[\s\S]*?\}/);
+                        if (jsonMatch) {
+                            parsed = JSON.parse(jsonMatch[0]);
+                            console.log('✅ Parsed JSON from match:', jsonMatch[0].substring(0, 100));
+                        } else {
+                            throw new Error('No JSON found in response');
+                        }
+                    }
+
+                    // Validate required fields
+                    if (!parsed.stage || parsed.content === undefined) {
+                        throw new Error('Invalid JSON structure - missing stage or content');
+                    }
+                    
+                    // Ensure thought field exists (can be empty)
+                    if (!parsed.thought) {
+                        parsed.thought = parsed.stage;
+                    }
+
+                    // Validate nextStage field (should always be present)
+                    if (!parsed.nextStage) {
+                        console.warn('⚠️ Missing nextStage field, inferring from stage');
+                        // Infer nextStage based on current stage
+                        if (parsed.stage === 'planning') {
+                            parsed.nextStage = 'reasoning';
+                        } else if (parsed.stage === 'reasoning') {
+                            parsed.nextStage = 'toolUsed';
+                        } else if (parsed.stage === 'toolUsed') {
+                            parsed.nextStage = 'reasoning';
+                        } else if (parsed.stage === 'summary') {
+                            parsed.nextStage = 'done';
+                        }
+                    }
+
+                    // Track stage in history
+                    stageHistory.push(parsed.stage);
+                    console.log(`✅ Stage: ${parsed.stage} → Next: ${parsed.nextStage}`);
+
+                    // Reset retry count on success
+                    retryCount = 0;
+
+                } catch (parseError) {
+                    retryCount++;
+                    console.error(`❌ JSON parse error (attempt ${retryCount}/${maxRetries}):`, parseError);
+                    console.error('Raw response:', aiResponse);
+
+                    if (retryCount >= maxRetries) {
+                        yield { 
+                            stage: 'error', 
+                            content: 'Failed to get valid JSON response after 3 attempts. Please try again.' 
+                        };
+                        break;
+                    }
+
+                    // Add error feedback to conversation with clearer instructions
+                    messages.push({
+                        role: 'assistant',
+                        content: aiResponse
+                    });
+                    messages.push({
+                        role: 'user',
+                        content: `ERROR: Your response was not valid JSON. Please respond with EXACTLY ONE JSON object on a single line in the format: {"stage":"...","thought":"...","content":"...","nextStage":"..."} - NO NEWLINES, NO MULTIPLE OBJECTS. MUST include nextStage field.`
+                    });
+
+                    continue;
+                }
+
+                // Add AI response to conversation
+                messages.push({
+                    role: 'assistant',
+                    content: JSON.stringify(parsed)
+                });
+
+                // Yield the stage to client
+                yield parsed;
+
+                // Update currentStage based on nextStage
+                // If nextStage is 'done', trigger summary stage first
+                if (parsed.nextStage === 'done' && parsed.stage !== 'summary') {
+                    currentStage = 'summary';
+                    console.log('🎯 Triggering summary stage before completion');
+                } else {
+                    currentStage = parsed.nextStage || 'done';
+                }
+
+                // Handle different stages
+                if (parsed.stage === 'done' || (parsed.stage === 'summary' && parsed.nextStage === 'done')) {
+                    console.log('🏁 Workflow complete');
+                    continueExecution = false;
+                    break;
+                }
+
+                if (parsed.stage === 'toolUsed') {
+                    toolExecutionCount++;
+                    
+                    const toolData = parsed.content;
+                    console.log(`🔧 Executing tool: ${toolData.tool}`, toolData.args);
+                    
+                    // Execute actual tool via API
+                    try { //USE LOCALHOST TEMP
+                        const toolResponse = await fetch('http://localhost:3001/api/tools/execute', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                tool: toolData.tool,
+                                args: toolData.args,
+                                documentId: documentId
+                            })
+                        });
+
+                        let toolResult: any;
+                        if (!toolResponse.ok) {
+                            console.error(`❌ Tool execution failed: ${toolResponse.status}`);
+                            toolResult = {
+                                success: false,
+                                tool: toolData.tool,
+                                error: `Tool execution failed with status ${toolResponse.status}`,
+                                result: null
+                            };
+                        } else {
+                            const toolData_response = await toolResponse.json();
+                            console.log(`✅ Tool executed successfully:`, toolData_response);
+                            toolResult = {
+                                success: true,
+                                tool: toolData.tool,
+                                result: toolData_response
+                            };
+                        }
+
+                        // Store the result for validation
+                        lastToolResult = toolResult;
+                        
+                        // Yield tool result to client
+                        yield {
+                            stage: 'toolResult',
+                            content: toolResult
+                        };
+
+                        // Add complete tool result to conversation for next reasoning stage
+                        const resultMessage = toolResult.success 
+                            ? `Tool "${toolResult.tool}" executed successfully.\n\nCOMPLETE RESULT:\n${JSON.stringify(toolResult.result, null, 2)}\n\nValidate this result and decide your next action. If the task is complete, set nextStage to "done".`
+                            : `Tool "${toolResult.tool}" FAILED with error: ${toolResult.error}\n\nYou MUST retry with the same tool using different args, or try a different approach. Set nextStage to "toolUsed" to retry.`;
+                        
+                        messages.push({
+                            role: 'user',
+                            content: resultMessage
+                        });
+
+                        console.log(`📋 Tool result passed to next stage (${currentStage}):`, toolResult.success ? 'SUCCESS' : 'FAILED');
+                        
+                    } catch (toolError) {
+                        console.error('❌ Tool execution error:', toolError);
+                        lastToolResult = {
+                            success: false,
+                            tool: toolData.tool,
+                            error: toolError instanceof Error ? toolError.message : 'Unknown tool error',
+                            result: null
+                        };
+                        
+                        yield {
+                            stage: 'toolResult',
+                            content: lastToolResult
+                        };
+
+                        messages.push({
+                            role: 'user',
+                            content: `Tool "${toolData.tool}" FAILED with error: ${lastToolResult.error}. Retry with different args or try another approach. Set nextStage to "toolUsed".`
+                        });
+                    }
+                } else {
+                    // For non-tool stages, add guidance for next stage
+                    messages.push({
+                        role: 'user',
+                        content: `Good. Now proceed to ${currentStage} stage. Remember to review what you learned in previous stages.`
+                    });
+                }
+            }
+
+            if (toolExecutionCount >= maxToolExecutions) {
+                yield {
+                    stage: 'summary',
+                    content: 'Reached maximum tool execution limit (15). Stopping execution.'
+                };
+            }
+
+            yield { stage: 'done', content: null };
+
+        } catch (error) {
+            console.error('AI Agent execution error:', error);
+            yield { 
+                stage: 'error', 
+                content: error instanceof Error ? error.message : 'Unknown error'
+            };
+        }
+    }
+
     async generateContent(prompt: string, context?: string): Promise<string> {
         try {
             const fullPrompt = context ? `Context: ${context}\n\nRequest: ${prompt}` : prompt;
@@ -134,7 +537,6 @@ You have access to powerful document manipulation tools that allow you to:
 
 1. **Read & Analyze Documents:**
    - scan_document_content: Read and analyze document structure (lines, words, headings)
-   - get_document_content: Retrieve the full content of a document
    - search_document_content: Search for specific text or patterns in documents
 
 2. **Edit & Modify Documents:**
@@ -150,7 +552,6 @@ You have access to powerful document manipulation tools that allow you to:
 - When a user asks to "delete", "remove", or "cut" text → Use remove_document_content
 - When a user asks about document structure or wants an overview → Use scan_document_content
 - When a user asks to "find" or "search" for something → Use search_document_content
-- When you need to understand document content before making changes → Use get_document_content
 
 **HOW TO RESPOND:**
 
@@ -201,91 +602,7 @@ Now respond to the user's message. If their request requires document manipulati
         return this.generateContent(fullPrompt);
     }
 
-    /**
-     * Advanced chat with MCP tool calling capabilities
-     * This method uses the backend MCP integration to actually execute tools
-     */
-    async chatWithToolCalling(
-        message: string, 
-        documentId?: string,
-        documentContent?: string
-    ): Promise<{
-        text: string;
-        toolsUsed: number;
-        toolCalls: Array<{
-            name: string;
-            args: Record<string, any>;
-            result?: any;
-            success: boolean;
-        }>;
-    }> {
-        try {
-            const systemPrompt = `You are an intelligent AI assistant with active document manipulation capabilities.
 
-**ACTIVE TOOL ACCESS:**
-
-You can directly execute these document operations:
-- scan_document_content(reason): Analyze document structure
-- get_document_content(documentId): Retrieve full content
-- search_document_content(query, reason): Find specific text
-- append_document_content(content, reason): Add to document end
-- insert_document_content(position, content, reason): Insert at position
-- replace_document_content(position{from, to}, content, reason): Replace text
-- remove_document_content(position{from, to}, reason): Delete text
-
-**WORKFLOW:**
-1. Understand what the user wants
-2. Execute the appropriate tool(s) automatically
-3. Provide clear feedback on what was done
-
-**EXAMPLES:**
-- "Add a conclusion section" → Use append_document_content
-- "Find all mentions of AI" → Use search_document_content
-- "Replace the intro" → Use replace_document_content with appropriate positions
-- "Delete the last paragraph" → Use remove_document_content
-
-Be proactive and execute tools when needed!`;
-
-            const response = await fetch(buildApiUrl('api/gemini/generate-with-tools'), {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt: message,
-                    documentId,
-                    documentContent,
-                    systemPrompt,
-                    model: this.defaultModel,
-                    generationConfig: {
-                        maxOutputTokens: 4096,
-                        temperature: 0.7
-                    }
-                })
-            });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData?.error || `Tool calling failed: ${response.status}`);
-            }
-
-            const data = await response.json();
-            
-            return {
-                text: data.text || '',
-                toolsUsed: data.toolsUsed || 0,
-                toolCalls: data.toolCalls || []
-            };
-        } catch (error) {
-            console.error('❌ Chat with tool calling error:', error);
-            
-            // Fallback to regular chat without tool execution
-            const fallbackText = await this.chatResponse(message, documentContent);
-            return {
-                text: fallbackText,
-                toolsUsed: 0,
-                toolCalls: []
-            };
-        }
-    }
 
     async analyzeAndSuggest(selectedText: string, documentContext: string): Promise<{
         improvements: string[];
@@ -348,7 +665,6 @@ Format your response as JSON with the structure:
 
 **AVAILABLE DOCUMENT TOOLS:**
 - scan_document_content: Analyze document structure (lines, words, headings)
-- get_document_content: Retrieve full document content
 - search_document_content: Find specific text or patterns
 - append_document_content: Add content to document end
 - insert_document_content: Insert text at specific position

@@ -35,16 +35,6 @@ export const createMcpServer = (): McpServer => {
   logger.info('🚀 Creating MCP Server with 7 document tools...');
 
   // Tool 1: Get Document Content
-  server.tool(
-    'get_document_content',
-    'Retrieve the full content of a document for review, editing, or analysis',
-    {
-      documentId: z.string().describe('The unique identifier of the document to retrieve')
-    },
-    async ({ documentId }: { documentId: string }) => {
-      return await toolService.get_document_content({ documentId });
-    }
-  );
 
   // Tool 2: Scan Document Content
   server.tool(
@@ -141,20 +131,6 @@ export const createMcpServer = (): McpServer => {
 export const getMcpToolsForGemini = (server: McpServer): GenAITool[] => {
   // Manually define the 7 tools in Google GenAI format
   const tools: GenAITool[] = [
-    {
-      name: 'get_document_content',
-      description: 'Retrieve the full content of a document for review, editing, or analysis',
-      parameters: {
-        type: SchemaType.OBJECT,
-        properties: {
-          documentId: {
-            type: SchemaType.STRING,
-            description: 'The unique identifier of the document to retrieve'
-          }
-        },
-        required: ['documentId']
-      }
-    },
     {
       name: 'scan_document_content',
       description: 'Get high-level metadata about the document (line count, word count, headings, structure) without retrieving full content',
@@ -300,9 +276,6 @@ export const executeMcpTool = async (toolName: string, args: Record<string, any>
   logger.info(`🔧 Executing MCP tool: ${toolName}`, args);
 
   switch (toolName) {
-    case 'get_document_content':
-      return await toolService.get_document_content(args as { documentId: string });
-
     case 'scan_document_content':
       return await toolService.scan_document_content(args as { reason: string });
 

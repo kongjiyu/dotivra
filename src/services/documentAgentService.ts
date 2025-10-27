@@ -25,48 +25,6 @@ export class DocumentAgentService {
   }
 
   /**
-   * Send a prompt to the agent and let it decide what actions to take
-   */
-  async chat(prompt: string, editor: Editor): Promise<AgentResponse> {
-    const documentContent = editor.getText();
-    const selection = editor.state.selection;
-    const selectedText = editor.state.doc.textBetween(selection.from, selection.to);
-    const hasSelection = !selection.empty;
-
-    // Build context for the agent
-    const context = {
-      documentContent,
-      selectedText: hasSelection ? selectedText : null,
-      selectionRange: hasSelection ? { from: selection.from, to: selection.to } : null,
-      documentLength: documentContent.length,
-      cursorPosition: selection.from,
-    };
-
-    try {
-      const response = await fetch(`${this.apiBaseUrl}/api/document-agent/chat`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          prompt,
-          context,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Agent request failed: ${response.status}`);
-      }
-
-      const data = await response.json();
-      return data;
-    } catch (error) {
-      console.error('Document Agent error:', error);
-      throw error;
-    }
-  }
-
-  /**
    * Execute document actions determined by the agent
    * Acts as an MCP server with tools for document manipulation
    */
@@ -138,43 +96,6 @@ export class DocumentAgentService {
     });
   }
 
-  /**
-   * Process a user prompt: let agent reason, then execute actions
-   * Provides progress callbacks for UI updates
-   */
-  async processPrompt(
-    prompt: string, 
-    editor: Editor,
-    onProgress?: (status: string) => void
-  ): Promise<AgentResponse> {
-    // Notify: Agent is thinking
-    onProgress?.('🤔 Agent analyzing your request...');
-
-    // Get agent's reasoning and planned actions
-    const response = await this.chat(prompt, editor);
-
-    // Notify: Agent received response
-    onProgress?.('📋 Agent planned actions, executing...');
-
-    // Execute the actions with progress updates
-    if (response.actions && response.actions.length > 0) {
-      for (let i = 0; i < response.actions.length; i++) {
-        const action = response.actions[i];
-        const toolName = action.type.charAt(0).toUpperCase() + action.type.slice(1);
-        onProgress?.(`🛠️ Using ${toolName} tool (${i + 1}/${response.actions.length})...`);
-        
-        // Execute single action
-        this.executeActions([action], editor);
-        
-        // Small delay to show progress
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
-      
-      onProgress?.('✅ All actions completed!');
-    }
-
-    return response;
-  }
 }
 
 export const documentAgentService = new DocumentAgentService();

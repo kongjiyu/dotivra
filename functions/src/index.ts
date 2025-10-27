@@ -48,6 +48,37 @@ const dashboardSessions = new Map(); // sessionId -> { createdAt, expiresAt }
 // Import Gemini SDK
 import {GoogleGenAI} from "@google/genai";
 
+// Simple retry helper for transient upstream errors (e.g., 503)
+async function fetchWithRetry(
+  input: string,
+  init?: RequestInit,
+  opts?: { retries?: number; backoffMs?: number }
+): Promise<Response> {
+  const retries = opts?.retries ?? 2;
+  const baseBackoff = opts?.backoffMs ?? 300;
+  let attempt = 0;
+
+  while (true) {
+    try {
+      const res = await fetch(input, init as any);
+      // Retry on common transient server errors
+      if ([502, 503, 504].includes(res.status) && attempt < retries) {
+        const delay = baseBackoff * Math.pow(2, attempt) + Math.floor(Math.random() * 100);
+        await new Promise((r) => setTimeout(r, delay));
+        attempt++;
+        continue;
+      }
+      return res;
+    } catch (err: any) {
+      if (attempt >= retries) throw err;
+      const delay = baseBackoff * Math.pow(2, attempt) + Math.floor(Math.random() * 100);
+      await new Promise((r) => setTimeout(r, delay));
+      attempt++;
+      continue;
+    }
+  }
+}
+
 // Helper: Clean expired sessions
 function cleanExpiredSessions() {
   const now = Date.now();
@@ -502,42 +533,53 @@ app.get("/api/health", (req, res) => {
 // GEMINI AI ENDPOINTS
 // ============================================================================
 
-// Authenticate with passkey
-app.post('/api/gemini/auth', (req, res) => {
+app.post('/api/gemini/reasoning', async (req, res) => {
   try {
-    const { passkey } = req.body;
-    const expectedPasskey = process.env.GEMINI_DASHBOARD_PASS;
+    logger.info("🧠 Reasoning API Request received");
+    const {
+      prompt,
+      contents,
+      model = "gemini-2.5-pro",
+      tools,
+      systemInstruction,
+      generationConfig,
+      safetySettings,
+      toolConfig,
+    } = req.body || {};
 
-    if (!expectedPasskey) {
-      return res.status(500).json({ error: 'Dashboard passkey not configured' });
+    if (!geminiBalancer) {
+      logger.error("❌ geminiBalancer not initialized");
+      return res.status(503).json({ error: "Balancer not configured" });
     }
 
-    if (passkey !== expectedPasskey) {
-      return res.status(401).json({ error: 'Invalid passkey' });
+    let effectiveContents = contents;
+    if (!effectiveContents && typeof prompt === "string") {
+      effectiveContents = [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `You are a reasoning AI agent. Follow this process:\n\nTHINK → PLAN → EXECUTE → REVIEW\n\nRespond using short, natural explanations for each phase, prefixed by emojis (🧠, 🧩, ⚙️, ✅).\n\nUser prompt: ${prompt}`,
+            },
+          ],
+        },
+      ];
     }
 
-    // Create session with 10 minute expiration
-    const sessionId = crypto.randomBytes(32).toString('hex');
-    const now = Date.now();
-    const expiresAt = now + 10 * 60 * 1000; // 10 minutes
+    // Set SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
 
-    dashboardSessions.set(sessionId, {
-      createdAt: now,
-      expiresAt: expiresAt,
-    });
-
-    // Clean expired sessions
-    cleanExpiredSessions();
-
-    logger.info('Dashboard session created:', sessionId.slice(0, 12), '...');
-    
-    res.json({
-      sessionId,
-      expiresAt: new Date(expiresAt).toISOString(),
-    });
+    // Note: Streaming implementation would need to be adapted for Firebase Functions
+    // For now, return a placeholder
+    res.write(`data: ${JSON.stringify({ phase: "message", message: "Reasoning endpoint requires streaming support" })}\n\n`);
+    res.write(`data: ${JSON.stringify({ phase: "done", message: "Reasoning completed." })}\n\n`);
+    res.end();
   } catch (error) {
-    logger.error('Dashboard auth error:', error);
-    res.status(500).json({ error: 'Authentication failed' });
+    logger.error("❌ Reasoning error:", error);
+    res.write(`data: ${JSON.stringify({ phase: "error", message: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
+    res.end();
   }
 });
 
@@ -605,82 +647,48 @@ app.post('/api/gemini/generate', async (req, res) => {
   }
 });
 
-// Generate with MCP tool calling
-app.post('/api/gemini/generate-with-tools', async (req, res) => {
+
+// Authenticate with passkey
+app.post('/api/gemini/auth', (req, res) => {
   try {
-    logger.info('🔧 Gemini API with Tools Request received');
+    const { passkey } = req.body;
+    const expectedPasskey = process.env.GEMINI_DASHBOARD_PASS;
 
-    if (!geminiWithMcp) {
-      logger.warn('⚠️ MCP not configured, falling back to regular generation');
-      // Fallback to regular generation
-      const {
-        prompt,
-        model = 'gemini-2.5-pro',
-        generationConfig = {},
-      } = req.body || {};
-
-      if (!prompt) {
-        return res.status(400).json({ error: 'Missing prompt' });
-      }
-
-      const result = await geminiBalancer!.generate({
-        model,
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig
-      });
-
-      return res.json({
-        success: true,
-        text: result.text,
-        toolCalls: [],
-        toolsUsed: 0,
-        model
-      });
+    if (!expectedPasskey) {
+      return res.status(500).json({ error: 'Dashboard passkey not configured' });
     }
 
-    const {
-      prompt,
-      documentId,
-      history = [],
-      systemPrompt,
-      model = 'gemini-2.0-flash-exp',
-      generationConfig = {},
-    } = req.body || {};
-
-    if (!prompt) {
-      return res.status(400).json({ error: 'Missing prompt' });
+    if (passkey !== expectedPasskey) {
+      return res.status(401).json({ error: 'Invalid passkey' });
     }
 
-    // Generate with tools using MCP integration
-    logger.info('🤖 Generating with MCP tools...');
-    const result = await geminiWithMcp.generateWithTools({
-      prompt,
-      history,
-      systemInstruction: systemPrompt,
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 4096,
-        ...generationConfig
-      },
-      documentId
+    // Create session with 10 minute expiration
+    const sessionId = crypto.randomBytes(32).toString('hex');
+    const now = Date.now();
+    const expiresAt = now + 10 * 60 * 1000; // 10 minutes
+
+    dashboardSessions.set(sessionId, {
+      createdAt: now,
+      expiresAt: expiresAt,
     });
 
-    logger.info(`✅ Generation complete`);
+    // Clean expired sessions
+    cleanExpiredSessions();
 
+    logger.info('Dashboard session created:', sessionId.slice(0, 12), '...');
+    
     res.json({
-      success: true,
-      text: result,
-      toolsUsed: 1, // MCP integration handles tool calls internally
-      model
+      sessionId,
+      expiresAt: new Date(expiresAt).toISOString(),
     });
   } catch (error) {
-    logger.error('❌ Gemini generate with tools error:', error);
-    res.status(500).json({
-      success: false,
-      error: (error as any)?.message || 'Failed to generate with tools'
-    });
+    logger.error('Dashboard auth error:', error);
+    res.status(500).json({ error: 'Authentication failed' });
   }
 });
+
+
+
 
 // Dashboard endpoint (requires authentication)
 app.get('/api/gemini/dashboard', async (req, res) => {
@@ -756,7 +764,7 @@ app.post('/api/github/oauth/token', async (req, res) => {
     }
 
     // Exchange code for access token with GitHub
-    const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+    const tokenResponse = await fetchWithRetry('https://github.com/login/oauth/access_token', {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
@@ -769,7 +777,7 @@ app.post('/api/github/oauth/token', async (req, res) => {
         code,
         redirect_uri
       })
-    });
+    }, { retries: 2 });
 
     if (!tokenResponse.ok) {
       throw new Error(`GitHub API error: ${tokenResponse.status}`);
@@ -803,13 +811,13 @@ app.get('/api/github/user/repos', async (req, res) => {
       return res.status(401).json({ error: 'Authorization header required' });
     }
 
-    const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=100', {
+    const response = await fetchWithRetry('https://api.github.com/user/repos?sort=updated&per_page=100', {
       headers: {
         'Authorization': authorization,
         'Accept': 'application/vnd.github.v3+json',
         'User-Agent': 'Dotivra-App'
       }
-    });
+    }, { retries: 2 });
 
     if (!response.ok) {
       throw new Error(`GitHub API error: ${response.status}`);
@@ -838,13 +846,13 @@ app.get('/api/github/repos/:owner/:repo/contents/*', async (req, res) => {
     }
 
     const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-    const response = await fetch(url, {
+    const response = await fetchWithRetry(url, {
       headers: {
         'Authorization': authorization,
         'Accept': 'application/vnd.github.v3+json',
         'User-Agent': 'Dotivra-App'
       }
-    });
+    }, { retries: 2 });
 
     if (!response.ok) {
       throw new Error(`GitHub API error: ${response.status}`);
@@ -1979,7 +1987,7 @@ app.get('/api/link-preview', async (req, res) => {
     }
 
     // Fetch webpage
-    const response = await fetch(validUrl.href, {
+    const response = await fetchWithRetry(validUrl.href, {
       method: 'GET',
       headers: {
         'User-Agent': 'Dotivra-Bot/1.0 (+https://dotivra.com)',
@@ -1987,7 +1995,7 @@ app.get('/api/link-preview', async (req, res) => {
         'Accept-Language': 'en-US,en;q=0.9',
       },
       redirect: 'follow',
-    });
+    }, { retries: 2, backoffMs: 400 });
 
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -2061,8 +2069,8 @@ app.get('/api/link-preview', async (req, res) => {
 // MCP TEST ENDPOINTS
 // ============================================================================
 
-// POST /api/mcp-test/document - Load a document by ID
-app.post('/api/mcp-test/document', async (req, res) => {
+// POST /api/mcp/document - Load a document by ID
+app.post('/api/mcp/document', async (req, res) => {
   try {
     const { documentId } = req.body;
 
@@ -2101,8 +2109,8 @@ app.post('/api/mcp-test/document', async (req, res) => {
   }
 });
 
-// GET /api/mcp-test/tools - Get all available MCP tools
-app.get('/api/mcp-test/tools', async (req, res) => {
+// GET /api/mcp/tools - Get all available MCP tools
+app.get('/api/mcp/tools', async (req, res) => {
   try {
     if (!geminiWithMcp) {
       return res.status(503).json({
@@ -2132,10 +2140,10 @@ app.get('/api/mcp-test/tools', async (req, res) => {
   }
 });
 
-// POST /api/mcp-test/generate - Test generation with MCP tools
-app.post('/api/mcp-test/generate', async (req, res) => {
+// POST /api/mcp/generate - Test generation with MCP tools
+app.post('/api/mcp/generate', async (req, res) => {
   try {
-    const { prompt, documentId, model = 'gemini-2.0-flash-exp' } = req.body;
+    const { prompt, documentId, model = 'gemini-2.5-pro' } = req.body;
     if (!prompt) {
       return res.status(400).json({
         success: false,
@@ -2171,7 +2179,6 @@ Available tools and when to use them:
 - insert_document_content(position, content, reason) → User says: "insert at", "add at position", "put at line"
 - replace_document_content(position, content, reason) → User says: "replace", "change", "update", "modify" + text
 - remove_document_content(position, reason) → User says: "delete", "remove", "erase", "clear" + text
-- get_document_content(documentId) → User says: "read", "get", "show", "retrieve" document
 
 ${documentId ? `\nCurrent document ID: ${documentId}\nDocument is loaded and ready. EXECUTE OPERATIONS IMMEDIATELY.` : '\nNo document loaded. If user asks for operations, tell them to open a document first.'}`;
 
@@ -2204,8 +2211,8 @@ ${documentId ? `\nCurrent document ID: ${documentId}\nDocument is loaded and rea
   }
 });
 
-// POST /api/mcp-test/set-document - Set current document context
-app.post('/api/mcp-test/set-document', async (req, res) => {
+// POST /api/mcp/set-document - Set current document context
+app.post('/api/mcp/set-document', async (req, res) => {
   try {
     const { documentId } = req.body;
 
@@ -2242,8 +2249,8 @@ app.post('/api/mcp-test/set-document', async (req, res) => {
   }
 });
 
-// GET /api/mcp-test/health - System health check
-app.get('/api/mcp-test/health', (req, res) => {
+// GET /api/mcp/health - System health check
+app.get('/api/mcp/health', (req, res) => {
   res.json({
     success: true,
     status: 'ok',
@@ -2258,59 +2265,6 @@ app.get('/api/mcp-test/health', (req, res) => {
   });
 });
 
-// ============================================================================
-// GEMINI REASONING ENDPOINT (SSE Streaming)
-// ============================================================================
-
-app.post('/api/gemini/reasoning', async (req, res) => {
-  try {
-    logger.info("🧠 Reasoning API Request received");
-    const {
-      prompt,
-      contents,
-      model = "gemini-2.5-pro",
-      tools,
-      systemInstruction,
-      generationConfig,
-      safetySettings,
-      toolConfig,
-    } = req.body || {};
-
-    if (!geminiBalancer) {
-      logger.error("❌ geminiBalancer not initialized");
-      return res.status(503).json({ error: "Balancer not configured" });
-    }
-
-    let effectiveContents = contents;
-    if (!effectiveContents && typeof prompt === "string") {
-      effectiveContents = [
-        {
-          role: "user",
-          parts: [
-            {
-              text: `You are a reasoning AI agent. Follow this process:\n\nTHINK → PLAN → EXECUTE → REVIEW\n\nRespond using short, natural explanations for each phase, prefixed by emojis (🧠, 🧩, ⚙️, ✅).\n\nUser prompt: ${prompt}`,
-            },
-          ],
-        },
-      ];
-    }
-
-    // Set SSE headers
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-
-    // Note: Streaming implementation would need to be adapted for Firebase Functions
-    // For now, return a placeholder
-    res.write(`data: ${JSON.stringify({ phase: "message", message: "Reasoning endpoint requires streaming support" })}\n\n`);
-    res.write(`data: ${JSON.stringify({ phase: "done", message: "Reasoning completed." })}\n\n`);
-    res.end();
-  } catch (error) {
-    logger.error("❌ Reasoning error:", error);
-    res.write(`data: ${JSON.stringify({ phase: "error", message: error instanceof Error ? error.message : "Unknown error" })}\n\n`);
-    res.end();
-  }
-});
 
 // ============================================================================
 // WEBSOCKET SERVER FOR REAL-TIME DOCUMENT COLLABORATION

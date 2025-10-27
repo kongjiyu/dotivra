@@ -71,8 +71,6 @@ const getResultSummary = (toolName: string, result: any): string => {
       return `Replaced ${result.removed_length || 0} characters with ${result.inserted_length || 0} characters`;
     case 'remove_document_content':
       return `Removed ${result.removed_length || 0} characters`;
-    case 'get_document_content':
-      return `Retrieved document: ${result.length || 0} characters`;
     default:
       return 'Operation completed';
   }
@@ -160,10 +158,19 @@ const syncToFirebase = async (): Promise<{ success: boolean; error?: string }> =
 
 // Tool 1: Get Document Content
 export const get_document_content = async ({ documentId }: { documentId: string }): Promise<any> => {
+  logger.info('📖 get_document_content called:', { 
+    documentId, 
+    currentDocId: currentDocumentId,
+    needsLoad: documentId !== currentDocumentId
+  });
+
   try {
     if (documentId && documentId !== currentDocumentId) {
+      logger.info(`📖 Loading new document: ${documentId}`);
       await setCurrentDocument(documentId);
     }
+
+    logger.info(`📖 Returning document content: ${currentDocumentContent.length} chars`);
 
     const result = {
       success: true,
@@ -175,6 +182,7 @@ export const get_document_content = async ({ documentId }: { documentId: string 
     logToolUsage('get_document_content', { documentId }, result, currentDocumentId);
     return result;
   } catch (error) {
+    logger.error('❌ get_document_content failed:', error);
     const result = {
       success: false,
       error: (error as Error).message
@@ -246,9 +254,30 @@ export const search_document_content = async ({ query, reason }: { query: string
 
 // Tool 4: Append Document Content
 export const append_document_content = async ({ content, reason }: { content: string; reason: string }): Promise<any> => {
-  currentDocumentContent = currentDocumentContent + content;
+  logger.info('📝 append_document_content called:', { 
+    contentLength: content.length, 
+    contentPreview: content.substring(0, 100),
+    reason, 
+    docId: currentDocumentId,
+    currentContentLength: currentDocumentContent.length
+  });
 
-  const result = {
+  if (!currentDocumentId) {
+    logger.error('❌ No document ID set - cannot append content');
+    return {
+      success: false,
+      error: 'No document context set. Call setCurrentDocument first.',
+      operation: 'append'
+    };
+  }
+
+  const oldLength = currentDocumentContent.length;
+  currentDocumentContent = currentDocumentContent + content;
+  const newLength = currentDocumentContent.length;
+
+  logger.info(`📝 Content appended. Length: ${oldLength} → ${newLength} (added ${content.length} chars)`);
+
+  const result: any = {
     success: true,
     reason,
     operation: 'append',
@@ -258,7 +287,15 @@ export const append_document_content = async ({ content, reason }: { content: st
   };
 
   logToolUsage('append_document_content', { content, reason }, result, currentDocumentId);
-  await syncToFirebase();
+  
+  const syncResult = await syncToFirebase();
+  logger.info('📝 Firebase sync result:', syncResult);
+  
+  if (!syncResult.success) {
+    logger.error('❌ Failed to sync to Firebase:', syncResult.error);
+    result.success = false;
+    result.error = syncResult.error;
+  }
 
   return result;
 };

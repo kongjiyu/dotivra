@@ -13,6 +13,31 @@ import crypto from 'crypto';
 import fetch from 'node-fetch';
 import { createBalancerFromEnv } from './server/gemini/balancer.js';
 
+// Simple retry helper for transient upstream errors (e.g., 503)
+async function fetchWithRetry(input, init, opts) {
+  const retries = (opts && opts.retries !== undefined) ? opts.retries : 2;
+  const baseBackoff = (opts && opts.backoffMs !== undefined) ? opts.backoffMs : 300;
+  let attempt = 0;
+  while (true) {
+    try {
+      const res = await fetch(input, init);
+      if ([502, 503, 504].includes(res.status) && attempt < retries) {
+        const delay = baseBackoff * Math.pow(2, attempt) + Math.floor(Math.random() * 100);
+        await new Promise((r) => setTimeout(r, delay));
+        attempt++;
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (attempt >= retries) throw err;
+      const delay = baseBackoff * Math.pow(2, attempt) + Math.floor(Math.random() * 100);
+      await new Promise((r) => setTimeout(r, delay));
+      attempt++;
+      continue;
+    }
+  }
+}
+
 
 
 
@@ -106,39 +131,31 @@ try {
 	console.warn('⚠️ Gemini balancer not initialized:', e?.message || e);
 }
 
-// Import MCP Test Routes and toolService
-import { createMcpTestRoutes } from './server/routes/mcpTestRoutes.js';
-import { initFirestore } from './server/services/toolService.js';
-import { createGeminiWithMcp } from './server/gemini/geminiMcpIntegration.js';
+// Import toolService and AIAgent
+import { initFirestore, getToolService } from './server/services/toolService.js';
+import { AIAgent } from './server/aiAgent.js';
 
 // Initialize firestore in toolService
 initFirestore(firestore);
 
-// Initialize Gemini with MCP integration
-let geminiWithMcp;
+// Get tool service instance
+const toolService = getToolService();
+
+// Initialize AI Agent
+let aiAgent;
 if (geminiBalancer) {
 	try {
-		geminiWithMcp = createGeminiWithMcp({
-			balancer: geminiBalancer,
-			firestore: firestore
-		});
-		console.log('✅ Gemini with MCP integration initialized');
+		// Initialize AI Agent
+		aiAgent = new AIAgent(geminiBalancer, toolService);
+		console.log('✅ AI Agent initialized');
 	} catch (error) {
-		console.error('❌ Failed to initialize Gemini with MCP:', error);
+		console.error('❌ Failed to initialize AI Agent:', error);
 	}
 }
 
-// Register MCP test routes with balancer
-try {
-	console.log('🔧 Initializing MCP test routes...');
-	const mcpTestRoutes = createMcpTestRoutes(firestore, geminiBalancer);
-	app.use('/api/mcp-test', mcpTestRoutes);
-	console.log('✅ MCP test routes registered at /api/mcp-test');
-} catch (error) {
-	console.error('❌ Failed to initialize MCP test routes:', error);
-	console.error(error.stack);
-}
-
+// Make globally available for routes
+global.geminiBalancer = geminiBalancer;
+global.aiAgent = aiAgent;
 // Utility functions - Match existing Firebase format
 function generateProjectId() {
 	const now = new Date();
@@ -158,7 +175,324 @@ app.get('/api/health', (req, res) => {
 	res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+
 // ===================== Gemini Endpoints =====================
+app.post('/api/gemini/generate-with-tools', async (req, res) => {
+	try {
+		console.log('🔧 Gemini API with Tools Request received');
+
+		const {
+			prompt,
+			model = 'gemini-2.5-pro',
+			generationConfig = {},
+		} = req.body || {};
+
+		if (!prompt) {
+			return res.status(400).json({ error: 'Missing prompt' });
+		}
+
+		// Fallback to regular generation (MCP removed)
+		const result = await geminiBalancer.generate({
+			model,
+			contents: [{ role: 'user', parts: [{ text: prompt }] }],
+			generationConfig
+		});
+
+		return res.json({
+			success: true,
+			text: result.text,
+			toolCalls: [],
+			toolsUsed: 0,
+			model
+		});
+	} catch (error) {
+		console.error('❌ Gemini generate with tools error:', error);
+		res.status(500).json({
+			success: false,
+			error: error?.message || 'Failed to generate with tools'
+		});
+	}
+});
+
+
+// Generate via balancer: central entry for all AI calls
+app.post('/api/gemini/generate', async (req, res) => {
+	try {
+		console.log('🔵 Gemini API Request received');
+		console.log('  Request body keys:', Object.keys(req.body || {}));
+		console.log('  Prompt:', req.body?.prompt?.substring(0, 100) + '...');
+		console.log('  Model:', req.body?.model || 'default');
+
+		if (!geminiBalancer) {
+			console.error('❌ Balancer not configured!');
+			return res.status(503).json({ error: 'Balancer not configured' });
+		}
+
+		const {
+			prompt,
+			contents,
+			model = 'gemini-2.5-pro',
+			tools,
+			systemInstruction,
+			generationConfig,
+			safetySettings,
+			toolConfig,
+		} = req.body || {};
+
+		let effectiveContents = contents;
+		if (!effectiveContents && typeof prompt === 'string') {
+			effectiveContents = [{ role: 'user', parts: [{ text: String(prompt) }] }];
+			console.log('  Converting prompt to contents format');
+		}
+		if (!effectiveContents) {
+			console.error('❌ Missing prompt or contents');
+			return res.status(400).json({ error: 'Missing prompt or contents' });
+		}
+
+		console.log('  Calling geminiBalancer.generate with model:', model);
+		const result = await geminiBalancer.generate({
+			model,
+			contents: effectiveContents,
+			tools,
+			systemInstruction,
+			generationConfig,
+			safetySettings,
+			toolConfig,
+		});
+
+		console.log('✅ Gemini generation successful, response length:', result.text?.length || 0);
+		res.json({
+			ok: true,
+			text: result.text,
+			usage: result.usage,
+			key: { idShort: result.keyIdShort },
+			model,
+		});
+	} catch (error) {
+		console.error('❌ Gemini generate error:', error);
+		console.error('   Error details:', {
+			message: error?.message,
+			status: error?.status,
+			stack: error?.stack?.substring(0, 500)
+		});
+		const status = error?.status || 500;
+		res.status(status).json({ ok: false, error: error?.message || 'Failed to generate' });
+	}
+});
+
+// AI Agent - Standard HTTP with multi-step execution
+// Store active sessions for multi-step execution
+const aiAgentSessions = new Map();
+
+app.post('/api/ai-agent/execute', async (req, res) => {
+	try {
+		console.log('🤖 AI Agent Execute - Request received');
+
+		if (!aiAgent) {
+			return res.status(503).json({ error: 'AI Agent not initialized' });
+		}
+
+		const { prompt, documentId, conversationHistory, selectedText, sessionId } = req.body;
+
+		// If sessionId provided, continue existing session
+		if (sessionId && aiAgentSessions.has(sessionId)) {
+			const iterator = aiAgentSessions.get(sessionId);
+			try {
+				const { value: stage, done } = await iterator.next();
+
+				if (done || !stage || stage.stage === 'done') {
+					aiAgentSessions.delete(sessionId);
+					return res.json({ stage: 'done', content: null, sessionId: null });
+				}
+
+				return res.json({ ...stage, sessionId });
+			} catch (error) {
+				aiAgentSessions.delete(sessionId);
+				return res.json({ stage: 'error', content: error.message, sessionId: null });
+			}
+		}
+
+		// New session - validate prompt
+		if (!prompt) {
+			return res.status(400).json({ error: 'Missing prompt' });
+		}
+
+		// Build full prompt with context
+		let fullPrompt = prompt;
+		if (selectedText) {
+			fullPrompt = `Selected text from document: "${selectedText}"\n\nUser request: ${prompt}`;
+		}
+
+		console.log('📝 Prompt:', fullPrompt?.substring(0, 200));
+		console.log('📄 Document ID:', documentId);
+
+		// Create new session
+		const newSessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+		try {
+			const iterator = aiAgent.executeWithStream(fullPrompt, documentId, conversationHistory || []);
+			aiAgentSessions.set(newSessionId, iterator);
+
+			// Get first stage
+			const { value: stage, done } = await iterator.next();
+
+			if (done || !stage || stage.stage === 'done') {
+				aiAgentSessions.delete(newSessionId);
+				return res.json({ stage: 'done', content: null, sessionId: null });
+			}
+
+			return res.json({ ...stage, sessionId: newSessionId });
+
+		} catch (agentError) {
+			console.error('❌ AI Agent execution error:', agentError);
+			aiAgentSessions.delete(newSessionId);
+			return res.json({ stage: 'error', content: agentError.message, sessionId: null });
+		}
+
+	} catch (error) {
+		console.error('❌ AI Agent execute error:', error);
+		res.status(500).json({
+			stage: 'error',
+			content: error?.message || 'AI Agent execution failed',
+			sessionId: null
+		});
+	}
+});
+
+// Clean up stale sessions every 5 minutes
+setInterval(() => {
+	const now = Date.now();
+	for (const [sessionId, iterator] of aiAgentSessions.entries()) {
+		// Remove sessions older than 10 minutes
+		const sessionAge = now - parseInt(sessionId.split('-')[1]);
+		if (sessionAge > 10 * 60 * 1000) {
+			aiAgentSessions.delete(sessionId);
+			console.log(`🧹 Cleaned up stale AI session: ${sessionId}`);
+		}
+	}
+}, 5 * 60 * 1000);
+
+// ===================== Tool Execution Endpoint =====================
+// Execute tools called by AI agent
+app.post('/api/tools/execute', async (req, res) => {
+	try {
+		console.log('🔧 Tool execution request received');
+
+		const { tool, args, documentId } = req.body;
+
+		if (!tool) {
+			return res.status(400).json({
+				success: false,
+				html: `<div class="error-message">Sorry, no tool was specified. Please try again.</div>`
+			});
+		}
+
+		if (!args || typeof args !== 'object') {
+			return res.status(400).json({
+				success: false,
+				html: `<div class="error-message">Sorry, the tool arguments are missing or invalid. Please try again.</div>`
+			});
+		}
+
+		// Pre-validate required args for known tools to provide clearer errors
+		const needsRange = tool === 'replace_document_content' || tool === 'remove_document_content' || tool === 'replace_doument_summary' || tool === 'remove_document_summary';
+		if (needsRange) {
+			const pos = args?.position;
+			if (!pos || typeof pos.from !== 'number' || typeof pos.to !== 'number') {
+				const errorHtml = `<div class="error-message">Missing required position range. Provide { position: { from: number, to: number } }.</div>`;
+				// Log system error to ChatHistory when we have a document context
+				try {
+					if (documentId) {
+						await firestore.collection('ChatHistory').add({
+							DocID: documentId,
+							Role: 'system-error',
+							Message: 'Tool argument error: position.from/to is required',
+							CreatedAt: new Date().toISOString(),
+						});
+					}
+				} catch (e) {
+					console.warn('⚠️ Failed to log system-error:', e?.message || e);
+				}
+				return res.status(400).json({ success: false, html: errorHtml, tool });
+			}
+		}
+
+		console.log(`🔧 Executing tool: ${tool}`);
+		console.log(`📄 Document ID: ${documentId || 'NOT_SET'}`);
+		console.log(`📋 Args:`, JSON.stringify(args, null, 2));
+
+		// Import setCurrentDocument from toolService
+		const { setCurrentDocument } = await import('./server/services/toolService.js');
+
+		// Set document context if documentId provided
+		if (documentId && documentId !== 'NOT_SET') {
+			try {
+				console.log(`📂 Setting current document context: ${documentId}`);
+				await setCurrentDocument(documentId);
+				console.log(`✅ Document context set successfully`);
+			} catch (error) {
+				console.error(`❌ Failed to set document context:`, error);
+				return res.status(500).json({
+					success: false,
+					html: `<div class="error-message">Sorry, we couldn't load your document. Please try again.</div>`
+				});
+			}
+		}
+
+		// Execute the tool
+		let result;
+		try {
+			result = await toolService.executeTool(tool, args);
+			console.log(`✅ Tool executed successfully: ${tool}`);
+			console.log(`📊 Result:`, JSON.stringify(result, null, 2));
+		} catch (toolError) {
+			console.error(`❌ Tool execution error:`, toolError);
+			// Log system error
+			try {
+				if (documentId) {
+					await firestore.collection('ChatHistory').add({
+						DocID: documentId,
+						Role: 'system-error',
+						Message: `Tool execution error for ${tool}: ${toolError?.message || toolError}`,
+						CreatedAt: new Date().toISOString(),
+					});
+				}
+			} catch (e) {
+				console.warn('⚠️ Failed to log system-error:', e?.message || e);
+			}
+			return res.status(500).json({
+				success: false,
+				html: `<div class="error-message">Sorry, something went wrong while running the tool. Please try again.</div>`,
+				tool: tool
+			});
+		}
+
+		// If tool returned an error, store it as system-error
+		if (!result?.success && documentId) {
+			try {
+				await firestore.collection('ChatHistory').add({
+					DocID: documentId,
+					Role: 'system-error',
+					Message: typeof result?.html === 'string' ? result.html.replace(/<[^>]*>/g, '') : (result?.error || 'Tool returned an error'),
+					CreatedAt: new Date().toISOString(),
+				});
+			} catch (e) {
+				console.warn('⚠️ Failed to log system-error:', e?.message || e);
+			}
+		}
+
+		// Return the result
+		res.json(result);
+
+	} catch (error) {
+		console.error('❌ Tool execution endpoint error:', error);
+		res.status(500).json({
+			success: false,
+			error: error?.message || 'Tool execution failed',
+			details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+		});
+	}
+});
 
 // Helper: Clean expired sessions
 function cleanExpiredSessions() {
@@ -281,253 +615,6 @@ app.get('/api/gemini/dashboard', async (req, res) => {
 	}
 });
 
-// Generate content via balancer: central entry for Chat Agent Calls
-app.post('/api/gemini/reasoning', async (req, res) => {
-	try {
-		console.log("🧠 Reasoning API Request received");
-		const {
-			prompt,
-			contents,
-			model = "gemini-2.5-pro",
-			tools,
-			systemInstruction,
-			generationConfig,
-			safetySettings,
-			toolConfig,
-		} = req.body || {};
-
-
-		if (!geminiBalancer) {
-			console.error("❌ geminiBalancer not initialized");
-			return res.status(503).json({ error: "Balancer not configured" });
-		}
-
-
-		let effectiveContents = contents;
-		if (!effectiveContents && typeof prompt === "string") {
-			effectiveContents = [
-				{
-					role: "user",
-					parts: [
-						{
-							text: `You are a reasoning AI agent. Follow this process:\n\nTHINK → PLAN → EXECUTE → REVIEW\n\nRespond using short, natural explanations for each phase, prefixed by emojis (🧠, 🧩, ⚙️, ✅).\n\nUser prompt: ${prompt}`,
-						},
-					],
-				},
-			];
-		}
-
-
-		res.setHeader("Content-Type", "text/event-stream");
-		res.setHeader("Cache-Control", "no-cache");
-		res.setHeader("Connection", "keep-alive");
-
-
-		const pass = new PassThrough();
-		pass.pipe(res);
-
-
-		const stream = await geminiBalancer.generate({
-			model,
-			contents: effectiveContents,
-			tools,
-			systemInstruction,
-			generationConfig: { ...generationConfig, stream: true },
-			safetySettings,
-			toolConfig,
-		});
-
-
-		if (!stream?.raw?.stream) {
-			console.error("⚠️ Model returned non-streaming response");
-			pass.write(`data: ${JSON.stringify({ phase: "error", message: "Streaming not supported." })}\n\n`);
-			pass.end();
-			return;
-		}
-
-
-		// Forward Gemini stream chunks to SSE
-		for await (const chunk of stream.raw.stream) {
-			const text = chunk?.text?.() || chunk?.response?.text?.() || "";
-			if (text.trim()) {
-				// Detect reasoning phase from text prefix (🧠, 🧩, ⚙️, ✅)
-				const match = text.match(/^(🧠|🧩|⚙️|✅)\s*(.*)/);
-				const phase = match ? match[1] : "message";
-				const message = match ? match[2] : text;
-				pass.write(`data: ${JSON.stringify({ phase, message })}\n\n`);
-			}
-		}
-
-
-		pass.write(`data: ${JSON.stringify({ phase: "done", message: "Reasoning completed." })}\n\n`);
-		pass.end();
-	} catch (error) {
-		console.error("❌ Reasoning error:", error);
-		res.write(`data: ${JSON.stringify({ phase: "error", message: error.message || "Unknown error" })}\n\n`);
-		res.end();
-	}
-
-});
-
-// Generate via balancer: central entry for all AI calls
-app.post('/api/gemini/generate', async (req, res) => {
-	try {
-		console.log('🔵 Gemini API Request received');
-		console.log('  Request body keys:', Object.keys(req.body || {}));
-		console.log('  Prompt:', req.body?.prompt?.substring(0, 100) + '...');
-		console.log('  Model:', req.body?.model || 'default');
-
-		if (!geminiBalancer) {
-			console.error('❌ Balancer not configured!');
-			return res.status(503).json({ error: 'Balancer not configured' });
-		}
-
-		const {
-			prompt,
-			contents,
-			model = 'gemini-2.5-pro',
-			tools,
-			systemInstruction,
-			generationConfig,
-			safetySettings,
-			toolConfig,
-		} = req.body || {};
-
-		let effectiveContents = contents;
-		if (!effectiveContents && typeof prompt === 'string') {
-			effectiveContents = [{ role: 'user', parts: [{ text: String(prompt) }] }];
-			console.log('  Converting prompt to contents format');
-		}
-		if (!effectiveContents) {
-			console.error('❌ Missing prompt or contents');
-			return res.status(400).json({ error: 'Missing prompt or contents' });
-		}
-
-		console.log('  Calling geminiBalancer.generate with model:', model);
-		const result = await geminiBalancer.generate({
-			model,
-			contents: effectiveContents,
-			tools,
-			systemInstruction,
-			generationConfig,
-			safetySettings,
-			toolConfig,
-		});
-
-		console.log('✅ Gemini generation successful, response length:', result.text?.length || 0);
-		res.json({
-			ok: true,
-			text: result.text,
-			usage: result.usage,
-			key: { idShort: result.keyIdShort },
-			model,
-		});
-	} catch (error) {
-		console.error('❌ Gemini generate error:', error);
-		console.error('   Error details:', {
-			message: error?.message,
-			status: error?.status,
-			stack: error?.stack?.substring(0, 500)
-		});
-		const status = error?.status || 500;
-		res.status(status).json({ ok: false, error: error?.message || 'Failed to generate' });
-	}
-});
-
-// Generate with MCP tool calling
-app.post('/api/gemini/generate-with-tools', async (req, res) => {
-	try {
-		console.log('🔧 Gemini API with Tools Request received');
-
-		if (!geminiWithMcp) {
-			console.warn('⚠️ MCP not configured, falling back to regular generation');
-			// Fallback to regular generation
-			const {
-				prompt,
-				model = 'gemini-2.5-pro',
-				generationConfig = {},
-			} = req.body || {};
-
-			if (!prompt) {
-				return res.status(400).json({ error: 'Missing prompt' });
-			}
-
-			const result = await geminiBalancer.generate({
-				model,
-				contents: [{ role: 'user', parts: [{ text: prompt }] }],
-				generationConfig
-			});
-
-			return res.json({
-				success: true,
-				text: result.text,
-				toolCalls: [],
-				toolsUsed: 0,
-				model
-			});
-		}
-
-		const {
-			prompt,
-			documentId,
-			documentContent,
-			systemPrompt,
-			model = 'gemini-2.0-flash-exp',
-			generationConfig = {},
-		} = req.body || {};
-
-		if (!prompt) {
-			return res.status(400).json({ error: 'Missing prompt' });
-		}
-
-		// Set document context if provided
-		if (documentId) {
-			console.log(`📄 Setting document context: ${documentId}`);
-			await geminiWithMcp.setDocument(documentId);
-		}
-
-		// Build contents with user prompt
-		const contents = [{
-			role: 'user',
-			parts: [{ text: prompt }]
-		}];
-
-		// Add system instruction if provided
-		const systemInstruction = systemPrompt ? {
-			parts: [{ text: systemPrompt }]
-		} : undefined;
-
-		// Generate with tools
-		console.log('🤖 Generating with MCP tools...');
-		const result = await geminiWithMcp.generateWithTools({
-			model,
-			contents,
-			systemInstruction,
-			generationConfig: {
-				temperature: 0.7,
-				maxOutputTokens: 4096,
-				...generationConfig
-			},
-			enableMcpTools: true
-		});
-
-		console.log(`✅ Generation complete (${result.toolCalls?.length || 0} tools used)`);
-
-		res.json({
-			success: true,
-			text: result.text,
-			toolCalls: result.toolCalls || [],
-			toolsUsed: result.toolCalls?.length || 0,
-			model
-		});
-	} catch (error) {
-		console.error('❌ Gemini generate with tools error:', error);
-		res.status(500).json({
-			success: false,
-			error: error?.message || 'Failed to generate with tools'
-		});
-	}
-});
 
 // Get GitHub App info and install URL
 app.get('/api/github/install-url', async (req, res) => {
@@ -1616,7 +1703,7 @@ app.post('/api/github/oauth/token', async (req, res) => {
 		}
 
 		// Exchange code for access token with GitHub
-		const tokenResponse = await fetch('https://github.com/login/oauth/access_token', {
+		const tokenResponse = await fetchWithRetry('https://github.com/login/oauth/access_token', {
 			method: 'POST',
 			headers: {
 				'Accept': 'application/json',
@@ -1629,7 +1716,7 @@ app.post('/api/github/oauth/token', async (req, res) => {
 				code,
 				redirect_uri
 			})
-		});
+		}, { retries: 2 });
 
 		if (!tokenResponse.ok) {
 			throw new Error(`GitHub API error: ${tokenResponse.status}`);
@@ -1663,13 +1750,13 @@ app.get('/api/github/user/repos', async (req, res) => {
 			return res.status(401).json({ error: 'Authorization header required' });
 		}
 
-		const response = await fetch('https://api.github.com/user/repos?sort=updated&per_page=100', {
+		const response = await fetchWithRetry('https://api.github.com/user/repos?sort=updated&per_page=100', {
 			headers: {
 				'Authorization': authorization,
 				'Accept': 'application/vnd.github.v3+json',
 				'User-Agent': 'Dotivra-App'
 			}
-		});
+		}, { retries: 2 });
 
 		if (!response.ok) {
 			throw new Error(`GitHub API error: ${response.status}`);
@@ -1698,13 +1785,13 @@ app.get('/api/github/repos/:owner/:repo/contents/*', async (req, res) => {
 		}
 
 		const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-		const response = await fetch(url, {
+		const response = await fetchWithRetry(url, {
 			headers: {
 				'Authorization': authorization,
 				'Accept': 'application/vnd.github.v3+json',
 				'User-Agent': 'Dotivra-App'
 			}
-		});
+		}, { retries: 2 });
 
 		if (!response.ok) {
 			throw new Error(`GitHub API error: ${response.status}`);
@@ -1742,7 +1829,7 @@ app.get('/api/link-preview', async (req, res) => {
 		}
 
 		// Fetch webpage
-		const response = await fetch(validUrl.href, {
+		const response = await fetchWithRetry(validUrl.href, {
 			method: 'GET',
 			headers: {
 				'User-Agent': 'Dotivra-Bot/1.0 (+https://dotivra.com)',
@@ -1752,7 +1839,7 @@ app.get('/api/link-preview', async (req, res) => {
 			timeout: 10000, // 10 second timeout
 			redirect: 'follow',
 			size: 1024 * 1024, // 1MB limit
-		});
+		}, { retries: 2, backoffMs: 400 });
 
 		if (!response.ok) {
 			throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -1817,280 +1904,7 @@ function extractMetaContent(html, regex) {
 	return match ? match[1].trim() : null;
 }
 
-/* ------------------ Document Agent with Gemini Pro 2.5 ------------------ */
-app.post('/api/document-agent/chat', async (req, res) => {
-	try {
-		const { prompt, context, documentId } = req.body;
 
-		if (!prompt || !context) {
-			return res.status(400).json({ error: 'Prompt and context are required' });
-		}
-
-		if (!geminiBalancer) {
-			return res.status(503).json({ error: 'Gemini service not available' });
-		}
-
-		// Set current document for MCP tools
-		if (documentId) {
-			try {
-				await setCurrentDocument(documentId);
-				console.log(`📄 Current document set for MCP tools: ${documentId}`);
-			} catch (error) {
-				console.warn('⚠️ Failed to set current document:', error.message);
-			}
-		}
-
-		// Set headers for Server-Sent Events (SSE)
-		res.setHeader('Content-Type', 'text/event-stream');
-		res.setHeader('Cache-Control', 'no-cache');
-		res.setHeader('Connection', 'keep-alive');
-
-		// Build system instruction for the agent
-		const systemInstruction = `You are an intelligent document editing assistant with access to MCP (Model Context Protocol) tools. You help users write, edit, and improve their documents.
-
-IMPORTANT: You work with the USER'S DOCUMENT CONTENT, not code repositories or technical files.
-
-Available Tools:
-1. **append** - Add new content to the end of the document
-2. **insert** - Insert content at a specific character position
-3. **replace** - Replace text in a specific range with new content
-4. **delete** - Remove text in a specific range
-5. **read** - Read and analyze without making changes
-
-Response format (JSON only):
-{
-  "reasoning": "Explain your analysis and what you plan to do",
-  "actions": [
-    {
-      "type": "append|insert|replace|delete|read",
-      "content": "text content",
-      "position": number OR {from: number, to: number},
-      "reason": "why this change"
-    }
-  ]
-}
-
-Guidelines:
-- Think step by step and explain your reasoning
-- Use character positions precisely
-- Match the user's writing style and tone
-- Be creative for creative writing; be professional for formal writing`;
-
-		// Build the prompt with context
-		const fullPrompt = `Document context:
-- Full content: ${context.documentContent || '(empty document)'}
-- Selected text: ${context.selectedText || '(no selection)'}
-- Selection range: ${context.selectionRange ? `${context.selectionRange.from} to ${context.selectionRange.to}` : '(no selection)'}
-- Document length: ${context.documentLength} characters
-- Cursor at: ${context.cursorPosition}
-
-User request: ${prompt}
-
-Think through this step by step, explain your reasoning, then provide the JSON response.`;
-
-		// Call Gemini API with streaming enabled
-		const { stream, keyIdShort } = await geminiBalancer.generateStream({
-			model: 'gemini-2.5-pro',
-			contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
-			systemInstruction: { parts: [{ text: systemInstruction }] },
-			generationConfig: {
-				temperature: 0.7,
-				topP: 0.95,
-				topK: 40,
-				maxOutputTokens: 4096,
-			},
-			useMcpTools: true,
-		});
-
-		console.log(`🤖 Streaming document agent response using key: ${keyIdShort}`);
-
-		let fullText = '';
-
-		// Stream the response
-		for await (const chunk of stream) {
-			const chunkText = chunk.text;
-			if (chunkText) {
-				fullText += chunkText;
-
-				// Send chunk as SSE event
-				res.write(`data: ${JSON.stringify({
-					type: 'chunk',
-					text: chunkText,
-					timestamp: Date.now()
-				})}\n\n`);
-			}
-		}
-
-		// Parse final response to extract JSON
-		let agentResponse;
-		try {
-			const jsonMatch = fullText.match(/\{[\s\S]*\}/);
-			if (jsonMatch) {
-				agentResponse = JSON.parse(jsonMatch[0]);
-			} else {
-				agentResponse = {
-					reasoning: fullText,
-					actions: []
-				};
-			}
-		} catch (parseError) {
-			console.error('Error parsing agent response:', parseError);
-			agentResponse = {
-				reasoning: fullText,
-				actions: [],
-				rawResponse: fullText
-			};
-		}
-
-		// Send final response
-		res.write(`data: ${JSON.stringify({
-			type: 'done',
-			response: agentResponse,
-			fullText: fullText,
-			timestamp: Date.now()
-		})}\n\n`);
-
-		res.end();
-	} catch (error) {
-		console.error('Document agent error:', error);
-
-		// Try to send error as SSE if headers not sent yet
-		if (!res.headersSent) {
-			res.setHeader('Content-Type', 'text/event-stream');
-		}
-
-		res.write(`data: ${JSON.stringify({
-			type: 'error',
-			error: 'Agent processing failed',
-			details: error.message,
-			timestamp: Date.now()
-		})}\n\n`);
-
-		res.end();
-	}
-});
-
-// Test endpoint for MCP tool integration
-app.post('/api/test-mcp', async (req, res) => {
-	try {
-		const { prompt } = req.body;
-
-		if (!prompt) {
-			return res.status(400).json({ error: 'Prompt is required' });
-		}
-
-		if (!geminiBalancer) {
-			return res.status(503).json({ error: 'Gemini service not available' });
-		}
-
-		console.log('🧪 Testing MCP integration with prompt:', prompt);
-
-		const response = await geminiBalancer.generate({
-			model: 'gemini-2.5-pro',
-			contents: [{ role: 'user', parts: [{ text: prompt }] }],
-			systemInstruction: {
-				parts: [{ text: 'You are a helpful assistant with access to document manipulation tools. Use the available tools when needed to help users.' }]
-			},
-			generationConfig: {
-				temperature: 0.7,
-				maxOutputTokens: 1024,
-			},
-			useMcpTools: true,
-		});
-
-		console.log('✅ MCP test response:', {
-			text: response.text?.substring(0, 200),
-			hasRaw: !!response.raw,
-			keyId: response.keyIdShort
-		});
-
-		res.json({
-			success: true,
-			response: response.text,
-			usage: response.usage,
-			keyId: response.keyIdShort,
-		});
-	} catch (error) {
-		console.error('❌ MCP test error:', error);
-		res.status(500).json({
-			error: 'MCP test failed',
-			details: error.message,
-			stack: error.stack
-		});
-	}
-});
-
-// ========================================
-// TOOL USAGE TRACKING ENDPOINTS
-// ========================================
-
-// Import tool service functions
-import { getToolUsageLog, clearToolUsageLog, setCurrentDocument } from './server/services/toolService.js';
-
-// Get tool usage log
-app.get('/api/tool-usage', async (req, res) => {
-	try {
-		const log = getToolUsageLog();
-		res.json({
-			success: true,
-			log,
-			count: log.length
-		});
-	} catch (error) {
-		console.error('❌ Error fetching tool usage:', error);
-		res.status(500).json({
-			success: false,
-			error: 'Failed to fetch tool usage',
-			details: error.message
-		});
-	}
-});
-
-// Clear tool usage log
-app.post('/api/tool-usage/clear', async (req, res) => {
-	try {
-		clearToolUsageLog();
-		res.json({
-			success: true,
-			message: 'Tool usage log cleared'
-		});
-	} catch (error) {
-		console.error('❌ Error clearing tool usage:', error);
-		res.status(500).json({
-			success: false,
-			error: 'Failed to clear tool usage',
-			details: error.message
-		});
-	}
-});
-
-// Set current document for MCP tools
-app.post('/api/document-agent/set-document', async (req, res) => {
-	try {
-		const { documentId } = req.body;
-
-		if (!documentId) {
-			return res.status(400).json({
-				success: false,
-				error: 'documentId is required'
-			});
-		}
-
-		const result = await setCurrentDocument(documentId);
-
-		res.json({
-			success: true,
-			...result
-		});
-	} catch (error) {
-		console.error('❌ Error setting current document:', error);
-		res.status(500).json({
-			success: false,
-			error: 'Failed to set current document',
-			details: error.message
-		});
-	}
-});
 
 /* ------------------ WebSocket ------------------ */
 const wss = new WebSocketServer({ noServer: true });

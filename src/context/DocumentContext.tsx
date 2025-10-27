@@ -19,8 +19,8 @@ interface DocumentContextType {
     setProjectId: (id: string) => void;
     repositoryInfo?: { owner: string; repo: string };
     setRepositoryInfo: (info: { owner: string; repo: string } | undefined) => void;
-    onOpenChat?: (message?: string) => void;
-    setOnOpenChat: (fn: (message?: string) => void) => void;
+    onOpenChat?: (message?: string, isReply?: boolean) => void;
+    setOnOpenChat: (fn: (message?: string, isReply?: boolean) => void) => void;
     showAIActions?: (content: string, beforeContent: string) => void;
     setShowAIActions: (fn: (content: string, beforeContent: string) => void) => void;
     chatSidebarOpen: boolean;
@@ -46,7 +46,7 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
     const [documentId, setDocumentId] = useState<string>('');
     const [projectId, setProjectId] = useState<string>('');
     const [repositoryInfo, setRepositoryInfo] = useState<{ owner: string; repo: string } | undefined>(undefined);
-    const [onOpenChat, setOnOpenChat] = useState<((message?: string) => void) | undefined>(undefined);
+    const [onOpenChat, setOnOpenChat] = useState<((message?: string, isReply?: boolean) => void) | undefined>(undefined);
     const [showAIActions, setShowAIActions] = useState<((content: string, beforeContent: string) => void) | undefined>(undefined);
     const [chatSidebarOpen, setChatSidebarOpen] = useState<boolean>(false);
     const [showToolbar, setShowToolbar] = useState<boolean>(true);

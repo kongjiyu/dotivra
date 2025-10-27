@@ -133,7 +133,7 @@ export const createGeminiWithMcp = (
 
       // Generate with tools
       const result = await balancer.generate({
-        model: 'gemini-2.0-flash-exp',
+        model: 'gemini-2.5-pro',
         contents: convertToContents(currentPrompt, conversationHistory),
         systemInstruction,
         generationConfig,
@@ -256,7 +256,7 @@ export const createGeminiWithMcp = (
 
       // For streaming, we'll use regular generate and manually send chunks
       const result = await balancer.generate({
-        model: 'gemini-2.0-flash-exp',
+        model: 'gemini-2.5-pro',
         contents: convertToContents(currentPrompt, conversationHistory),
         systemInstruction,
         generationConfig,

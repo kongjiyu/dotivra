@@ -1,6 +1,6 @@
 ﻿// server/gemini/balancer.js - ESM compatible runtime balancer with Firebase support
 import crypto from 'crypto';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenAI, FunctionCallingConfigMode } from '@google/genai';
 
 const DEFAULT_LIMITS = {
 	RPM: Number(process.env.GEMINI_LIMIT_RPM || 15),
@@ -333,14 +333,19 @@ export class GeminiBalancer {
 				}
 
 				// Use the official Google GenAI SDK format with config parameter
-				const resp = await client.models.generateContent({
+				const resp = await client.models.generateContentStream({
 					model,
 					contents,
 					systemInstruction,
 					config: {
 						...generationConfig,
 						tools,
-						toolConfig,
+						toolConfig: tools && tools.length > 0 ? {
+							functionCallingConfig: {
+								mode: FunctionCallingConfigMode.ANY,
+								allowedFunctionNames: tools[0]?.functionDeclarations?.map((fd) => fd.name) || [],
+							}
+						} : undefined,
 						safetySettings
 					}
 				});
@@ -383,6 +388,145 @@ export class GeminiBalancer {
 				continue;
 			}
 		}
+		const err = new Error(lastError?.message || 'Gemini request failed for all keys');
+		err.status = lastError?.status || 500;
+		throw err;
+	}
+
+	async generateStream({ model, contents, tools, systemInstruction, generationConfig, safetySettings, toolConfig, dryRun, onStream }) {
+		await this._loadPromise;
+
+		const estimatedTokens = estimateTokensFromContents(contents);
+		const maxAttempts = this.state.keys.length;
+		let lastError;
+
+		for (let attempt = 0; attempt < maxAttempts; attempt++) {
+			const picked = this._pickKey(estimatedTokens);
+			if (!picked) {
+				const err = new Error('All API keys are rate-limited or exhausted.');
+				err.status = 429;
+				throw err;
+			}
+
+			const { key: keyState } = picked;
+
+			try {
+				// Dry-run support
+				if (dryRun) {
+					this._markUsage(keyState, estimatedTokens);
+					return {
+						text: null,
+						raw: { dryRun: true },
+						usage: {
+							promptTokens: null,
+							candidatesTokens: null,
+							totalTokens: null,
+							estimatedTokens,
+						},
+						keyId: keyState.id,
+						keyIdShort: keyState.id.slice(0, 12),
+					};
+				}
+
+				const client = new GoogleGenAI({ apiKey: keyState.key });
+
+				// Log tools and config for debugging
+				if (tools) {
+					console.log(`🔧 Tools passed to Gemini:`,
+						tools?.[0]?.functionDeclarations?.length || 0,
+						'function declarations');
+					if (toolConfig) console.log(`🔧 Tool config:`, JSON.stringify(toolConfig, null, 2));
+				}
+
+				// --- Core streaming logic ---
+				const stream = await client.models.generateContentStream({
+					model,
+					contents,
+					systemInstruction,
+					config: {
+						...generationConfig,
+						tools,
+						toolConfig: !toolConfig ? {
+							functionCallingConfig: {
+								mode: FunctionCallingConfigMode.ANY,
+								allowedFunctionNames: tools[0]?.functionDeclarations?.map((fd) => fd.name) || [],
+							}
+						} : toolConfig
+						,
+						safetySettings,
+					},
+				});
+
+				// Prepare accumulators
+				let finalText = '';
+				let allChunks = [];
+				let usageMeta = {};
+				let functionCalls = [];
+
+				// Stream iteration
+				console.log('🚀 Starting to receive stream from Gemini...');
+				for await (const chunk of stream) {
+					const delta = chunk?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+					console.log('🧩 Received chunk:', JSON.stringify(chunk));
+					if (delta) {
+						finalText += delta;
+						allChunks.push(delta);
+
+						// Call the onStream callback if provided
+						if (onStream && typeof onStream === 'function') {
+							onStream(delta);
+						}
+					}
+
+					// Collect function calls if emitted
+					const fnCalls = chunk?.candidates?.[0]?.functionCalls;
+					if (fnCalls?.length) functionCalls.push(...fnCalls);
+
+					// Keep last metadata
+					if (chunk?.usageMetadata) usageMeta = chunk.usageMetadata;
+				}
+
+				const finalResponse = await stream.response;
+				const metadata = finalResponse?.usageMetadata || usageMeta || {};
+
+				// --- Token tracking ---
+				const usedTokens = Number(metadata.totalTokenCount || metadata.candidatesTokenCount || 0)
+					+ Number(metadata.promptTokenCount || 0);
+				const effectiveTokens = usedTokens > 0 ? usedTokens : estimatedTokens;
+				this._markUsage(keyState, effectiveTokens);
+
+				// --- Return final structure ---
+				return {
+					text: finalText.trim(),
+					functionCalls,
+					raw: finalResponse,
+					usage: {
+						promptTokens: metadata.promptTokenCount ?? null,
+						candidatesTokens: metadata.candidatesTokenCount ?? null,
+						totalTokens: usedTokens || null,
+						estimatedTokens,
+					},
+					keyId: keyState.id,
+					keyIdShort: keyState.id.slice(0, 12),
+				};
+			} catch (e) {
+				lastError = e;
+				const msg = (e && (e.message || String(e))) || '';
+				const isRateLimit = e?.status === 429 || e?.status === 403 || /rate/i.test(msg);
+
+				if (isRateLimit) {
+					const now = this._now();
+					const minuteEnd = Math.floor(now / 60000) * 60000 + 60000;
+					keyState.cooldownUntil = minuteEnd;
+					this._debouncedSave();
+				}
+
+				console.error(`❌ Gemini attempt ${attempt + 1} failed with key ${keyState.id}:`, msg);
+				await sleep(100);
+				continue;
+			}
+		}
+
 		const err = new Error(lastError?.message || 'Gemini request failed for all keys');
 		err.status = lastError?.status || 500;
 		throw err;

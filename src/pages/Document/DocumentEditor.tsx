@@ -592,7 +592,6 @@ export default function DocumentEditor() {
                     initialContent={effectiveContent}
                     onUpdate={handleDocumentUpdateOptimized}
                     onEditorReady={handleEditorReady}
-                    onOpenChat={onOpenChat}
                     showToolbar={showToolbar}
                     className=""
                 />

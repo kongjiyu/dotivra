@@ -1,4 +1,4 @@
-import { useState, type ReactNode, useEffect } from "react";
+import { useState, type ReactNode, useEffect, createContext } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -44,7 +44,6 @@ export default function DocumentLayout({
         repositoryInfo,
         documentId,
         projectId,
-        showToolbar,
         setShowToolbar,
         showNavigationPane,
         setShowNavigationPane,
@@ -111,7 +110,11 @@ export default function DocumentLayout({
     // Remove the local chatOpen state and use context instead
 
     useEffect(() => {
-        const chatFunction = (message?: string) => {
+        const chatFunction = (message?: string, isReply: boolean = false) => {
+            if (isReply) {
+                // If it's a reply, open chat sidebar and append the content at the reply container
+                return;
+            }
 
             if (message && message.trim()) {
                 setInitialChatMessage(message);
@@ -233,7 +236,7 @@ export default function DocumentLayout({
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="m-h-screen bg-gray-50">
             {/* Header (fixed) */}
             <div className="fixed top-0 left-0 right-0 z-40 h-20 bg-white border-b border-gray-200 px-6 flex items-center">
                 <div className="flex items-center w-full">
@@ -342,7 +345,7 @@ export default function DocumentLayout({
             </div>
 
             {/* Main content under fixed header */}
-            <div className="pt-20">
+            <div className=" pt-20">
                 {/* Document Menu (fixed under header) */}
                 {showDocumentMenu && (
                     <div className="fixed top-20 left-0 right-0 z-30 bg-white border-b border-gray-200">
@@ -368,6 +371,8 @@ export default function DocumentLayout({
                             }}
                             onToolbarToggle={setShowToolbar}
                             onNavigationPaneToggle={setShowNavigationPane}
+                            isSummaryPage={isTabActive('summary')}
+                            documentId={documentId}
                         />
                     </div>
                 )}

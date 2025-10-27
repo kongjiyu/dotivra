@@ -1,6 +1,63 @@
 import type { Editor } from "@tiptap/react";
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { TextSelection } from 'prosemirror-state';
+
+/**
+ * Safely insert a horizontal rule right after a heading (H1 or H2)
+ * without causing ProseMirror "mismatched transaction" errors.
+ *
+ * Key differences from older versions:
+ * - Uses the latest EditorState and View directly (no async timing)
+ * - Executes all mutations in a single valid transaction
+ * - Prevents duplicate <hr> insertions
+ * - Works with autosave / collaborative setups
+ */
+/**
+ * Safe version: applies heading and inserts horizontal rule in ONE transaction.
+ * Eliminates all "Applying a mismatched transaction" errors.
+ */
+export const insertHorizontalLineAfterHeading = (editor: Editor, level: 1 | 2) => {
+    if (!editor || editor.isDestroyed) return;
+    const { state, view } = editor;
+    const { schema } = state;
+    const { horizontalRule, heading } = schema.nodes;
+
+    try {
+        const { tr } = state;
+
+        // 1️⃣ Replace current block with heading
+        const { from, to } = state.selection;
+        const attrs = { level };
+        tr.setBlockType(from, to, heading, attrs);
+
+        // 2️⃣ Compute after-heading position from that transaction’s mapping
+        const mappedAfter = tr.mapping.map(to + 1);
+
+        // 3️⃣ Prevent duplicate HR (check on tr.doc, not editor.state.doc)
+        const nextNode = tr.doc.nodeAt(mappedAfter);
+        if (nextNode?.type.name === 'horizontalRule') {
+            // move cursor after existing HR
+            const movePos = mappedAfter + nextNode.nodeSize;
+            tr.setSelection(TextSelection.near(tr.doc.resolve(movePos)));
+            view.dispatch(tr);
+            return;
+        }
+
+        // 4️⃣ Insert <hr> and move cursor after it
+        const hrNode = horizontalRule.create();
+        tr.insert(mappedAfter, hrNode);
+        const posAfterHR = mappedAfter + hrNode.nodeSize;
+        tr.setSelection(TextSelection.near(tr.doc.resolve(posAfterHR)));
+
+        // 5️⃣ Dispatch the single unified transaction
+        view.dispatch(tr);
+
+    } catch (err) {
+        console.error('[insertHorizontalLineAfterHeading] failed:', err);
+    }
+};
+
 import { Button } from "@/components/ui/button";
 import {
     Select,
@@ -47,6 +104,7 @@ import {
     Link,
     Minus,
     ImageIcon,
+    Sparkles,
 } from "lucide-react";
 import { TableGridSelector } from "./TableGridSelector";
 import { useDocument } from "@/context/DocumentContext";
@@ -59,7 +117,17 @@ const FONT_FAMILIES = [
 
 
 
-const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly?: boolean }) => {
+const ToolBar = ({
+    editor,
+    readOnly = false,
+    onOpenChat,
+    selectedText
+}: {
+    editor: Editor | null;
+    readOnly?: boolean;
+    onOpenChat?: (selectedText?: string, isReply?: boolean) => void;
+    selectedText?: string;
+}) => {
 
     const [showMoreOptions, setShowMoreOptions] = useState(false);
     const [currentFontSize, setCurrentFontSize] = useState<string>('16px');
@@ -67,7 +135,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     const [currentTextColor, setCurrentTextColor] = useState<string>('#000000');
     const [currentBackgroundColor, setCurrentBackgroundColor] = useState<string>('');
     const [tablePopoverOpen, setTablePopoverOpen] = useState(false);
-    const tablePopoverTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     const [isInPreviewMode, setIsInPreviewMode] = useState(false);
     const [maxIndentLevel, setMaxIndentLevel] = useState<number>(14);
@@ -91,53 +158,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     useEffect(() => {
         if (!editor) return;
 
-        console.log('[ToolBar] isEditingDisabled:', isEditingDisabled, 'readOnly:', readOnly, 'isInPreviewMode:', isInPreviewMode);
         const updateToolbarState = () => {
-            // SELECTION DEBUG: detect cross-block selection and populate debug state
-            try {
-                const { state } = editor;
-                const { from, to, empty } = state.selection;
-                if (!empty && from !== to) {
-                    const resolvedFrom = state.doc.resolve(from);
-                    const resolvedTo = state.doc.resolve(to);
-                    const startNode = resolvedFrom.parent;
-                    const endNode = resolvedTo.parent;
-
-                    if (startNode && endNode && startNode.type && endNode.type && (startNode.type !== endNode.type || resolvedFrom.depth !== resolvedTo.depth)) {
-                        // Cross-block selection detected - log detailed info
-                        const selectedText = state.doc.textBetween(from, to, ' ', ' ');
-                        const selectionType = state.selection.constructor.name;
-
-                        // Build parent chain for start node
-                        const parentChain: string[] = [];
-                        for (let d = resolvedFrom.depth; d >= 0; d--) {
-                            const ancestor = resolvedFrom.node(d);
-                            if (ancestor) parentChain.push(ancestor.type.name);
-                        }
-
-                        console.group('🔍 Cross-Block Selection Detected');
-                        console.log('Selection Type:', selectionType);
-                        console.log('Range:', `${from} -> ${to} (${to - from} chars)`);
-                        console.log('Start Block:', {
-                            type: startNode.type.name,
-                            depth: resolvedFrom.depth,
-                            attrs: startNode.attrs
-                        });
-                        console.log('End Block:', {
-                            type: endNode.type.name,
-                            depth: resolvedTo.depth,
-                            attrs: endNode.attrs
-                        });
-                        console.log('Parent Chain:', parentChain.join(' ->'));
-                        console.log('Selected Text:', selectedText);
-                        console.groupEnd();
-                    }
-                }
-            } catch (err) {
-                // ignore debug errors
-                console.error('[ToolBar] selection debug error', err);
-            }
-
             // Check if we're in a code block first
             let inMermaidPreview = false;
             const inCodeBlock = editor.isActive('codeBlock');
@@ -149,14 +170,14 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                 const nodeEl = domAtPos?.node
 
                 // Find the nearest block container (the <pre> or wrapping div)
-                const codeBlockEl = (nodeEl as HTMLElement)?.closest('pre, [data-node-type="codeBlock"], .tiptap-code-block')
+                const block = (nodeEl instanceof HTMLElement) ? nodeEl.closest('.ProseMirror') : null;
 
-                if (codeBlockEl) {
+                if (block) {
                     // Now limit queries to the current code block only
-                    const mermaidPreviews = codeBlockEl.querySelectorAll(
+                    const mermaidPreviews = block.querySelectorAll(
                         '[data-mermaid-preview="true"], .mermaid-preview, .mermaid-container'
                     )
-                    const mermaidErrors = codeBlockEl.querySelectorAll(
+                    const mermaidErrors = block.querySelectorAll(
                         '[data-mermaid-error="true"], .mermaid-error, .syntax-error, .mermaid-parse-error'
                     )
 
@@ -164,7 +185,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                 }
             }
             // Only disable editing when Mermaid is in preview mode or showing errors
-            console.log('[ToolBar] Mermaid preview mode:', inMermaidPreview, 'Code block:', inCodeBlock, 'Previews found:');
             setIsInPreviewMode(inMermaidPreview);
 
             // Get text style attributes (font size and family)
@@ -385,14 +405,10 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
             const newThreshold = thresholds.find(t => newWidth >= t) || 0;
 
             if (oldThreshold === newThreshold && Math.abs(newWidth - windowWidth) < 50) return;
-            console.log('========== WIDTH-BASED TOOLBAR DEBUG ==========');
-            console.log('Available width changed:', windowWidth, '->', newWidth);
-            console.log('Navigation pane:', showNavigationPane, 'Chat sidebar:', chatSidebarOpen);
 
             // Update maxIndentLevel based on new width
             const newMaxIndentLevel = calculateMaxIndentLevel(newWidth);
             setMaxIndentLevel(newMaxIndentLevel);
-            console.log('Max indent level updated:', maxIndentLevel, '->', newMaxIndentLevel);
 
             // Calculated width breakpoints based on actual toolbar section sizes
             // Core sections (always visible): Bold, Italic, Underline, Font Size, Font Color, Background Color ~400px
@@ -411,9 +427,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                 newWidth < breakpoints.clearFormatting ||
                 newWidth < breakpoints.indent ||
                 newWidth < breakpoints.lists;
-
-            console.log('  - More Options needed:', hasHiddenSections ? 'SHOW' : 'HIDE');
-            console.log('==========================================');
 
             setWindowWidth(newWidth);
         };
@@ -484,20 +497,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
     const shouldShowMoreOptions = useMemo(() => {
         const showMore = !shouldShowInsertOptions || !shouldShowTextAlign || !shouldShowClearFormatting ||
             !shouldShowIndent || !shouldShowLists || !shouldShowFontControls || !shouldShowHeadingSelector;
-
-        // Debug logging
-        console.log('[ToolBar] Visibility Check:', {
-            toolbarMaxWidth,
-            availableWidth,
-            shouldShowInsertOptions,
-            shouldShowIndent,
-            shouldShowClearFormatting,
-            shouldShowLists,
-            shouldShowTextAlign,
-            shouldShowFontControls,
-            shouldShowHeadingSelector,
-            shouldShowMoreOptions: showMore
-        });
 
         return showMore;
     }, [toolbarMaxWidth, availableWidth, shouldShowInsertOptions, shouldShowTextAlign, shouldShowClearFormatting, shouldShowIndent,
@@ -747,6 +746,23 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                         <Code className="w-3.5 h-3.5" />
                     </Button>
 
+                    {/* Ask AI button - opens chat with selected text */}
+                    {onOpenChat && selectedText && (
+                        <>
+                            <div className={'w-px h-6 bg-gray-300 mx-0.5'}></div>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => onOpenChat(selectedText)}
+                                className="h-7 px-2 bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100 border-purple-200 hover:border-purple-300"
+                                title="Ask AI about selected text"
+                            >
+                                <Sparkles className="w-3.5 h-3.5 mr-1 text-purple-600" />
+                                <span className="text-xs font-medium text-purple-700">Ask AI</span>
+                            </Button>
+                        </>
+                    )}
+
                     {shouldShowHeadingSelector && <div className={'w-px h-6 bg-gray-300 mx-0.5'}></div>}
 
                     {/* Headings & Blocks Dropdown */}
@@ -793,10 +809,10 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                                 c.setCodeBlock();
                                                 break;
                                             case 'h1':
-                                                c.setHeading({ level: 1 });
+                                                insertHorizontalLineAfterHeading(editor, 1);
                                                 break;
                                             case 'h2':
-                                                c.setHeading({ level: 2 });
+                                                insertHorizontalLineAfterHeading(editor, 2);
                                                 break;
                                             case 'h3':
                                                 c.setHeading({ level: 3 });
@@ -825,9 +841,41 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                             case 'codeBlock':
                                                 chain.setCodeBlock();
                                                 break;
+                                            case 'h1':
+                                            case 'h2':
+                                                // For H1/H2, set heading and then add HR
+                                                const headingLevel = parseInt(target.charAt(1)) as 1 | 2;
+                                                chain.setHeading({ level: headingLevel });
+                                                chain.run();
+
+                                                // Insert HR after the heading
+                                                requestAnimationFrame(() => {
+                                                    try {
+                                                        const { state } = editor;
+                                                        const { $from } = state.selection;
+
+                                                        // Get position after the heading
+                                                        const afterHeadingPos = $from.after();
+
+                                                        if (afterHeadingPos < state.doc.content.size) {
+                                                            const $after = state.doc.resolve(afterHeadingPos);
+                                                            const nextNode = $after.nodeAfter;
+
+                                                            if (!nextNode || nextNode.type.name !== 'horizontalRule') {
+                                                                editor.chain()
+                                                                    .setTextSelection(afterHeadingPos)
+                                                                    .insertContent({ type: 'horizontalRule' })
+                                                                    .run();
+                                                            }
+                                                        }
+                                                    } catch (error) {
+                                                        console.error('Error inserting horizontal rule:', error);
+                                                    }
+                                                });
+                                                break;
                                             default:
-                                                // For headings, extract the level
-                                                const level = parseInt(target.charAt(1)) as 1 | 2 | 3 | 4 | 5;
+                                                // For other headings (H3-H5), no HR
+                                                const level = parseInt(target.charAt(1)) as 3 | 4 | 5;
                                                 chain.setHeading({ level });
                                                 break;
                                         }
@@ -1080,7 +1128,6 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
 
                                                                 // Update state immediately
                                                                 setCurrentTextColor(color);
-                                                                console.log('Set text color to', color);
 
                                                                 // Verify the actual state after operation completes
                                                                 setTimeout(() => {
@@ -1428,17 +1475,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                     <Button variant="outline" size="sm"
                                         className="flex items-center gap-1.5 px-2 py-1 h-7 rounded-md hover:bg-gray-100 transition-colors text-sm"
                                         title="Insert Table"
-                                        onMouseEnter={() => {
-                                            if (tablePopoverTimerRef.current) {
-                                                clearTimeout(tablePopoverTimerRef.current);
-                                            }
-                                            setTablePopoverOpen(true);
-                                        }}
-                                        onMouseLeave={() => {
-                                            tablePopoverTimerRef.current = setTimeout(() => {
-                                                setTablePopoverOpen(false);
-                                            }, 300);
-                                        }}
+                                        onClick={() => setTablePopoverOpen(!tablePopoverOpen)}
                                     >
                                         <Table className="w-3.5 h-3.5" />
                                         <span className="hidden lg:inline">Table</span>
@@ -1448,17 +1485,7 @@ const ToolBar = ({ editor, readOnly = false }: { editor: Editor | null; readOnly
                                     className="w-64 p-4"
                                     side="bottom"
                                     align="start"
-                                    onMouseEnter={() => {
-                                        if (tablePopoverTimerRef.current) {
-                                            clearTimeout(tablePopoverTimerRef.current);
-                                        }
-                                        setTablePopoverOpen(true);
-                                    }}
-                                    onMouseLeave={() => {
-                                        tablePopoverTimerRef.current = setTimeout(() => {
-                                            setTablePopoverOpen(false);
-                                        }, 300);
-                                    }}
+                                    onInteractOutside={() => setTablePopoverOpen(false)}
                                 >
                                     <div className="space-y-3">
                                         <h4 className="text-sm font-medium text-gray-700">Insert Table</h4>
@@ -1600,7 +1627,7 @@ D --> E`;
                             <DropdownMenuContent
                                 side={dropdownAlignment.side}
                                 align={dropdownAlignment.align}
-                                className="w-50"
+                                className="w-50 custom-scrollbar max-h-100 overflow-y-auto"
                             >
                                 {/* Categorized sections - only show categories when sections are hidden */}
 
@@ -1614,11 +1641,11 @@ D --> E`;
                                             <span className="text-sm font-normal mr-2">P</span>
                                             <span>Paragraph</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().setHeading({ level: 1 }).run()}>
+                                        <DropdownMenuItem onClick={() => insertHorizontalLineAfterHeading(editor, 1)}>
                                             <span className="text-lg font-bold mr-2">H1</span>
                                             <span>Heading 1</span>
                                         </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().setHeading({ level: 2 }).run()}>
+                                        <DropdownMenuItem onClick={() => insertHorizontalLineAfterHeading(editor, 2)}>
                                             <span className="text-base font-bold mr-2">H2</span>
                                             <span>Heading 2</span>
                                         </DropdownMenuItem>
@@ -1686,50 +1713,146 @@ D --> E`;
                                     </>
                                 )}
 
+
+
+                                {/* ALIGNMENT CATEGORY */}
+                                {!shouldShowTextAlign && (
+                                    <>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                            Alignment
+                                        </div>
+                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('left').run()}>
+                                            <AlignLeft className="w-3.5 h-3.5 mr-2" />
+                                            <span>Left</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('center').run()}>
+                                            <AlignCenter className="w-3.5 h-3.5 mr-2" />
+                                            <span>Center</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('right').run()}>
+                                            <AlignRight className="w-3.5 h-3.5 mr-2" />
+                                            <span>Right</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('justify').run()}>
+                                            <AlignJustify className="w-3.5 h-3.5 mr-2" />
+                                            <span>Justify</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
+
+                                {/* CLEAR FORMATTING CATEGORY */}
+                                {!shouldShowClearFormatting && (
+                                    <>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                            More
+                                        </div>
+                                        <DropdownMenuItem onClick={() => {
+                                            if (!isEditingDisabled) {
+                                                editor.chain().focus().clearNodes().unsetAllMarks().run();
+                                            }
+                                        }}>
+                                            <Eraser className="w-3.5 h-3.5 mr-2" />
+                                            <span>Clear Formatting</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
+
+
+
+                                {/* INDENTATION CATEGORY */}
+                                {!shouldShowIndent && (
+                                    <>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                            Indentation
+                                        </div>
+                                        <DropdownMenuItem onClick={() => {
+                                            if (!isEditingDisabled && editor) {
+                                                let currentLevel = 0;
+                                                if (editor.isActive('paragraph')) {
+                                                    const attrs = editor.getAttributes('paragraph');
+                                                    currentLevel = attrs.indent || 0;
+                                                } else if (editor.isActive('heading')) {
+                                                    const attrs = editor.getAttributes('heading');
+                                                    currentLevel = attrs.indent || 0;
+                                                }
+
+                                                // Only indent if below maximum level
+                                                if (currentLevel < maxIndentLevel) {
+                                                    if (editor.isActive('paragraph')) {
+                                                        editor.chain().focus().indentParagraph().run();
+                                                    } else if (editor.isActive('heading')) {
+                                                        editor.chain().focus().indentHeading().run();
+                                                    }
+                                                }
+                                            }
+                                        }}>
+                                            <IndentIncrease className="w-3.5 h-3.5 mr-2" />
+                                            <span>Indent</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => {
+                                            if (!isEditingDisabled && editor) {
+                                                if (editor.isActive('paragraph')) {
+                                                    editor.chain().focus().outdentParagraph().run();
+                                                } else if (editor.isActive('heading')) {
+                                                    editor.chain().focus().outdentHeading().run();
+                                                }
+                                            }
+                                        }}>
+                                            <IndentDecrease className="w-3.5 h-3.5 mr-2" />
+                                            <span>Outdent</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                    </>
+                                )}
+
+                                {/* LISTS CATEGORY */}
+                                {!shouldShowLists && (
+                                    <>
+                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
+                                            List
+                                        </div>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
+                                            <CheckSquare className="w-3.5 h-3.5 mr-2" />
+                                            <span>Task List</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleBulletList().run()}>
+                                            <List className="w-3.5 h-3.5 mr-2" />
+                                            <span>Bullet List</span>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleOrderedList().run()}>
+                                            <ListOrdered className="w-3.5 h-3.5 mr-2" />
+                                            <span>Ordered List</span>
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
+
+
+
                                 {/* INSERT CATEGORY */}
                                 {!shouldShowInsertOptions && (
                                     <>
                                         <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
                                             Insert
                                         </div>
-                                        <DropdownMenuItem>
+                                        <DropdownMenuItem asChild>
                                             {/* Table Grid Selector */}
                                             <Popover open={tablePopoverOpen} onOpenChange={setTablePopoverOpen}>
                                                 <PopoverTrigger asChild>
-                                                    <div data-variant="default" className="
-                                                           focus:bg-accent focus:text-accent-foreground data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 dark:data-[variant=destructive]:focus:bg-destructive/20 data-[variant=destructive]:focus:text-destructive data-[variant=destructive]:*:[svg]:!text-destructive [&_svg:not([class*='text-'])]:text-muted-foreground relative flex cursor-default items-center gap-4 rounded-sm px-0 py-0 text-sm outline-hidden [&_svg:not([class*='size-'])]:size-4
-                                                        "
-                                                        onMouseEnter={() => {
-                                                            if (tablePopoverTimerRef.current) {
-                                                                clearTimeout(tablePopoverTimerRef.current);
-                                                            }
-                                                            setTablePopoverOpen(true);
-                                                        }}
-                                                        onMouseLeave={() => {
-                                                            tablePopoverTimerRef.current = setTimeout(() => {
-                                                                setTablePopoverOpen(false);
-                                                            }, 300);
-                                                        }}
+                                                    <div
+                                                        className="flex items-center gap-4 cursor-pointer px-2 py-1.5 hover:bg-gray-100 rounded text-sm"
+                                                        onMouseEnter={() => setTablePopoverOpen(true)}
                                                     >
-                                                        <Table className="w-3.5 h-3.5" />
-                                                        <span className="hidden lg:inline">Table</span>
+                                                        <Table className="w-3.5 h-3.5 text-gray-500" />
+                                                        <span>Table</span>
                                                     </div>
                                                 </PopoverTrigger>
                                                 <PopoverContent
                                                     className="w-64 p-4"
                                                     side="left"
                                                     align="start"
-                                                    onMouseEnter={() => {
-                                                        if (tablePopoverTimerRef.current) {
-                                                            clearTimeout(tablePopoverTimerRef.current);
-                                                        }
-                                                        setTablePopoverOpen(true);
-                                                    }}
-                                                    onMouseLeave={() => {
-                                                        tablePopoverTimerRef.current = setTimeout(() => {
-                                                            setTablePopoverOpen(false);
-                                                        }, 300);
-                                                    }}
+                                                    onInteractOutside={() => setTablePopoverOpen(false)}
                                                 >
                                                     <div className="space-y-3">
                                                         <h4 className="text-sm font-medium text-gray-700">Insert Table</h4>
@@ -1742,7 +1865,6 @@ D --> E`;
                                                     </div>
                                                 </PopoverContent>
                                             </Popover>
-
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => {
                                             const defaultChart = `graph TD
@@ -1824,119 +1946,6 @@ D --> E`;
                                         }}>
                                             <Minus className="w-3.5 h-3.5 mr-2" />
                                             <span>Divider</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                    </>
-                                )}
-
-                                {/* ALIGNMENT CATEGORY */}
-                                {!shouldShowTextAlign && (
-                                    <>
-                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
-                                            Alignment
-                                        </div>
-                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('left').run()}>
-                                            <AlignLeft className="w-3.5 h-3.5 mr-2" />
-                                            <span>Left</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('center').run()}>
-                                            <AlignCenter className="w-3.5 h-3.5 mr-2" />
-                                            <span>Center</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('right').run()}>
-                                            <AlignRight className="w-3.5 h-3.5 mr-2" />
-                                            <span>Right</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor?.chain().focus().setTextAlign('justify').run()}>
-                                            <AlignJustify className="w-3.5 h-3.5 mr-2" />
-                                            <span>Justify</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                    </>
-                                )}
-
-
-
-                                {/* INDENTATION CATEGORY */}
-                                {!shouldShowIndent && (
-                                    <>
-                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
-                                            Indentation
-                                        </div>
-                                        <DropdownMenuItem onClick={() => {
-                                            if (!isEditingDisabled && editor) {
-                                                let currentLevel = 0;
-                                                if (editor.isActive('paragraph')) {
-                                                    const attrs = editor.getAttributes('paragraph');
-                                                    currentLevel = attrs.indent || 0;
-                                                } else if (editor.isActive('heading')) {
-                                                    const attrs = editor.getAttributes('heading');
-                                                    currentLevel = attrs.indent || 0;
-                                                }
-
-                                                // Only indent if below maximum level
-                                                if (currentLevel < maxIndentLevel) {
-                                                    if (editor.isActive('paragraph')) {
-                                                        editor.chain().focus().indentParagraph().run();
-                                                    } else if (editor.isActive('heading')) {
-                                                        editor.chain().focus().indentHeading().run();
-                                                    }
-                                                }
-                                            }
-                                        }}>
-                                            <IndentIncrease className="w-3.5 h-3.5 mr-2" />
-                                            <span>Indent</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => {
-                                            if (!isEditingDisabled && editor) {
-                                                if (editor.isActive('paragraph')) {
-                                                    editor.chain().focus().outdentParagraph().run();
-                                                } else if (editor.isActive('heading')) {
-                                                    editor.chain().focus().outdentHeading().run();
-                                                }
-                                            }
-                                        }}>
-                                            <IndentDecrease className="w-3.5 h-3.5 mr-2" />
-                                            <span>Outdent</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                    </>
-                                )}
-
-                                {/* LISTS CATEGORY */}
-                                {!shouldShowLists && (
-                                    <>
-                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
-                                            List
-                                        </div>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
-                                            <CheckSquare className="w-3.5 h-3.5 mr-2" />
-                                            <span>Task List</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleBulletList().run()}>
-                                            <List className="w-3.5 h-3.5 mr-2" />
-                                            <span>Bullet List</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleOrderedList().run()}>
-                                            <ListOrdered className="w-3.5 h-3.5 mr-2" />
-                                            <span>Ordered List</span>
-                                        </DropdownMenuItem>
-                                    </>
-                                )}
-
-                                {/* CLEAR FORMATTING CATEGORY */}
-                                {!shouldShowClearFormatting && (
-                                    <>
-                                        <div className="px-2 py-1.5 text-xs font-semibold text-gray-500 uppercase tracking-wide bg-gray-50">
-                                            More
-                                        </div>
-                                        <DropdownMenuItem onClick={() => {
-                                            if (!isEditingDisabled) {
-                                                editor.chain().focus().clearNodes().unsetAllMarks().run();
-                                            }
-                                        }}>
-                                            <Eraser className="w-3.5 h-3.5 mr-2" />
-                                            <span>Clear Formatting</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuSeparator />
                                     </>

@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import html2pdf from '@digivorefr/html2pdf.js';
 import { marked } from 'marked';
 import mammoth from 'mammoth';
+import mermaid from 'mermaid';
 import { Input } from "@/components/ui/input";
 import {
 	Popover,
@@ -20,8 +22,6 @@ import {
 	Download,
 	BookTemplate,
 	Copy,
-	ChevronUp,
-	ChevronDown,
 	Wrench,
 	HelpCircle,
 	Menu,
@@ -29,6 +29,7 @@ import {
 	Keyboard,
 	BookOpen,
 	Settings,
+	Sparkles,
 } from "lucide-react";
 
 // Import new components
@@ -47,6 +48,11 @@ import {
 
 // Import document context
 import { useDocument } from "@/context/DocumentContext";
+import { useAuth } from "@/context/AuthContext";
+import { aiService } from "@/services/aiService";
+import { fetchDocument } from "@/services/apiService";
+import { showNotification } from "@/services/documentService";
+import { FirestoreService } from "@/../firestoreService";
 
 // NEW: ProseMirror bits for decorations
 import { Plugin, PluginKey, TextSelection } from "prosemirror-state";
@@ -64,6 +70,8 @@ interface DocumentMenuProps {
 	currentDocument?: any; // Current document data for template/copy operations
 	onToolbarToggle?: (show: boolean) => void; // Callback when toolbar visibility changes
 	onNavigationPaneToggle?: (show: boolean) => void; // Callback when navigation pane visibility changes
+	isSummaryPage?: boolean; // Whether we're on the summary page
+	documentId?: string; // Document ID for summary generation
 }
 
 export default function DocumentMenu({
@@ -77,7 +85,10 @@ export default function DocumentMenu({
 	currentDocument,
 	onToolbarToggle,
 	onNavigationPaneToggle,
+	isSummaryPage = false,
+	documentId,
 }: DocumentMenuProps) {
+    const navigate = useNavigate();
 	// Get context state for navigation pane
 	const { showNavigationPane, setShowNavigationPane: setContextNavigationPane } = useDocument();
 
@@ -103,6 +114,11 @@ export default function DocumentMenu({
 	// Import confirmation modal state
 	const [showImportConfirm, setShowImportConfirm] = useState(false);
 	const [pendingImport, setPendingImport] = useState<{ content: string; fileName: string } | null>(null);
+
+	// Summary generation state
+	const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+	const { user } = useAuth();
+	const { setSummaryContent } = useDocument();
 
 	// Save preferences when they change
 	useEffect(() => {
@@ -228,6 +244,47 @@ export default function DocumentMenu({
 	const handleRedo = () => {
 		if (editor) {
 			editor.chain().focus().redo().run();
+		}
+	};
+
+	const handleGenerateSummary = async () => {
+		if (!documentId || !user?.uid) {
+			showNotification("Document ID or user not found", "error");
+			return;
+		}
+
+		setIsGeneratingSummary(true);
+
+		try {
+			// Fetch the full document content
+			const docData = await fetchDocument(documentId);
+			if (!docData || !docData.Content) {
+				throw new Error('Document content not found');
+			}
+
+			// Generate summary using AI
+			const summary = await aiService.summarizeContent(docData.Content);
+
+			if (!summary) {
+				throw new Error('Failed to generate summary');
+			}
+
+			// Update summary in Firebase
+			await FirestoreService.updateDocument(documentId, { Summary: summary });
+
+			// Update local state
+			setSummaryContent(summary);
+
+			showNotification("Document summary generated successfully", "success");
+
+		} catch (error) {
+			console.error('Error generating summary:', error);
+			showNotification(
+				error instanceof Error ? error.message : 'Failed to generate summary',
+				"error"
+			);
+		} finally {
+			setIsGeneratingSummary(false);
 		}
 	};
 
@@ -453,7 +510,60 @@ export default function DocumentMenu({
 			const parser = new DOMParser();
 			const doc = parser.parseFromString(contentToExport, "text/html");
 
-			// 3️⃣ Process code-blocks
+			// 3️⃣ Process Mermaid diagrams
+			const mermaidBlocks = doc.querySelectorAll("pre[class*='language-mermaid']");
+			console.log("[PDF Export] Found Mermaid diagrams:", mermaidBlocks.length);
+
+			for (const pre of Array.from(mermaidBlocks)) {
+				const code = pre.textContent || '';
+				const container = doc.createElement("div");
+				container.className = "mermaid-diagram-container";
+
+				try {
+					// Try to render Mermaid diagram
+					const { svg } = await mermaid.render(`mermaid-pdf-${Date.now()}-${Math.random()}`, code);
+					container.innerHTML = svg;
+					container.style.cssText = `
+						margin: 16px 0;
+						padding: 16px;
+						background-color: #f8f9fa;
+						border-radius: 6px;
+						display: flex;
+						justify-content: center;
+						align-items: center;
+					`;
+					pre.parentNode?.replaceChild(container, pre);
+					console.log("[PDF Export] Successfully rendered Mermaid diagram");
+				} catch (error) {
+					// If render fails, show the code block instead
+					console.warn("[PDF Export] Mermaid render failed, showing code:", error);
+					const codeWrapper = doc.createElement("div");
+					codeWrapper.className = "code-block-wrapper";
+
+					const header = doc.createElement("div");
+					header.className = "code-block-header";
+					header.textContent = "mermaid (error)";
+
+					const codeBlock = doc.createElement("pre");
+					codeBlock.textContent = code;
+					codeBlock.style.cssText = `
+						background-color: #000;
+						color: #d4d4d4;
+						padding: 16px;
+						border-radius: 0 0 6px 6px;
+						font-family: 'Consolas','Monaco','Courier New', monospace;
+						font-size: 13px;
+						line-height: 1.6;
+						overflow-x: auto;
+					`;
+
+					codeWrapper.appendChild(header);
+					codeWrapper.appendChild(codeBlock);
+					pre.parentNode?.replaceChild(codeWrapper, pre);
+				}
+			}
+
+			// 4️⃣ Process code-blocks
 			doc.querySelectorAll(".code-block-wrapper, pre[class*='language-']").forEach((wrapper) => {
 				const pre = wrapper.tagName === "PRE" ? wrapper : wrapper.querySelector("pre");
 				if (!pre) return;
@@ -478,7 +588,7 @@ export default function DocumentMenu({
 				container.insertBefore(header, pre);
 			});
 
-			// 4️⃣ Insert page-break divs before each <h1>, skipping the first one
+			// 5️⃣ Insert page-break divs before each <h1>, skipping the first one
 			const h1Headings = doc.querySelectorAll("h1");
 			console.log("[PDF Export] Found H1:", h1Headings.length);
 			h1Headings.forEach((heading, index) => {
@@ -490,7 +600,7 @@ export default function DocumentMenu({
 				heading.parentNode?.insertBefore(pageBreak, heading);
 			});
 
-			// 5️⃣ Create wrapper for padding
+			// 6️⃣ Create wrapper for padding
 			const wrapper = document.createElement("div");
 			wrapper.className = "pdf-wrapper";
 			wrapper.style.cssText = `
@@ -505,7 +615,7 @@ export default function DocumentMenu({
 			element.innerHTML = doc.body.innerHTML;
 			wrapper.appendChild(element);
 
-			// 6️⃣ Inject styles
+			// 7️⃣ Inject styles
 			const style = document.createElement("style");
 			style.textContent = `
       * { box-sizing: border-box; }
@@ -630,6 +740,16 @@ export default function DocumentMenu({
         text-decoration: underline;
       }
 
+      /* Mermaid diagram styling */
+      .mermaid-diagram-container {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+      }
+      .mermaid-diagram-container svg {
+        max-width: 100%;
+        height: auto;
+      }
+
       @page {
         size: A4;
         margin: 0; /* We'll handle padding ourselves */
@@ -637,7 +757,7 @@ export default function DocumentMenu({
     `;
 			wrapper.prepend(style);
 
-			// 7️⃣ Setup html2pdf options with spacing after page break (based on SO suggestion)
+			// 8️⃣ Setup html2pdf options with spacing after page break (based on SO suggestion)
 			// Create filename from document title, sanitizing for file system
 			const sanitizedTitle = documentTitle
 				.replace(/[^a-z0-9\s-]/gi, '') // Remove special characters
@@ -1141,9 +1261,10 @@ export default function DocumentMenu({
 
 
 
+
 						<div className="w-px h-4 bg-gray-300 mx-1"></div>
 
-						{/* File Menu - Combined Import, Export, Save as Template, Make a Copy */}
+						{/* File Menu - Combined Import (Markdown only), Export, Make a Copy */}
 						<Popover open={showImportOptions} onOpenChange={setShowImportOptions}>
 							<PopoverTrigger asChild>
 								<Button
@@ -1204,19 +1325,7 @@ export default function DocumentMenu({
 
 									<div className="border-t border-gray-200 my-1"></div>
 
-									{/* Document Actions */}
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => {
-											handleSaveAsTemplate();
-											setShowImportOptions(false);
-										}}
-										className="w-full justify-start h-8 px-2 text-gray-700"
-									>
-										<BookTemplate className="w-4 h-4 mr-2" />
-										<span className="text-sm">Save as Template</span>
-									</Button>
+									{/* Document Actions - Removed Save as Template */}
 									<Button
 										variant="ghost"
 										size="sm"
@@ -1231,9 +1340,7 @@ export default function DocumentMenu({
 									</Button>
 								</div>
 							</PopoverContent>
-						</Popover>
-
-						{/* Tools Menu */}
+						</Popover>						{/* Tools Menu */}
 						<Popover open={showToolsMenu} onOpenChange={setShowToolsMenu}>
 							<PopoverTrigger asChild>
 								<Button
@@ -1295,6 +1402,21 @@ export default function DocumentMenu({
 											<span className="ml-auto text-blue-600">✓</span>
 										)}
 									</Button>
+
+									<div className="border-t border-gray-200 my-1" />
+
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => {
+											setShowToolsMenu(false);
+											navigate('/tools/playground');
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
+									>
+										<Wrench className="w-4 h-4 mr-2" />
+										<span className="text-sm">Tools Playground</span>
+									</Button>
 								</div>
 							</PopoverContent>
 						</Popover>
@@ -1341,6 +1463,26 @@ export default function DocumentMenu({
 								</div>
 							</PopoverContent>
 						</Popover>
+
+						{/* Generate Summary Button - Only on Summary Page */}
+						{isSummaryPage && (
+							<>
+								<div className="w-px h-4 bg-gray-300 mx-1"></div>
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={handleGenerateSummary}
+									disabled={isGeneratingSummary}
+									className="h-7 px-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50"
+									title="Generate AI Summary"
+								>
+									<Sparkles className={`w-4 h-4 mr-1 ${isGeneratingSummary ? 'animate-pulse' : ''}`} />
+									<span className="text-xs">
+										{isGeneratingSummary ? 'Generating...' : 'Generate Summary'}
+									</span>
+								</Button>
+							</>
+						)}
 					</div>
 				</div>
 			</div>
@@ -1434,35 +1576,11 @@ export default function DocumentMenu({
 							</Button>
 						</div>
 
-						{/* Match count and navigation */}
+						{/* Match count */}
 						{searchMatches > 0 && (
-							<div className="flex items-center space-x-2">
-								<span className="text-xs text-gray-600 min-w-fit">
-									{currentMatch} of {searchMatches}
-								</span>
-								<div className="flex items-center space-x-1">
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => navigateMatch('prev')}
-										disabled={searchMatches === 0}
-										className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
-										title="Previous match"
-									>
-										<ChevronUp className="w-3 h-3" />
-									</Button>
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => navigateMatch('next')}
-										disabled={searchMatches === 0}
-										className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
-										title="Next match"
-									>
-										<ChevronDown className="w-3 h-3" />
-									</Button>
-								</div>
-							</div>
+							<span className="text-xs text-gray-600 min-w-fit">
+								{currentMatch} of {searchMatches}
+							</span>
 						)}
 
 						<Button

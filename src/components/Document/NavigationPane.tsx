@@ -199,10 +199,10 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
             </div>
 
             {/* Headings List with ScrollArea */}
-            <ScrollArea className="flex-1 px-3 py-3 bg-gray-50/50">
+            <ScrollArea className="flex-1 px-1 py-3 bg-gray-50/50 overflow-y-auto">
                 {renderHeadingTree()}
             </ScrollArea>
 
-        </div>
+            </div>
     );
 }

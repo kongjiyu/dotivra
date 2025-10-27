@@ -157,9 +157,13 @@ export const ResizableImage = Image.extend<ResizableImageOptions>({
                                 // Check if mouse is near the bottom edge (within 10px)
                                 const nearBottomEdge = mouseY > imageRect.bottom - 10
 
-                                // Show resize cursor when hovering near edges
-                                if (nearRightEdge || nearBottomEdge) {
-                                    target.style.cursor = 'ew-resize'
+                                // Show appropriate resize cursor
+                                if (nearRightEdge && nearBottomEdge) {
+                                    target.style.cursor = 'nwse-resize' // Diagonal resize (both directions)
+                                } else if (nearRightEdge) {
+                                    target.style.cursor = 'ew-resize' // Horizontal resize
+                                } else if (nearBottomEdge) {
+                                    target.style.cursor = 'ns-resize' // Vertical resize
                                 } else {
                                     target.style.cursor = 'default'
                                 }
@@ -198,13 +202,54 @@ export const ResizableImage = Image.extend<ResizableImageOptions>({
                                         event.preventDefault()
 
                                         const startX = event.clientX
+                                        const startY = event.clientY
                                         const startWidth = imageRect.width
+                                        const startHeight = imageRect.height
+                                        
+                                        // Calculate aspect ratio from the actual image
+                                        const aspectRatio = startWidth / startHeight
+                                        
+                                        // Set maximum dimensions (prevent images from becoming too large)
+                                        const MAX_WIDTH = 1000
+                                        const MAX_HEIGHT = 1000
+                                        const MIN_WIDTH = 100
+                                        const MIN_HEIGHT = 100
+
+                                        console.log(`🖼️ Start resize - Width: ${startWidth}px, Height: ${startHeight}px, Aspect ratio: ${aspectRatio.toFixed(2)}`);
 
                                         const handleMouseMove = (e: MouseEvent) => {
                                             const deltaX = e.clientX - startX
-                                            const newWidth = Math.max(100, Math.min(800, startWidth + deltaX))
+                                            const deltaY = e.clientY - startY
+                                            
+                                            // Use the larger delta to determine resize amount (prioritize horizontal drag)
+                                            const delta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY
+                                            
+                                            // Calculate new width maintaining aspect ratio
+                                            let newWidth = startWidth + delta
+
+                                            // Apply minimum constraint (100px minimum)
+                                            newWidth = Math.max(MIN_WIDTH, newWidth)
+                                            
+                                            // Apply maximum constraint
+                                            newWidth = Math.min(MAX_WIDTH, newWidth)
+
+                                            
+                                            
+                                            // Calculate corresponding height maintaining aspect ratio
+                                            let newHeight = newWidth / aspectRatio
+                                            
+                                            // Check if height exceeds maximum, if so recalculate from height
+                                            if (newHeight > MAX_HEIGHT) {
+                                                newHeight = MAX_HEIGHT
+                                                newWidth = newHeight * aspectRatio
+                                            }
+                                            if (newHeight < MIN_HEIGHT) {
+                                                newHeight = MIN_HEIGHT
+                                                newWidth = newHeight * aspectRatio
+                                            }
 
                                             // Update the image width in real-time
+                                            // Height is automatically calculated by browser with aspect ratio
                                             view.dispatch(
                                                 view.state.tr.setNodeMarkup(pos, undefined, {
                                                     ...node.attrs,
@@ -216,6 +261,11 @@ export const ResizableImage = Image.extend<ResizableImageOptions>({
                                         const handleMouseUp = () => {
                                             document.removeEventListener('mousemove', handleMouseMove)
                                             document.removeEventListener('mouseup', handleMouseUp)
+                                            
+                                            const finalNode = view.state.doc.nodeAt(pos)
+                                            if (finalNode) {
+                                                console.log(`✅ Resize complete - Final width: ${finalNode.attrs.width}px`)
+                                            }
                                         }
 
                                         document.addEventListener('mousemove', handleMouseMove)

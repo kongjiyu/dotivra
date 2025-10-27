@@ -2,6 +2,7 @@ import type { Editor } from "@tiptap/react";
 import { EditorContent } from "@tiptap/react";
 import { memo, useState, useEffect, useRef } from "react";
 import ContextMenu from "../Document/ContextMenu";
+import { useDocument } from "@/context/DocumentContext";
 
 interface DocumentContextProps {
     editor: Editor | null;
@@ -9,6 +10,7 @@ interface DocumentContextProps {
 }
 
 const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
+    const { onOpenChat } = useDocument(); // Get onOpenChat from context
     const [contextMenu, setContextMenu] = useState({
         isVisible: false,
         position: { x: 0, y: 0 },
@@ -193,6 +195,7 @@ const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
                 position={contextMenu.position}
                 onClose={closeContextMenu}
                 isTableContext={contextMenu.isTableContext}
+                onOpenChat={onOpenChat} // Pass onOpenChat to ContextMenu
             />
         </div>
     );

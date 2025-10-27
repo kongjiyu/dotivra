@@ -25,9 +25,9 @@ import {
     Link,
     Minus,
     Strikethrough,
+    Sparkles,
 } from 'lucide-react'
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover'
-import { TableGridSelector } from "./TableGridSelector";
+import { aiService } from '@/services/aiService'
 
 interface ContextMenuProps {
     editor: Editor | null
@@ -35,6 +35,7 @@ interface ContextMenuProps {
     position: { x: number; y: number }
     onClose: () => void
     isTableContext?: boolean
+    onOpenChat?: (selectedText: string, isReply?: boolean) => void
 }
 
 export const ContextMenu: React.FC<ContextMenuProps> = ({
@@ -43,13 +44,12 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     position,
     onClose,
     isTableContext = false,
+    onOpenChat,
 }) => {
     const menuRef = useRef<HTMLDivElement>(null)
 
     // Always declare hooks at the top level
     const [menuHeight, setMenuHeight] = React.useState(500)
-    const [tablePopoverOpen, setTablePopoverOpen] = React.useState(false)
-    const tablePopoverTimerRef = React.useRef<NodeJS.Timeout | null>(null)
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -531,7 +531,6 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                         </Button>
 
                         <div className="border-t border-gray-100 my-1"></div>
-
                         <Button
                             variant="ghost"
                             size="sm"
@@ -541,6 +540,27 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                             <Eraser className="w-4 h-4 mr-2" />
                             Clear Formatting
                         </Button>
+
+                        {/* Ask AI Button */}
+                        {onOpenChat && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="w-full justify-start px-3 py-2 text-sm bg-gradient-to-r from-purple-50 to-blue-50 hover:from-purple-100 hover:to-blue-100"
+                                onClick={() => {
+                                    const { from, to } = editor.state.selection;
+                                    const selectedText = editor.state.doc.textBetween(from, to, ' ');
+                                    if (selectedText) {
+                                        onOpenChat(selectedText, true);
+                                        onClose();
+                                    }
+                                }}
+                            >
+                                <Sparkles className="w-4 h-4 mr-2 text-purple-600" />
+                                <span className="text-purple-700">Ask AI</span>
+                            </Button>
+                        )}
+
                     </>
                 ) : (
                     // Default mode (no selection) - show insert (link, divider, table, image, diagram) and more (clear formatting button)
@@ -549,56 +569,19 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                             Insert
                         </div>
 
-                        {/* Table Grid Selector */}
-                        <Popover open={tablePopoverOpen} onOpenChange={setTablePopoverOpen}>
-                            <PopoverTrigger asChild>
-                                <div
-                                    className="
-                                    inline-flex items-center whitespace-nowrap font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50 h-8 rounded-md gap-3 has-[>svg]:px-2.5 w-full justify-start px-3 py-2 text-sm 
-                                "
-                                    onMouseEnter={() => {
-                                        if (tablePopoverTimerRef.current) {
-                                            clearTimeout(tablePopoverTimerRef.current);
-                                        }
-                                        setTablePopoverOpen(true);
-                                    }}
-                                    onMouseLeave={() => {
-                                        tablePopoverTimerRef.current = setTimeout(() => {
-                                            setTablePopoverOpen(false);
-                                        }, 300);
-                                    }}
-                                >
-                                    <Table className="w-3.5 h-3.5" />
-                                    <span className="hidden lg:inline">Table</span>
-                                </div>
-                            </PopoverTrigger>
-                            <PopoverContent
-                                className="w-64 p-4 z-99991"
-                                side="left"
-                                align="start"
-                                onMouseEnter={() => {
-                                    if (tablePopoverTimerRef.current) {
-                                        clearTimeout(tablePopoverTimerRef.current);
-                                    }
-                                    setTablePopoverOpen(true);
-                                }}
-                                onMouseLeave={() => {
-                                    tablePopoverTimerRef.current = setTimeout(() => {
-                                        setTablePopoverOpen(false);
-                                    }, 300);
-                                }}
-                            >
-                                <div className="space-y-3">
-                                    <h4 className="text-sm font-medium text-gray-700">Insert Table</h4>
-                                    <TableGridSelector
-                                        onSelect={(rows, cols) => {
-                                            editor.chain().focus().insertTable({ rows, cols, withHeaderRow: true }).run();
-                                            setTablePopoverOpen(false);
-                                        }}
-                                    />
-                                </div>
-                            </PopoverContent>
-                        </Popover>
+                        {/* Simple 3x3 Table Button */}
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start px-3 py-2 text-sm"
+                            onClick={() => {
+                                editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+                                onClose();
+                            }}
+                        >
+                            <Table className="w-3.5 h-3.5 mr-2" />
+                            <span>Table</span>
+                        </Button>
                         <Button variant="ghost"
                             size="sm"
                             className="w-full justify-start px-3 py-2 text-sm" onClick={() => {
@@ -609,6 +592,7 @@ B -->|No| D[Do something else]
 C --> E[End]
 D --> E`;
                                 editor?.chain().focus().toggleCodeBlock({ language: 'mermaid' }).insertContent(defaultChart).run();
+                                onClose();
                             }}>
                             <Network className="w-3.5 h-3.5 mr-2" />
                             <span>Diagram</span>
@@ -626,6 +610,7 @@ D --> E`;
                                         reader.onload = () => {
                                             const result = reader.result as string;
                                             editor?.chain().focus().setImage({ src: result }).run();
+                                            onClose();
                                         };
                                         reader.readAsDataURL(file);
                                     }
@@ -673,9 +658,11 @@ D --> E`;
                                                 // Insert link with URL as text
                                                 editor.chain().focus().insertContent(`<a href="${url.trim()}">${url.trim()}</a>`).run();
                                             }
+                                            onClose();
                                         }
                                     }
                                 }
+                                onClose();
                             }}>
                             <Link className="w-3.5 h-3.5 mr-2" />
                             <span>Link</span>
@@ -684,11 +671,21 @@ D --> E`;
                             size="sm"
                             className="w-full justify-start px-3 py-2 text-sm" onClick={() => {
                                 editor?.chain().focus().setHorizontalRule().run();
+                                onClose();
                             }}>
                             <Minus className="w-3.5 h-3.5 mr-2" />
                             <span>Divider</span>
                         </Button>
                         <div className="border-t border-gray-100 my-1"></div>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-full justify-start px-3 py-2 text-sm"
+                            onClick={() => executeCommand(() => editor.chain().focus().unsetAllMarks().run())}
+                        >
+                            <Eraser className="w-4 h-4 mr-2" />
+                            Clear Formatting
+                        </Button>
                     </>
                 )}
             </ScrollArea>
