@@ -29,14 +29,14 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
         const file = event.target.files?.[0];
         if (!file) return;
 
-        // Accept Markdown and Mermaid files
-        const allowedExtensions = ['.md', '.mmd', '.mermaid'];
+        // Accept only Markdown files - removed Mermaid support
+        const allowedExtensions = ['.md'];
         const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
 
         if (!allowedExtensions.includes(fileExtension)) {
             showError(
                 'Invalid File Type',
-                'Please select a Markdown (.md) or Mermaid diagram (.mmd, .mermaid) file'
+                'Please select a Markdown (.md) file. Note: You can import from Google Docs or Microsoft Word by saving as Markdown first.'
             );
             return;
         }
@@ -46,7 +46,7 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
         // Auto-suggest title from filename
         if (!documentTitle) {
             const suggestedTitle = file.name
-                .replace(/\.(md|mmd|mermaid)$/i, '')
+                .replace(/\.md$/i, '')
                 .replace(/[-_]/g, ' ');
             setDocumentTitle(suggestedTitle);
         }
@@ -70,10 +70,39 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
 
                     if (fileExtension === '.md') {
                         // Convert Markdown to HTML using marked
-                        htmlContent = await marked(fileContent);
-                    } else if (fileExtension === '.mmd' || fileExtension === '.mermaid') {
-                        // Create HTML with Mermaid diagram
-                        htmlContent = `<div data-type="mermaid" data-chart="${fileContent.trim()}" data-theme="default"></div>`;
+                        let markdownContent = fileContent;
+
+                        // Add horizontal line before H1 and H2 headings (except the first one)
+                        // This regex matches H1 (#) and H2 (##) at the start of lines
+                        const lines = markdownContent.split('\n');
+                        const processedLines: string[] = [];
+                        let isFirstHeading = true;
+
+                        for (let i = 0; i < lines.length; i++) {
+                            const line = lines[i].trim();
+
+                            // Check if line is H1 or H2
+                            const isH1 = /^#\s+/.test(line);
+                            const isH2 = /^##\s+/.test(line);
+
+                            if ((isH1 || isH2) && !isFirstHeading) {
+                                // Add horizontal line before heading (but not if previous line already has one)
+                                const prevLine = processedLines[processedLines.length - 1];
+                                if (prevLine && prevLine.trim() !== '---') {
+                                    processedLines.push('---');
+                                    processedLines.push('');
+                                }
+                            }
+
+                            if (isH1 || isH2) {
+                                isFirstHeading = false;
+                            }
+
+                            processedLines.push(lines[i]); // Keep original line with formatting
+                        }
+
+                        markdownContent = processedLines.join('\n');
+                        htmlContent = await marked(markdownContent);
                     }
 
                     if (htmlContent) {
@@ -120,9 +149,9 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px]" onPointerDownOutside={handleClose}>
                 <DialogHeader>
-                    <DialogTitle>Import Document</DialogTitle>
+                    <DialogTitle>Import as Markdown</DialogTitle>
                     <DialogDescription>
-                        Import a Markdown file (.md) or Mermaid diagram file (.mmd, .mermaid) to your project. Enter a title for the document and select a file.
+                        Import a Markdown file (.md) to your project. You can export from Google Docs or Microsoft Word as Markdown. Enter a title for the document and select a file. Horizontal lines will be automatically added before H1 and H2 headings.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -144,13 +173,13 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
                     {/* File Upload */}
                     <div className="grid gap-2">
                         <label htmlFor="file" className="text-sm font-medium">
-                            Markdown or Mermaid File
+                            Markdown File (.md)
                         </label>
                         <div className="relative">
                             <Input
                                 id="file"
                                 type="file"
-                                accept=".md,.mmd,.mermaid"
+                                accept=".md"
                                 onChange={handleFileSelect}
                                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-not-allowed"
                                 disabled={isImporting}
@@ -169,8 +198,8 @@ export default function ImportModal({ onImport, trigger }: ImportModalProps) {
                                     ) : (
                                         <div className="flex flex-col items-center">
                                             <FolderOpen className="w-5 h-5 text-gray-400 mb-1" />
-                                            <span className="text-sm text-gray-600">Click to select file</span>
-                                            <span className="text-xs text-gray-500">.md, .mmd, .mermaid files</span>
+                                            <span className="text-sm text-gray-600">Click to select Markdown file</span>
+                                            <span className="text-xs text-gray-500">.md files only</span>
                                         </div>
                                     )}
                                 </div>

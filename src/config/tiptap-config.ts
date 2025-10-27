@@ -18,6 +18,7 @@ import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
 import CharacterCount from "@tiptap/extension-character-count";
 import FontFamily from "@tiptap/extension-font-family";
+import ResizableImage from "@/lib/extensions/ResizableImage";
 import FontSize from "@/types/fontSize";
 import { cn } from "@/lib/utils";
 import Paragraph from "@/lib/extensions/Paragraph";
@@ -86,6 +87,14 @@ export const getTipTapExtensions = () => [
     }),
     // Markdown link paste extension - converts [text](url) to HTML links
     MarkdownLinkPaste,
+    // Resizable Image extension with drag-to-resize and border toggle
+    ResizableImage.configure({
+        inline: false,
+        allowBase64: true,
+        HTMLAttributes: {
+            class: 'tiptap-image',
+        },
+    }),
     // Horizontal rule (divider)
     HorizontalRule.configure({
         HTMLAttributes: {

@@ -3,7 +3,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { FileText, Plus, Download, ExternalLink, Clock, User, FolderOpen, Copy } from "lucide-react";
 import { useDocument } from "@/context/DocumentContext";
-import SimpleShare from "@/components/Document/SimpleShare";
 import ImportModal from "@/components/Document/ImportModal";
 import { useParams, useNavigate } from "react-router-dom";
 import { useState, useEffect, useCallback } from "react";
@@ -297,7 +296,6 @@ export default function DocumentProject() {
                                     >
                                         <Download className="w-4 h-4" />
                                     </Button>
-                                    <SimpleShare documentTitle={currentDocument.DocumentName} documentId={currentDocument.id!} />
                                 </div>
                             </div>
                         </div>
@@ -352,7 +350,6 @@ export default function DocumentProject() {
                                         >
                                             <Download className="w-4 h-4" />
                                         </Button>
-                                        <SimpleShare documentTitle={doc.DocumentName} documentId={doc.id!} />
                                     </div>
                                 </div>
                             </div>

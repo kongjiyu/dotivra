@@ -123,63 +123,6 @@ export function createApp(options = {}) {
     }
   });
 
-  // Generate via Gemini API (using balancer)
-  app.post('/api/gemini/generate', async (req, res) => {
-    try {
-      logger.log('🔵 Gemini API Request received');
-      
-      if (!geminiBalancer) {
-        logger.error('❌ Balancer not configured!');
-        return res.status(503).json({ error: 'Balancer not configured' });
-      }
-      
-      const {
-        prompt,
-        contents,
-        model = 'gemini-2.5-pro',
-        tools,
-        systemInstruction,
-        generationConfig,
-        safetySettings,
-        toolConfig,
-      } = req.body || {};
-
-      let effectiveContents = contents;
-      if (!effectiveContents && typeof prompt === 'string') {
-        effectiveContents = [{ role: 'user', parts: [{ text: String(prompt) }] }];
-      }
-      if (!effectiveContents) {
-        return res.status(400).json({ error: 'Missing prompt or contents' });
-      }
-
-      const result = await geminiBalancer.generate({
-        model,
-        contents: effectiveContents,
-        tools,
-        systemInstruction,
-        generationConfig,
-        safetySettings,
-        toolConfig,
-      });
-
-      logger.log('✅ Gemini generation successful');
-      res.json({
-        ok: true,
-        text: result.text,
-        usage: result.usage,
-        key: { idShort: result.keyIdShort },
-        model,
-      });
-    } catch (error) {
-      logger.error('❌ Gemini generate error:', error);
-      const status = error?.status || 500;
-      res.status(status).json({ 
-        ok: false, 
-        error: error?.message || 'Failed to generate' 
-      });
-    }
-  });
-
   // Dashboard endpoint
   app.get('/api/gemini/dashboard', async (req, res) => {
     try {

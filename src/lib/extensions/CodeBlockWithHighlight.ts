@@ -97,6 +97,8 @@ export const CodeBlockWithHighlight = CodeBlockLowlight
   .extend({
     name: 'codeBlock',
     
+    draggable: false, // Disable drag for Safari compatibility
+    
     addAttributes() {
       return {
         language: {

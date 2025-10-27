@@ -1519,3 +1519,259 @@ kbd {
   -ms-user-select: text !important;
   cursor: text !important;
 }
+/* Image styling with resize support and border */
+.tiptap img.tiptap-image {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  cursor: pointer;
+  display: block;
+  margin: 1rem auto;
+  transition: all 0.2s ease;
+}
+
+.tiptap img.tiptap-image:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.tiptap img.tiptap-image.ProseMirror-selectednode {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+  outline: none;
+  position: relative;
+}
+
+/* Image resize handles */
+.tiptap img.tiptap-image.ProseMirror-selectednode::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  bottom: -4px;
+  width: 12px;
+  height: 12px;
+  background: #3b82f6;
+  border: 2px solid white;
+  border-radius: 50%;
+  cursor: nwse-resize;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Dark theme image styles */
+.theme-dark .tiptap img.tiptap-image {
+  border-color: #4b5563;
+}
+
+.theme-dark .tiptap img.tiptap-image:hover {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.15);
+}
+
+.theme-dark .tiptap img.tiptap-image.ProseMirror-selectednode {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.25);
+}
+
+/* ===========================
+   AI Chat Tool Execution Styles
+   =========================== */
+
+/* Stage block container */
+.stage-block {
+  margin: 0.75rem 0;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.stage-block:last-child {
+  border-bottom: none;
+}
+
+/* Stage content - the actual message */
+.stage-content {
+  margin-bottom: 0.5rem;
+  color: #374151;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+}
+
+/* Stage indicator at the END of content */
+.stage-indicator {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+}
+
+.stage-label {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  border-radius: 12px;
+  letter-spacing: 0.025em;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+}
+
+/* Tool execution block container */
+.tool-execution-block {
+  margin: 0.75rem 0;
+  padding: 0.875rem 1rem;
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.tool-execution-block:hover {
+  background-color: #f3f4f6;
+  border-color: #d1d5db;
+}
+
+/* Tool header - flex container with tool tag on left, status on right */
+.tool-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  gap: 0.75rem;
+}
+
+/* Tool tag - badge style */
+.tool-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #ffffff;
+  border-radius: 6px;
+  letter-spacing: 0.025em;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+  white-space: nowrap;
+}
+
+/* Tool status indicator - positioned on right side */
+.tool-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+/* Loading state */
+.tool-status.loading {
+  background-color: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fbbf24;
+}
+
+.tool-status.loading::before {
+  content: '⏳';
+  margin-right: 0.25rem;
+}
+
+/* Success state */
+.tool-status.success {
+  background-color: #d1fae5;
+  color: #065f46;
+  border: 1px solid #34d399;
+}
+
+.tool-status.success::before {
+  content: '✓';
+  margin-right: 0.25rem;
+  font-weight: 700;
+}
+
+/* Failed state */
+.tool-status.failed {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #f87171;
+}
+
+.tool-status.failed::before {
+  content: '✕';
+  margin-right: 0.25rem;
+  font-weight: 700;
+}
+
+/* Tool description */
+.tool-description {
+  color: #374151;
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  padding-left: 0.25rem;
+}
+
+/* Tool result container */
+.tool-result {
+  margin-top: 0.625rem;
+  padding: 0.75rem;
+  background-color: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: #1f2937;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+}
+
+/* Dark theme styles for tool execution */
+.theme-dark .stage-block {
+  border-bottom-color: #374151;
+}
+
+.theme-dark .tool-execution-block {
+  background-color: #1f2937;
+  border-color: #374151;
+}
+
+.theme-dark .tool-execution-block:hover {
+  background-color: #111827;
+  border-color: #4b5563;
+}
+
+.theme-dark .tool-status.loading {
+  background-color: #78350f;
+  color: #fbbf24;
+  border-color: #92400e;
+}
+
+.theme-dark .tool-status.success {
+  background-color: #064e3b;
+  color: #34d399;
+  border-color: #065f46;
+}
+
+.theme-dark .tool-status.failed {
+  background-color: #7f1d1d;
+  color: #f87171;
+  border-color: #991b1b;
+}
+
+.theme-dark .tool-description {
+  color: #d1d5db;
+}
+
+.theme-dark .tool-result {
+  background-color: #111827;
+  border-color: #374151;
+  color: #e5e7eb;
+}
+

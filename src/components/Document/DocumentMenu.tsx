@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { marked } from 'marked';
 import mammoth from 'mammoth';
+import mermaid from 'mermaid';
 import { Input } from "@/components/ui/input";
+import { addDividersAfterHeadings } from "@/utils/addDividersAfterHeadings";
 import {
 	Popover,
 	PopoverContent,
@@ -19,8 +22,6 @@ import {
 	Download,
 	BookTemplate,
 	Copy,
-	ChevronUp,
-	ChevronDown,
 	Wrench,
 	HelpCircle,
 	Menu,
@@ -28,6 +29,7 @@ import {
 	Keyboard,
 	BookOpen,
 	Settings,
+	Sparkles,
 } from "lucide-react";
 
 // Import new components
@@ -46,6 +48,11 @@ import {
 
 // Import document context
 import { useDocument } from "@/context/DocumentContext";
+import { useAuth } from "@/context/AuthContext";
+import { aiService } from "@/services/aiService";
+import { fetchDocument } from "@/services/apiService";
+import { showNotification } from "@/services/documentService";
+import { FirestoreService } from "@/../firestoreService";
 
 // Import Mermaid export utilities
 import { processMermaidForExport } from "@/utils/mermaidExportUtils";
@@ -66,6 +73,8 @@ interface DocumentMenuProps {
 	currentDocument?: any; // Current document data for template/copy operations
 	onToolbarToggle?: (show: boolean) => void; // Callback when toolbar visibility changes
 	onNavigationPaneToggle?: (show: boolean) => void; // Callback when navigation pane visibility changes
+	isSummaryPage?: boolean; // Whether we're on the summary page
+	documentId?: string; // Document ID for summary generation
 }
 
 export default function DocumentMenu({
@@ -79,7 +88,10 @@ export default function DocumentMenu({
 	currentDocument,
 	onToolbarToggle,
 	onNavigationPaneToggle,
+	isSummaryPage = false,
+	documentId,
 }: DocumentMenuProps) {
+    const navigate = useNavigate();
 	// Get context state for navigation pane
 	const { showNavigationPane, setShowNavigationPane: setContextNavigationPane } = useDocument();
 
@@ -105,6 +117,11 @@ export default function DocumentMenu({
 	// Import confirmation modal state
 	const [showImportConfirm, setShowImportConfirm] = useState(false);
 	const [pendingImport, setPendingImport] = useState<{ content: string; fileName: string } | null>(null);
+
+	// Summary generation state
+	const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
+	const { user } = useAuth();
+	const { setSummaryContent } = useDocument();
 
 	// Save preferences when they change
 	useEffect(() => {
@@ -726,6 +743,12 @@ export default function DocumentMenu({
 			// Replace all content
 			if (onUpdate) {
 				onUpdate(pendingImport.content);
+				// Add dividers after H1/H2 headings after a short delay to ensure content is loaded
+				setTimeout(() => {
+					if (editor) {
+						addDividersAfterHeadings(editor);
+					}
+				}, 100);
 			}
 		} else if (action === 'append') {
 			// Append to existing content
@@ -733,6 +756,12 @@ export default function DocumentMenu({
 				const currentContent = editor.getHTML();
 				const combinedContent = currentContent + '<p></p>' + pendingImport.content;
 				onUpdate(combinedContent);
+				// Add dividers after H1/H2 headings after a short delay
+				setTimeout(() => {
+					if (editor) {
+						addDividersAfterHeadings(editor);
+					}
+				}, 100);
 			}
 		}
 
@@ -931,9 +960,10 @@ export default function DocumentMenu({
 
 
 
+
 						<div className="w-px h-4 bg-gray-300 mx-1"></div>
 
-						{/* File Menu - Combined Import, Export, Save as Template, Make a Copy */}
+						{/* File Menu - Combined Import (Markdown only), Export, Make a Copy */}
 						<Popover open={showImportOptions} onOpenChange={setShowImportOptions}>
 							<PopoverTrigger asChild>
 								<Button
@@ -994,19 +1024,7 @@ export default function DocumentMenu({
 
 									<div className="border-t border-gray-200 my-1"></div>
 
-									{/* Document Actions */}
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => {
-											handleSaveAsTemplate();
-											setShowImportOptions(false);
-										}}
-										className="w-full justify-start h-8 px-2 text-gray-700"
-									>
-										<BookTemplate className="w-4 h-4 mr-2" />
-										<span className="text-sm">Save as Template</span>
-									</Button>
+									{/* Document Actions - Removed Save as Template */}
 									<Button
 										variant="ghost"
 										size="sm"
@@ -1021,9 +1039,7 @@ export default function DocumentMenu({
 									</Button>
 								</div>
 							</PopoverContent>
-						</Popover>
-
-						{/* Tools Menu */}
+						</Popover>						{/* Tools Menu */}
 						<Popover open={showToolsMenu} onOpenChange={setShowToolsMenu}>
 							<PopoverTrigger asChild>
 								<Button
@@ -1085,6 +1101,21 @@ export default function DocumentMenu({
 											<span className="ml-auto text-blue-600">✓</span>
 										)}
 									</Button>
+
+									<div className="border-t border-gray-200 my-1" />
+
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => {
+											setShowToolsMenu(false);
+											navigate('/tools/playground');
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
+									>
+										<Wrench className="w-4 h-4 mr-2" />
+										<span className="text-sm">Tools Playground</span>
+									</Button>
 								</div>
 							</PopoverContent>
 						</Popover>
@@ -1131,6 +1162,26 @@ export default function DocumentMenu({
 								</div>
 							</PopoverContent>
 						</Popover>
+
+						{/* Generate Summary Button - Only on Summary Page */}
+						{isSummaryPage && (
+							<>
+								<div className="w-px h-4 bg-gray-300 mx-1"></div>
+								<Button
+									variant="ghost"
+									size="sm"
+									onClick={handleGenerateSummary}
+									disabled={isGeneratingSummary}
+									className="h-7 px-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50"
+									title="Generate AI Summary"
+								>
+									<Sparkles className={`w-4 h-4 mr-1 ${isGeneratingSummary ? 'animate-pulse' : ''}`} />
+									<span className="text-xs">
+										{isGeneratingSummary ? 'Generating...' : 'Generate Summary'}
+									</span>
+								</Button>
+							</>
+						)}
 					</div>
 				</div>
 			</div>
@@ -1224,35 +1275,11 @@ export default function DocumentMenu({
 							</Button>
 						</div>
 
-						{/* Match count and navigation */}
+						{/* Match count */}
 						{searchMatches > 0 && (
-							<div className="flex items-center space-x-2">
-								<span className="text-xs text-gray-600 min-w-fit">
-									{currentMatch} of {searchMatches}
-								</span>
-								<div className="flex items-center space-x-1">
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => navigateMatch('prev')}
-										disabled={searchMatches === 0}
-										className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
-										title="Previous match"
-									>
-										<ChevronUp className="w-3 h-3" />
-									</Button>
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => navigateMatch('next')}
-										disabled={searchMatches === 0}
-										className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
-										title="Next match"
-									>
-										<ChevronDown className="w-3 h-3" />
-									</Button>
-								</div>
-							</div>
+							<span className="text-xs text-gray-600 min-w-fit">
+								{currentMatch} of {searchMatches}
+							</span>
 						)}
 
 						<Button

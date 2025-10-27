@@ -70,26 +70,30 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
     const handleNavigateToHeading = (position: number) => {
         if (!editor) return;
 
-        // Set selection to the heading position
+        // Focus the heading
         editor.commands.setTextSelection(position);
         editor.commands.focus();
 
-        // Scroll to the heading with more upward offset for better visibility
         const { view } = editor;
         const coords = view.coordsAtPos(position);
 
         if (coords) {
-            const editorElement = view.dom.parentElement;
-            if (editorElement) {
-                const offset = coords.top - editorElement.getBoundingClientRect().top;
-                // Increased offset from 100 to 200 for better visibility
-                editorElement.scrollTo({
-                    top: editorElement.scrollTop + offset - 200,
-                    behavior: "smooth",
-                });
-            }
+            // Calculate absolute Y coordinate relative to the whole document
+            const absoluteY = window.scrollY + coords.top;
+
+            // Optional: offset for fixed header or padding (e.g., 20px)
+            const offset = 20;
+
+            // Scroll window so heading top is at the very top of viewport
+            window.scrollTo({
+                top: absoluteY - offset,
+                behavior: "smooth",
+            });
+
         }
     };
+
+
 
     const toggleCollapse = (id: string) => {
         setCollapsedLevels((prev) => {
@@ -190,15 +194,15 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
             {/* Header with gradient background */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-indigo-50 to-blue-50 flex-shrink-0">
                 <h3 className="font-semibold text-gray-900 flex items-center gap-2 text-sm">
-                    Navigation
+                    Document Tabs
                 </h3>
             </div>
 
             {/* Headings List with ScrollArea */}
-            <ScrollArea className="flex-1 px-3 py-3 bg-gray-50/50">
+            <ScrollArea className="flex-1 px-1 py-3 bg-gray-50/50 overflow-y-auto">
                 {renderHeadingTree()}
             </ScrollArea>
 
-        </div>
+            </div>
     );
 }

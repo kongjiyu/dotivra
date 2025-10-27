@@ -1,9 +1,9 @@
 import DocumentLayout from "./DocumentLayout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, Plus, Copy, CheckCircle, Download } from "lucide-react";
+import { FileText, Plus, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 // Simplified mock document data
@@ -72,20 +72,6 @@ interface DocumentCardProps {
 }
 
 const DocumentCard = ({ document, onDocumentClick }: DocumentCardProps) => {
-    const [copySuccess, setCopySuccess] = useState(false);
-
-    const handleCopyUrl = useCallback(async (e: React.MouseEvent) => {
-        e.stopPropagation();
-        const url = `${window.location.origin}/document/${document.id}`;
-        try {
-            await navigator.clipboard.writeText(url);
-            setCopySuccess(true);
-            setTimeout(() => setCopySuccess(false), 2000);
-        } catch (err) {
-            console.error('Failed to copy URL:', err);
-        }
-    }, [document.id]);
-
     const handleExportMd = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
         try {
@@ -147,21 +133,6 @@ const DocumentCard = ({ document, onDocumentClick }: DocumentCardProps) => {
 
                     {/* Action Buttons */}
                     <div className="flex items-center gap-2">
-                        {/* Share Button - Icon Only */}
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleCopyUrl}
-                            title="Share document"
-                            className="h-8 w-8 p-0"
-                        >
-                            {copySuccess ? (
-                                <CheckCircle className="w-4 h-4 text-green-600" />
-                            ) : (
-                                <Copy className="w-4 h-4" />
-                            )}
-                        </Button>
-
                         {/* Export Dropdown */}
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>

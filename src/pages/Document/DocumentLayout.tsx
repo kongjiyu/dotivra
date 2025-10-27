@@ -16,7 +16,6 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import DocumentMenu from "@/components/Document/DocumentMenu";
 import NavigationPane from "@/components/Document/NavigationPane";
 import ChatSidebar from "@/components/Document/ChatSidebar";
-import SimpleShare from "@/components/Document/SimpleShare";
 import ProjectDocumentsDropdown from "@/components/Document/ProjectDocumentsDropdown";
 import { useDocument } from "@/context/DocumentContext";
 import { updateToolPreference } from "@/utils/documentToolsPreferences";
@@ -45,7 +44,6 @@ export default function DocumentLayout({
         repositoryInfo,
         documentId,
         projectId,
-        showToolbar,
         setShowToolbar,
         showNavigationPane,
         setShowNavigationPane,
@@ -53,6 +51,7 @@ export default function DocumentLayout({
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [isAIGenerating, setIsAIGenerating] = useState(false);
     const [initialChatMessage, setInitialChatMessage] = useState<string>('');
+    const [selectedTextForChat, setSelectedTextForChat] = useState<string>('');
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -112,10 +111,24 @@ export default function DocumentLayout({
     // Remove the local chatOpen state and use context instead
 
     useEffect(() => {
-        const chatFunction = (message?: string) => {
+        const chatFunction = (message?: string, isReply: boolean = false) => {
+            console.log('📝 Chat function called:', { message: message?.substring(0, 50), isReply });
+
+            if (isReply) {
+                // If it's a reply, store the selected text and open chat sidebar
+                if (message && message.trim()) {
+                    console.log('✅ Setting selected text for chat:', message.substring(0, 50));
+                    setSelectedTextForChat(message);
+                    setInitialChatMessage(''); // Don't set initial message for replies
+                }
+                setChatSidebarOpen(true);
+                return;
+            }
 
             if (message && message.trim()) {
+                console.log('✅ Setting initial message:', message.substring(0, 50));
                 setInitialChatMessage(message);
+                setSelectedTextForChat(''); // Clear selected text for regular messages
 
                 // Clear the initial message after a delay to prevent re-sending
                 setTimeout(() => {
@@ -234,7 +247,7 @@ export default function DocumentLayout({
     };
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="m-h-screen bg-gray-50">
             {/* Header (fixed) */}
             <div className="fixed top-0 left-0 right-0 z-40 h-20 bg-white border-b border-gray-200 px-6 flex items-center">
                 <div className="flex items-center w-full">
@@ -329,8 +342,6 @@ export default function DocumentLayout({
                             currentDocumentId={documentId}
                         />
 
-                        <div className="w-px h-5 bg-gray-300 mx-1 border-b"></div>
-
                         <Button
                             variant="outline"
                             size="sm"
@@ -340,16 +351,12 @@ export default function DocumentLayout({
                             <History className="w-4 h-4 mr-2" />
                             History
                         </Button>
-                        <SimpleShare
-                            documentTitle={documentTitle}
-                            documentId={documentId}
-                        />
                     </div>
                 </div>
             </div>
 
             {/* Main content under fixed header */}
-            <div className="pt-20">
+            <div className=" pt-20">
                 {/* Document Menu (fixed under header) */}
                 {showDocumentMenu && (
                     <div className="fixed top-20 left-0 right-0 z-30 bg-white border-b border-gray-200">
@@ -375,6 +382,8 @@ export default function DocumentLayout({
                             }}
                             onToolbarToggle={setShowToolbar}
                             onNavigationPaneToggle={setShowNavigationPane}
+                            isSummaryPage={isTabActive('summary')}
+                            documentId={documentId}
                         />
                     </div>
                 )}
@@ -455,10 +464,13 @@ export default function DocumentLayout({
                                     onClose={() => {
                                         setChatSidebarOpen(false);
                                         setInitialChatMessage('');
+                                        setSelectedTextForChat('');
                                     }}
                                     editor={currentEditor}
                                     initialMessage={initialChatMessage}
                                     repositoryInfo={repositoryInfo}
+                                    selectedText={selectedTextForChat}
+                                    onClearSelection={() => setSelectedTextForChat('')}
                                     suggestions={repositoryInfo ? [
                                         "Analyze repository structure",
                                         "Explain codebase patterns",

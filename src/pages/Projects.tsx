@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { getUserDisplayInfo } from '../utils/user';
 import { useFeedback } from '../components/AppLayout';
 import { showError } from '@/utils/sweetAlert';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 const Projects: React.FC = () => {
   const navigate = useNavigate();
@@ -130,95 +131,98 @@ const Projects: React.FC = () => {
   const { name: displayName, initials } = getUserDisplayInfo(userProfile, user);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <Header  userName={displayName} initials={initials} onFeedbackClick={openFeedbackModal} />
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <Header userName={displayName} initials={initials} onFeedbackClick={openFeedbackModal} />
 
-      <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="relative w-full md:w-96">
-            <Search className="h-4 w-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search projects..."
-              className="w-full pl-11 pr-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 bg-white shadow-sm"
-            />
-          </div>
-          <div className="flex justify-end">
-            <button
-              onClick={handleNewProject}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>New Project</span>
-            </button>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center items-center py-12">
-            <div className="text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Loading projects...</p>
+      <ScrollArea className="flex-1">
+        <div className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="relative w-full md:w-96">
+              <Search className="h-4 w-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search projects..."
+                className="w-full pl-11 pr-3 py-2 border border-gray-300 rounded-full text-sm focus:outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100 bg-white shadow-sm"
+              />
             </div>
-          </div>
-        ) : error ? (
-          <div className="text-center py-12 bg-white rounded-lg border border-red-200 mx-4">
-            <div className="w-16 h-16 mx-auto mb-4 bg-red-50 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Unable to Load Projects</h3>
-            <p className="text-gray-600 mb-6 max-w-md mx-auto">
-              We're having trouble connecting to load your projects. Please check your internet connection and try again.
-            </p>
-            <div className="space-y-3">
-              <button
-                onClick={loadProjects}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                Retry Loading
-              </button>
-              <p className="text-sm text-gray-500">or</p>
+            <div className="flex justify-end">
               <button
                 onClick={handleNewProject}
-                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
               >
                 <Plus className="w-4 h-4" />
-                Create New Project
+                <span>New Project</span>
               </button>
             </div>
           </div>
-        ) : filteredProjects.length > 0 ? (
-          <ProjectsGridView
-            projects={filteredProjects}
-            onProjectClick={handleProjectClick}
-            onProjectEdit={handleProjectEdit}
-            onProjectDelete={handleProjectDelete}
-          />
-        ) : (
-          <div className="text-center py-12">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {searchQuery ? 'No projects found' : 'No projects yet'}
-            </h3>
-            <p className="text-gray-600 mb-4">
-              {searchQuery ? 'Try adjusting your search terms' : 'Create your first project to get started'}
-            </p>
-            <button
-              onClick={handleNewProject}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Create Project</span>
-            </button>
-          </div>
-        )}
-      </div>
+
+          {loading ? (
+            <div className="flex justify-center items-center py-12">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600">Loading projects...</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="text-center py-12 bg-white rounded-lg border border-red-200 mx-4">
+              <div className="w-16 h-16 mx-auto mb-4 bg-red-50 rounded-full flex items-center justify-center">
+                <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Unable to Load Projects</h3>
+              <p className="text-gray-600 mb-6 max-w-md mx-auto">
+                We're having trouble connecting to load your projects. Please check your internet connection and try again.
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={loadProjects}
+                  className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Retry Loading
+                </button>
+                <p className="text-sm text-gray-500">or</p>
+                <button
+                  onClick={handleNewProject}
+                  className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" />
+                  Create New Project
+                </button>
+              </div>
+            </div>
+          ) : filteredProjects.length > 0 ? (
+            <ProjectsGridView
+              projects={filteredProjects}
+              onProjectClick={handleProjectClick}
+              onProjectEdit={handleProjectEdit}
+              onProjectDelete={handleProjectDelete}
+            />
+          ) : (
+            <div className="text-center py-12">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {searchQuery ? 'No projects found' : 'No projects yet'}
+              </h3>
+              <p className="text-gray-600 mb-4">
+                {searchQuery ? 'Try adjusting your search terms' : 'Create your first project to get started'}
+              </p>
+              <button
+                onClick={handleNewProject}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Project</span>
+              </button>
+            </div>
+          )}
+        </div>
+        <ScrollBar orientation="vertical" />
+      </ScrollArea>
 
       {/* AddProjectModal with GitHub Integration */}
       <AddProjectModal
