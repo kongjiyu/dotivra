@@ -250,6 +250,47 @@ export default function DocumentMenu({
 		}
 	};
 
+	const handleGenerateSummary = async () => {
+		if (!documentId || !user?.uid) {
+			showNotification("Document ID or user not found", "error");
+			return;
+		}
+
+		setIsGeneratingSummary(true);
+
+		try {
+			// Fetch the full document content
+			const docData = await fetchDocument(documentId);
+			if (!docData || !docData.Content) {
+				throw new Error('Document content not found');
+			}
+
+			// Generate summary using AI
+			const summary = await aiService.summarizeContent(docData.Content);
+
+			if (!summary) {
+				throw new Error('Failed to generate summary');
+			}
+
+			// Update summary in Firebase
+			await FirestoreService.updateDocument(documentId, { Summary: summary });
+
+			// Update local state
+			setSummaryContent(summary);
+
+			showNotification("Document summary generated successfully", "success");
+
+		} catch (error) {
+			console.error('Error generating summary:', error);
+			showNotification(
+				error instanceof Error ? error.message : 'Failed to generate summary',
+				"error"
+			);
+		} finally {
+			setIsGeneratingSummary(false);
+		}
+	};
+
 	const handlePrint = async () => {
 		// Get content from props first, then fallback to editor
 		let contentToPrint = documentContent;
