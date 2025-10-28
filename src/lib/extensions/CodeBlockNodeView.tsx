@@ -263,47 +263,80 @@ export const CodeBlockNodeView: React.FC<NodeViewProps> = ({
                 </div>
             </div>
 
-            {/* Editable Content or Mermaid Preview */}
-            {node.attrs.language === "mermaid" && isPreviewMode ? (
-                <div
-                    className={cx(
-                        "p-4 overflow-auto",
-                        isDarkTheme ? "bg-gray-900" : "bg-gray-50"
-                    )}
-                    ref={mermaidRef}
-                    contentEditable={false}
-                >
-                    {mermaidError ? (
-                        <div
-                            className={cx(
-                                "p-3 rounded-md text-sm font-mono border",
+            {/* Code content with highlight.js styling or Mermaid preview */}
+            <div className={cx(
+                "relative rounded-b-lg border border-t-0",
+                isDarkTheme
+                    ? "bg-gray-900 border-gray-600"
+                    : "bg-white border-gray-200"
+            )}>
+                {/* Mermaid Preview Mode */}
+                {node.attrs.language === 'mermaid' && isPreviewMode ? (
+                    <div className="p-4">
+                        {mermaidError ? (
+                            <div className={cx(
+                                "mermaid-error p-4 rounded-md text-sm",
                                 isDarkTheme
-                                    ? "bg-red-900/20 border-red-600 text-red-400"
-                                    : "bg-red-50 border-red-300 text-red-700"
-                            )}
-                        >
-                            Mermaid Syntax Error: {mermaidError}
-                        </div>
-                    ) : (
-                        <div
-                            dangerouslySetInnerHTML={{ __html: mermaidSvg }}
-                            className="mermaid flex justify-center"
-                        />
-                    )}
-                </div>
-            ) : (
-                <pre
-                    ref={codeRef}
-                    className={cx(
-                        "overflow-auto p-4 text-sm font-mono rounded-b-md",
-                        isDarkTheme ? "bg-gray-900 text-gray-100" : "bg-white text-gray-900"
-                    )}
-                >
-                    <NodeViewContent
-                        className="block outline-none min-h-[3rem]"
-                    />
-                </pre>
-            )}
+                                    ? "bg-red-900/20 border border-red-600 text-red-400"
+                                    : "bg-red-50 border border-red-300 text-red-700"
+                            )}>
+                                <div className="flex items-start gap-2 mb-2">
+                                    <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                                    </svg>
+                                    <div className="flex-1">
+                                        <div className="font-semibold mb-1">Mermaid Syntax Error</div>
+                                        <div className="font-mono text-xs mb-3 opacity-90">{mermaidError}</div>
+                                        <div className="text-xs opacity-75 space-y-1">
+                                            <p><strong>Common fixes:</strong></p>
+                                            <ul className="list-disc list-inside ml-2 space-y-0.5">
+                                                <li>Check for typos in diagram type (flowchart, sequenceDiagram, etc.)</li>
+                                                <li>Verify all node IDs and connections are valid</li>
+                                                <li>Ensure proper syntax for your diagram type</li>
+                                                <li>Switch to Code view to edit the diagram</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ) : mermaidSvg ? (
+                            <div
+                                ref={mermaidRef}
+                                className={cx(
+                                    "mermaid-preview flex justify-center items-start p-4 rounded-md overflow-auto",
+                                    isDarkTheme ? "bg-gray-800" : "bg-gray-50"
+                                )}
+                                contentEditable={false}
+                                style={{ userSelect: 'none' }}
+                                dangerouslySetInnerHTML={{ __html: mermaidSvg }}
+                            />
+                        ) : (
+                            <div className={cx(
+                                "flex items-center justify-center p-8 text-gray-500 text-sm",
+                                isDarkTheme ? "text-gray-400" : "text-gray-600"
+                            )}>
+                                No diagram content to preview
+                            </div>
+                        )}
+                    </div>
+                ) : (
+                    /* Code Mode */
+                    <pre
+                        ref={codeRef}
+                        className={cx(
+                            "overflow-auto p-4 text-sm leading-relaxed font-mono",
+                            `language-${node.attrs.language}`,
+                            "hljs", // highlight.js class
+                            isDarkTheme ? "hljs-dark" : "hljs-light"
+                        )}
+                    >
+                        <NodeViewContent className={cx(
+                            `language-${node.attrs.language}`,
+                            "block outline-none min-h-[3rem]"
+                        )} />
+                    </pre>
+                )}
+            </div>
         </NodeViewWrapper>
     );
 };
