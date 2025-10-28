@@ -29,9 +29,7 @@ export function generatePreviewWithHighlights(
     originalContent: string,
     toolExecutions: ToolExecution[]
 ): { previewHtml: string; changes: HighlightedChange[] } {
-    let previewContent = originalContent;
     const changes: HighlightedChange[] = [];
-    let offset = 0; // Track cumulative offset from insertions/deletions
 
     // Sort tool executions by timestamp to maintain order
     const sortedExecutions = [...toolExecutions]
@@ -40,13 +38,14 @@ export function generatePreviewWithHighlights(
 
     console.log('🎨 Generating preview with', sortedExecutions.length, 'tool executions');
 
-    // Apply each tool execution and track changes
+    // First pass: collect all changes without modifying content
+    let offset = 0;
     for (const execution of sortedExecutions) {
         const { tool, args } = execution;
 
         switch (tool) {
             case 'append_document_content':
-                const appendPos = previewContent.length + offset;
+                const appendPos = originalContent.length + offset;
                 const appendContent = args.content || '';
                 
                 changes.push({
@@ -55,12 +54,11 @@ export function generatePreviewWithHighlights(
                     to: appendPos,
                     content: appendContent
                 });
-
-                previewContent = previewContent + appendContent;
                 offset += appendContent.length;
                 break;
 
             case 'insert_document_content':
+            case 'insert_document_content_at_location':
                 const insertPos = (args.position || 0) + offset;
                 const insertContent = args.content || '';
                 
@@ -70,11 +68,6 @@ export function generatePreviewWithHighlights(
                     to: insertPos,
                     content: insertContent
                 });
-
-                previewContent = 
-                    previewContent.slice(0, insertPos) + 
-                    insertContent + 
-                    previewContent.slice(insertPos);
                 offset += insertContent.length;
                 break;
 
@@ -82,7 +75,7 @@ export function generatePreviewWithHighlights(
                 const replaceFrom = (args.position?.from || 0) + offset;
                 const replaceTo = (args.position?.to || 0) + offset;
                 const replaceContent = args.content || '';
-                const originalText = previewContent.slice(replaceFrom, replaceTo);
+                const originalText = originalContent.slice(replaceFrom, replaceTo);
                 
                 changes.push({
                     type: 'replacement',
@@ -91,18 +84,13 @@ export function generatePreviewWithHighlights(
                     content: replaceContent,
                     originalContent: originalText
                 });
-
-                previewContent = 
-                    previewContent.slice(0, replaceFrom) + 
-                    replaceContent + 
-                    previewContent.slice(replaceTo);
                 offset += replaceContent.length - (replaceTo - replaceFrom);
                 break;
 
             case 'remove_document_content':
                 const removeFrom = (args.position?.from || 0) + offset;
                 const removeTo = (args.position?.to || 0) + offset;
-                const removedText = previewContent.slice(removeFrom, removeTo);
+                const removedText = originalContent.slice(removeFrom, removeTo);
                 
                 changes.push({
                     type: 'deletion',
@@ -110,17 +98,14 @@ export function generatePreviewWithHighlights(
                     to: removeTo,
                     originalContent: removedText
                 });
-
-                previewContent = 
-                    previewContent.slice(0, removeFrom) + 
-                    previewContent.slice(removeTo);
+                // For deletions, reduce offset since content will be shown but marked
                 offset -= (removeTo - removeFrom);
                 break;
         }
     }
 
-    // Apply highlights to preview content
-    const highlightedHtml = applyHighlights(previewContent, changes);
+    // Apply highlights to original content (don't modify structure)
+    const highlightedHtml = applyHighlightsToHtml(originalContent, changes);
 
     return {
         previewHtml: highlightedHtml,
@@ -135,6 +120,7 @@ function isContentModifyingTool(tool: string): boolean {
     const modifyingTools = [
         'append_document_content',
         'insert_document_content',
+        'insert_document_content_at_location',
         'replace_document_content',
         'remove_document_content'
     ];
@@ -142,59 +128,146 @@ function isContentModifyingTool(tool: string): boolean {
 }
 
 /**
- * Apply color-coded highlights to content based on changes
+ * Apply color-coded highlights to HTML content based on changes
+ * This version preserves HTML structure while highlighting changes
  */
-function applyHighlights(content: string, changes: HighlightedChange[]): string {
+function applyHighlightsToHtml(htmlContent: string, changes: HighlightedChange[]): string {
+    // Create a temporary div to parse HTML
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+    const body = doc.body;
+
     // Sort changes by position (reverse order to apply from end to start)
     const sortedChanges = [...changes].sort((a, b) => b.from - a.from);
 
-    let highlightedContent = content;
-
+    // Apply highlights by wrapping content at specified positions
     for (const change of sortedChanges) {
-        const { type, from, to, content: newContent, originalContent } = change;
+        try {
+            const { type, from, to, content: newContent } = change;
 
-        switch (type) {
-            case 'deletion':
-                // Highlight deleted content in light red
-                const deletedHtml = `<mark class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through;">${escapeHtml(originalContent || '')}</mark>`;
-                highlightedContent = 
-                    highlightedContent.slice(0, from) + 
-                    deletedHtml + 
-                    highlightedContent.slice(to);
-                break;
+            // Find the text node and offset at the specified position
+            const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+            
+            let currentPos = 0;
+            let startNode: Node | null = null;
+            let startOffset = 0;
+            let endNode: Node | null = null;
+            let endOffset = 0;
 
-            case 'addition':
-                // Highlight added content in light green
-                const addedHtml = `<mark class="addition-highlight" style="background-color: #ccffcc;">${escapeHtml(newContent || '')}</mark>`;
-                highlightedContent = 
-                    highlightedContent.slice(0, from) + 
-                    addedHtml + 
-                    highlightedContent.slice(from);
-                break;
+            // Find start position
+            let node = walker.nextNode();
+            while (node) {
+                const textLength = node.textContent?.length || 0;
+                if (currentPos + textLength >= from) {
+                    startNode = node;
+                    startOffset = from - currentPos;
+                    break;
+                }
+                currentPos += textLength;
+                node = walker.nextNode();
+            }
 
-            case 'replacement':
-                // Show deleted content in red, then new content in green
-                const replacedHtml = 
-                    `<mark class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through;">${escapeHtml(originalContent || '')}</mark>` +
-                    `<mark class="addition-highlight" style="background-color: #ccffcc;">${escapeHtml(newContent || '')}</mark>`;
-                highlightedContent = 
-                    highlightedContent.slice(0, from) + 
-                    replacedHtml + 
-                    highlightedContent.slice(to);
-                break;
+            // Find end position for deletions and replacements
+            if (type === 'deletion' || type === 'replacement') {
+                currentPos = 0;
+                walker.currentNode = body;
+                node = walker.nextNode();
+                while (node) {
+                    const textLength = node.textContent?.length || 0;
+                    if (currentPos + textLength >= to) {
+                        endNode = node;
+                        endOffset = to - currentPos;
+                        break;
+                    }
+                    currentPos += textLength;
+                    node = walker.nextNode();
+                }
+            }
+
+            // Apply highlighting based on change type
+            if (startNode) {
+                switch (type) {
+                    case 'deletion':
+                        // Wrap deleted content in red background (don't remove it)
+                        if (endNode && startNode === endNode) {
+                            const textNode = startNode as Text;
+                            const beforeText = textNode.textContent?.substring(0, startOffset) || '';
+                            const deletedText = textNode.textContent?.substring(startOffset, endOffset) || '';
+                            const afterText = textNode.textContent?.substring(endOffset) || '';
+
+                            const span = document.createElement('span');
+                            span.style.backgroundColor = '#ffcccc';
+                            span.style.textDecoration = 'line-through';
+                            span.className = 'deletion-highlight';
+                            span.textContent = deletedText;
+
+                            const parent = textNode.parentNode;
+                            if (parent) {
+                                parent.insertBefore(document.createTextNode(beforeText), textNode);
+                                parent.insertBefore(span, textNode);
+                                parent.insertBefore(document.createTextNode(afterText), textNode);
+                                parent.removeChild(textNode);
+                            }
+                        }
+                        break;
+
+                    case 'addition':
+                        // Insert new content with green background
+                        const textNode = startNode as Text;
+                        const beforeText = textNode.textContent?.substring(0, startOffset) || '';
+                        const afterText = textNode.textContent?.substring(startOffset) || '';
+
+                        const addSpan = document.createElement('span');
+                        addSpan.style.backgroundColor = '#ccffcc';
+                        addSpan.className = 'addition-highlight';
+                        addSpan.textContent = newContent || '';
+
+                        const parent = textNode.parentNode;
+                        if (parent) {
+                            parent.insertBefore(document.createTextNode(beforeText), textNode);
+                            parent.insertBefore(addSpan, textNode);
+                            parent.insertBefore(document.createTextNode(afterText), textNode);
+                            parent.removeChild(textNode);
+                        }
+                        break;
+
+                    case 'replacement':
+                        // Show deleted content in red, then new content in green
+                        if (endNode && startNode === endNode) {
+                            const replaceTextNode = startNode as Text;
+                            const beforeText = replaceTextNode.textContent?.substring(0, startOffset) || '';
+                            const replacedText = replaceTextNode.textContent?.substring(startOffset, endOffset) || '';
+                            const afterText = replaceTextNode.textContent?.substring(endOffset) || '';
+
+                            const delSpan = document.createElement('span');
+                            delSpan.style.backgroundColor = '#ffcccc';
+                            delSpan.style.textDecoration = 'line-through';
+                            delSpan.className = 'deletion-highlight';
+                            delSpan.textContent = replacedText;
+
+                            const addSpan = document.createElement('span');
+                            addSpan.style.backgroundColor = '#ccffcc';
+                            addSpan.className = 'addition-highlight';
+                            addSpan.textContent = newContent || '';
+
+                            const parent = replaceTextNode.parentNode;
+                            if (parent) {
+                                parent.insertBefore(document.createTextNode(beforeText), replaceTextNode);
+                                parent.insertBefore(delSpan, replaceTextNode);
+                                parent.insertBefore(addSpan, replaceTextNode);
+                                parent.insertBefore(document.createTextNode(afterText), replaceTextNode);
+                                parent.removeChild(replaceTextNode);
+                            }
+                        }
+                        break;
+                }
+            }
+        } catch (err) {
+            console.warn('Failed to apply highlight:', err);
         }
     }
 
-    return highlightedContent;
-}
-
-/**
- * Escape HTML special characters
- */
-function escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    return body.innerHTML;
 }
 
 /**

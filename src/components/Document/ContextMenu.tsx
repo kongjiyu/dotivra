@@ -27,7 +27,6 @@ import {
     Strikethrough,
     Sparkles,
 } from 'lucide-react'
-import { aiService } from '@/services/aiService'
 
 interface ContextMenuProps {
     editor: Editor | null

@@ -49,6 +49,16 @@ IMPORTANT: You are working with HTML document content. When analyzing or modifyi
 AVAILABLE TOOLS:
 ${toolDescriptions}
 
+SPECIAL INSTRUCTIONS FOR "CREATE" OR "GENERATE" REQUESTS:
+When user asks to "create" or "generate" something (e.g., "create a project overview", "generate a summary"):
+1. ALWAYS scan the document first using get_document_content or scan_document_content
+2. Analyze the current document structure and content
+3. Reason about what content to create and WHERE to place it
+4. Use insert_document_content_at_location to add the new content at the appropriate position
+5. For project overviews, place at the beginning after any title
+6. For summaries, place at a logical section or at the end
+7. DO NOT just append at the end unless that's the best location
+
 WORKFLOW - You MUST follow these stages in order:
 1. **Planning** - Briefly plan what you need to do
 2. **Reasoning** - Analyze and think through the approach (can repeat)
@@ -92,6 +102,7 @@ CRITICAL RULES:
 6. Work with HTML tags and structure
 7. After each tool execution, you'll receive a toolResult stage
 8. You can repeat reasoning/executing/toolUsed cycles as needed
+9. When creating content, analyze the document to find the best insertion point
 
 User Request: ${userPrompt}
 `;

@@ -155,6 +155,25 @@ export const getToolsRegistry = async () => {
                 annotations: { title: 'Insert Text', idempotentHint: false, destructiveHint: false }
             },
             {
+                name: 'insert_document_content_at_location',
+                description: 'Insert content at a specific location in the document by searching for a target string or heading. Useful for adding content at meaningful positions.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        target: { type: 'string', description: 'Target string or heading to find (e.g., "</h1>", "Introduction", specific text)' },
+                        position: {
+                            type: 'string',
+                            enum: ['before', 'after'],
+                            description: 'Insert before or after the target'
+                        },
+                        content: { type: 'string', description: 'HTML content to insert' },
+                        reason: { type: 'string', description: 'Why insertion is needed' }
+                    },
+                    required: ['target', 'position', 'content', 'reason']
+                },
+                annotations: { title: 'Insert at Location', idempotentHint: false, destructiveHint: false }
+            },
+            {
                 name: 'replace_document_content',
                 description: 'Replace text in a given range with new content.',
                 inputSchema: {
@@ -392,12 +411,17 @@ const syncToFirebase = async () => {
         // For regular Firebase SDK, use doc() and updateDoc()
         const { doc, updateDoc, Timestamp } = await import('firebase/firestore');
         const docRef = doc(firestore, 'Documents', currentDocumentId);
+
+        // Update document with new content and mark as modified (draft)
         await updateDoc(docRef, {
             Content: currentDocumentContent,
-            Updated_Time: Timestamp.now()
+            Updated_Time: Timestamp.now(),
+            IsDraft: true // Mark as draft when AI modifies content
         });
 
         console.log(`💾 Synced to Firebase: ${currentDocumentId} (${currentDocumentContent.length} chars)`);
+        console.log(`📝 Document status updated to draft`);
+
         return { success: true };
     } catch (error) {
         console.error('❌ Firebase sync error:', error);
@@ -612,9 +636,63 @@ export const insert_document_content = async ({ position, content, reason }) => 
     currentDocumentContent = currentDocumentContent.slice(0, position) + content + currentDocumentContent.slice(position);
     const result = {
         success: true,
-        html: `<div class="tool-success">Inserted <b>${content.length}</b> characters at position <b>${position}</b>.</div>`
+        html: `<div class="tool-success">Inserted <b>${content.length}</b> characters at position <b>${position}</b>.</div>`,
+        position: { from: position, to: position + content.length }
     };
     logToolUsage('insert_document_content', { position, content, reason }, result, currentDocumentId);
+    await syncToFirebase();
+    return result;
+}
+
+export const insert_document_content_at_location = async ({ target, position, content, reason }) => {
+    if (typeof target !== 'string' || !target.length) {
+        return {
+            success: false,
+            html: `<div class="error-message">Sorry, no target location was provided. Please specify where to insert the content.</div>`
+        };
+    }
+    if (typeof content !== 'string' || !content.length) {
+        return {
+            success: false,
+            html: `<div class="error-message">Sorry, no content was provided to insert. Please try again.</div>`
+        };
+    }
+    if (position !== 'before' && position !== 'after') {
+        return {
+            success: false,
+            html: `<div class="error-message">Position must be either 'before' or 'after'.</div>`
+        };
+    }
+
+    // Find the target in the document
+    const targetIndex = currentDocumentContent.indexOf(target);
+    if (targetIndex === -1) {
+        return {
+            success: false,
+            html: `<div class="error-message">Sorry, couldn't find "${target.substring(0, 50)}" in the document. Please try a different target.</div>`
+        };
+    }
+
+    // Calculate insertion position
+    let insertPosition;
+    if (position === 'before') {
+        insertPosition = targetIndex;
+    } else {
+        insertPosition = targetIndex + target.length;
+    }
+
+    // Insert the content
+    currentDocumentContent = currentDocumentContent.slice(0, insertPosition) + content + currentDocumentContent.slice(insertPosition);
+
+    const result = {
+        success: true,
+        html: `<div class="tool-success">Inserted <b>${content.length}</b> characters ${position} "${target.substring(0, 30)}${target.length > 30 ? '...' : ''}".</div>`,
+        position: { from: insertPosition, to: insertPosition + content.length },
+        targetFound: target.substring(0, 100),
+        insertedAt: insertPosition
+    };
+
+    logToolUsage('insert_document_content_at_location', { target, position, content, reason }, result, currentDocumentId);
     await syncToFirebase();
     return result;
 }

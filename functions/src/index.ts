@@ -669,6 +669,141 @@ app.post('/api/gemini/generate', async (req, res) => {
 });
 
 
+// Generate document recommendations
+app.post('/api/gemini/recommendations', async (req, res) => {
+  try {
+    const { documentId, content } = req.body;
+
+    if (!documentId || !content) {
+      return res.status(400).json({ error: 'Missing documentId or content' });
+    }
+
+    logger.info('🎯 Generating recommendations for document:', documentId);
+
+    if (!geminiBalancer) {
+      return res.status(503).json({ error: 'Gemini balancer not initialized' });
+    }
+
+    // Generate recommendations using Gemini
+    const prompt = `Analyze this document and provide exactly 4 actionable recommendations.
+
+Document Content:
+${content}
+
+Provide 4 specific, actionable recommendations for improving or extending this document. Each recommendation should be:
+- Brief (1-2 sentences)
+- Actionable (user can immediately act on it)
+- Relevant to the document content
+
+Format your response as JSON:
+{
+  "recommendations": [
+    { "title": "...", "description": "..." },
+    { "title": "...", "description": "..." },
+    { "title": "...", "description": "..." },
+    { "title": "...", "description": "..." }
+  ]
+}`;
+
+    const result = await geminiBalancer.generate({
+      model: 'gemini-2.5-pro',
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 1024
+      }
+    });
+
+    // Parse JSON from response
+    let recommendations;
+    try {
+      const parsed = JSON.parse(result.text);
+      recommendations = parsed.recommendations || [];
+    } catch (parseError) {
+      logger.error('Failed to parse recommendations JSON:', parseError);
+      // Fallback: extract text recommendations
+      recommendations = [
+        { title: 'Review Content', description: 'Review and verify the generated recommendations' },
+        { title: 'Add Details', description: 'Consider adding more specific details based on the context' },
+        { title: 'Improve Structure', description: 'Enhance document structure for better readability' },
+        { title: 'Add Examples', description: 'Include practical examples where appropriate' }
+      ];
+    }
+
+    logger.info(`✅ Generated ${recommendations.length} recommendations`);
+    res.json({ recommendations });
+
+  } catch (error) {
+    logger.error('❌ Recommendations generation error:', error);
+    res.status(500).json({ error: 'Failed to generate recommendations' });
+  }
+});
+
+// Generate with tools (fallback to regular generation)
+app.post('/api/gemini/generate-with-tools', async (req, res) => {
+  try {
+    logger.info('🔧 Gemini API with Tools Request received');
+
+    const {
+      prompt,
+      model = 'gemini-2.5-pro',
+      generationConfig = {},
+    } = req.body || {};
+
+    if (!prompt) {
+      return res.status(400).json({ error: 'Missing prompt' });
+    }
+
+    if (!geminiBalancer) {
+      return res.status(503).json({ error: 'Gemini balancer not initialized' });
+    }
+
+    // Fallback to regular generation (MCP removed)
+    const result = await geminiBalancer.generate({
+      model,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig
+    });
+
+    return res.json({
+      success: true,
+      text: result.text,
+      toolCalls: [],
+      toolsUsed: 0,
+      model
+    });
+  } catch (error: any) {
+    logger.error('❌ Gemini generate with tools error:', error);
+    res.status(500).json({
+      success: false,
+      error: error?.message || 'Failed to generate with tools'
+    });
+  }
+});
+
+// AI Agent - Standard HTTP with multi-step execution
+// Store active sessions for multi-step execution
+const aiAgentSessions = new Map<string, any>();
+
+app.post('/api/ai-agent/execute', async (req, res) => {
+  try {
+    logger.info('🤖 AI Agent Execute - Request received');
+
+    // AI Agent not available in Firebase Functions deployment
+    return res.status(503).json({ 
+      error: 'AI Agent not available in production. Please use local development server.' 
+    });
+
+  } catch (error: any) {
+    logger.error('❌ AI Agent execute error:', error);
+    res.status(500).json({
+      stage: 'error',
+      content: error?.message || 'AI Agent execution failed',
+      sessionId: null
+    });
+  }
+});
+
 // Authenticate with passkey
 app.post('/api/gemini/auth', (req, res) => {
   try {
@@ -1837,6 +1972,38 @@ app.get("/api/document/editor/history/:docId", async (req, res) => {
     res.json({ versions });
   } catch (err) {
     logger.error('❌ Error fetching version history:', err);
+    res.status(500).json({ error: "SERVER_ERROR", details: err instanceof Error ? err.message : 'Unknown error' });
+  }
+});
+
+// Save document history snapshot
+app.post("/api/document/history", async (req, res) => {
+  try {
+    const { Document_Id, Content, Version, Edited_Time } = req.body;
+
+    if (!Document_Id || !Content || !Version) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    logger.info('💾 Saving document history snapshot:', Document_Id, Version);
+
+    const historyData = {
+      Document_Id,
+      Content,
+      Version,
+      Edited_Time: Edited_Time || new Date().toISOString()
+    };
+
+    const historyRef = await db.collection("DocumentHistory").add(historyData);
+
+    logger.info('✅ Document history saved with ID:', historyRef.id);
+    res.status(201).json({
+      success: true,
+      id: historyRef.id,
+      ...historyData
+    });
+  } catch (err) {
+    logger.error('❌ Error saving document history:', err);
     res.status(500).json({ error: "SERVER_ERROR", details: err instanceof Error ? err.message : 'Unknown error' });
   }
 });

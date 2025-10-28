@@ -89,7 +89,7 @@ export default function DocumentMenu({
 	isSummaryPage = false,
 	documentId,
 }: DocumentMenuProps) {
-    const navigate = useNavigate();
+	const navigate = useNavigate();
 	// Get context state for navigation pane
 	const { showNavigationPane, setShowNavigationPane: setContextNavigationPane } = useDocument();
 
@@ -1472,11 +1472,11 @@ export default function DocumentMenu({
 									size="sm"
 									onClick={handleGenerateSummary}
 									disabled={isGeneratingSummary}
-									className="h-7 px-2 text-gray-600 hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50"
+									className="h-7 px-2 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
 									title="Generate AI Summary"
 								>
-									<Sparkles className={`w-4 h-4 mr-1 ${isGeneratingSummary ? 'animate-pulse' : ''}`} />
-									<span className="text-xs">
+									<Sparkles className={`text-purple-800  w-4 h-4 mr-1 ${isGeneratingSummary ? 'animate-pulse' : ''}`} />
+									<span className="text-xs text-purple-800 ">
 										{isGeneratingSummary ? 'Generating...' : 'Generate Summary'}
 									</span>
 								</Button>
