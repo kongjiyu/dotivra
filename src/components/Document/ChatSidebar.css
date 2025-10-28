@@ -1,0 +1,65 @@
+/* Animations for Chat Sidebar */
+
+/* Smooth pulsing animation for stop button */
+@keyframes pulse-stop {
+    0% {
+        transform: rotate(0deg);
+    }
+    25% {
+        transform: rotate(720deg);
+    }
+    100% {
+        transform: rotate(720deg);
+    }
+}
+
+.animate-pulse-stop {
+    animation: pulse-stop 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    transition: all 0.3s ease-in-out;
+}
+
+.chat-loading-indicator {
+    animation: pulse-stop 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+
+}
+
+.chat-loading-indicator.loading-planning {
+    color: #06b6d4;
+}
+
+/* Color wave animation for generating button */
+@keyframes color-wave {
+    0% {
+        background: linear-gradient(135deg, #9333ea 0%, #2563eb 100%);
+    }
+    25% {
+        background: linear-gradient(135deg, #2563eb 0%, #06b6d4 100%);
+    }
+    50% {
+        background: linear-gradient(135deg, #06b6d4 0%, #8b5cf6 100%);
+    }
+    75% {
+        background: linear-gradient(135deg, #8b5cf6 0%, #9333ea 100%);
+    }
+    100% {
+        background: linear-gradient(135deg, #9333ea 0%, #2563eb 100%);
+    }
+}
+
+.animate-color-wave {
+    animation: color-wave 3s ease-in-out infinite;
+}
+
+/* Rotate animation for stop icon */
+@keyframes rotate-pulse {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-rotate-pulse {
+    animation: rotate-pulse 2s linear infinite;
+}

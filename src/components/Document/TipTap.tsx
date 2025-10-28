@@ -13,6 +13,7 @@ interface TiptapProps {
     onEditorReady?: (editor: any) => void;
     className?: string;
     showToolbar?: boolean;
+    forceUpdate?: boolean; // Force content update even if editor has content
 }
 
 const Tiptap = ({
@@ -22,6 +23,7 @@ const Tiptap = ({
     onEditorReady,
     className = "",
     showToolbar = true,
+    forceUpdate = false,
 }: TiptapProps) => {
     const [isReady, setIsReady] = useState(false);
     const lastAppliedContentRef = useRef<string | null>(null);
@@ -162,11 +164,13 @@ const Tiptap = ({
         const isEditorEmpty = currentHTML === '<p></p>' || currentHTML === '' || currentHTML === '<p><br></p>';
 
         // Only apply if editor is empty OR this is genuinely different content (not just a context update)
-        if (isEditorEmpty || lastAppliedContentRef.current === null) {
+        // OR if forceUpdate is true (for cases like generate summary where we want to replace content)
+        if (isEditorEmpty || lastAppliedContentRef.current === null || forceUpdate) {
             console.log('📝 Applying initial content to editor:', {
                 contentLength: initialContent.length,
                 isEditorEmpty,
-                isFirstLoad: lastAppliedContentRef.current === null
+                isFirstLoad: lastAppliedContentRef.current === null,
+                forceUpdate
             });
 
             // Set content without emitting update to avoid triggering onUpdate
@@ -198,7 +202,7 @@ const Tiptap = ({
                 newLength: initialContent.length
             });
         }
-    }, [editor, initialContent]);
+    }, [editor, initialContent, forceUpdate]);
 
     // Call onEditorReady when editor is ready
     useEffect(() => {

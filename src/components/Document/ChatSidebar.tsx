@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { X, Sparkles, SendHorizonal, Loader2, Eraser, RotateCcw, CircleX, CircleStop } from "lucide-react";
+import { X, Sparkles, SendHorizonal, Loader2, Eraser, RotateCcw, CircleX, CircleStop, ClipboardList, Brain, Wrench, ListChecks, Check } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 import { useDocument } from "@/context/DocumentContext";
 import { EnhancedAIContentWriter } from "@/utils/enhancedAIContentWriter";
@@ -14,7 +14,7 @@ import { buildApiUrl } from "@/lib/apiConfig";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { AIChangesPreviewModal } from "./AIChangesPreviewModal";
 import { generatePreviewWithHighlights, type ToolExecution } from "@/utils/previewGenerator";
-import { buildAIInteractionHTML, getAIInteractionStyles, type AIInteractionStage, type AIInteractionSession } from "@/utils/aiInteractionHtmlBuilder";
+import { type AIInteractionStage } from "@/utils/aiInteractionHtmlBuilder";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -26,11 +26,12 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import "./ChatSidebar.css";
 
 export type ChatMessage = {
     id: string;
     role: "user" | "assistant" | "system-error";
-    content: string;
+    content: string | ChatMessageStage[]; // Can be plain string or structured stages
     timestamp?: number;
     type?: 'user' | 'assistant' | 'tool-use' | 'tool-response' | 'progress' | 'error';
     progressStage?: 'planning' | 'reasoning' | 'execution' | 'summary';
@@ -38,6 +39,11 @@ export type ChatMessage = {
     toolReason?: string; // Reason for tool usage
     toolResult?: string; // Result from tool execution
     replyTo?: string; // ID of message being replied to (not stored in Firebase)
+};
+
+export type ChatMessageStage = {
+    stage: 'planning' | 'reasoning' | 'toolUsed' | 'toolResult' | 'summary' | 'error';
+    message: string;
 };
 
 interface ChatSidebarProps {
@@ -77,6 +83,8 @@ export default function ChatSidebar({
     const [replyToMessage, setReplyToMessage] = useState<ChatMessage | null>(null);
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number; y: number } | null>(null);
     const [contextMenuMessageId, setContextMenuMessageId] = useState<string | null>(null);
+    const [recommendations, setRecommendations] = useState<Array<{ title: string; description: string; action: string }>>([]);
+    const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false);
     const listRef = useRef<HTMLDivElement>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const topSentinelRef = useRef<HTMLDivElement>(null);
@@ -93,11 +101,29 @@ export default function ChatSidebar({
     const [previewHtml, setPreviewHtml] = useState<string>("");
     const [previewChanges, setPreviewChanges] = useState<any[]>([]);
 
+    // Snapshot state for document versioning
+    const [documentSnapshot, setDocumentSnapshot] = useState<{
+        content: string;
+        timestamp: number;
+        version: number;
+        toolExecutions: ToolExecution[];
+    } | null>(null);
+
     // Get document ID from context for MCP operations
     const { documentId } = useDocument();
 
     // Get user context for repository operations
     const { user } = useAuth();
+
+    const stageConfig = {
+        planning: { icon: <ClipboardList />, label: 'Planning', color: 'bg-blue-50 border-blue-200 text-blue-800' },
+        reasoning: { icon: <Brain />, label: 'Reasoning', color: 'bg-purple-50 border-purple-200 text-purple-800' },
+        execution: { icon: <Wrench />, label: 'Executing', color: 'bg-yellow-50 border-yellow-200 text-yellow-800' },
+        toolUsed: { icon: <Wrench />, label: 'Action', color: 'bg-green-50 border-green-200 text-green-800' },
+        toolResult: { icon: <Check />, label: 'Result', color: 'bg-gray-50 border-gray-200 text-gray-700' },
+        summary: { icon: <ListChecks />, label: 'Summary', color: 'bg-emerald-50 border-emerald-200 text-emerald-800' },
+        error: { icon: <CircleX />, label: 'Error', color: 'bg-red-50 border-red-200 text-red-800' }
+    };
 
     // Configure marked for better markdown rendering
     useEffect(() => {
@@ -106,6 +132,40 @@ export default function ChatSidebar({
             gfm: true, // GitHub flavored markdown
         });
     }, []);
+
+    // Helper function to get content as string
+    const getContentAsString = (content: string | ChatMessageStage[]): string => {
+        if (typeof content === 'string') {
+            return content;
+        }
+        return content.map(stage => stage.message).join('\n\n');
+    };
+
+    // Helper function to render structured message stages
+    const renderStructuredMessage = (stages: ChatMessageStage[]) => {
+        return (
+            <div className="space-y-3">
+                {stages.map((stage, index) => {
+
+
+                    const config = stageConfig[stage.stage] || stageConfig.summary;
+
+                    return (
+                        <div key={index} className={`${config.color} border rounded-lg p-3`}>
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className="text-lg">{config.icon}</span>
+                                <span className="font-semibold text-sm">{config.label}</span>
+                            </div>
+                            <div
+                                className="prose prose-sm max-w-none"
+                                dangerouslySetInnerHTML={{ __html: renderMarkdown(stage.message) }}
+                            />
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    };
 
     // Combine external messages (if any) with internal state
     const messages = useMemo(() => externalMessages ?? internalMessages, [externalMessages, internalMessages]);
@@ -120,7 +180,9 @@ export default function ChatSidebar({
                     if (history.length > 0) {
                         setInternalMessages(history);
                     } else {
+                        // No history - load recommendations
                         initMessage();
+                        loadRecommendations();
                     }
                 } catch (error) {
                     console.error('Failed to load chat history:', error);
@@ -132,6 +194,45 @@ export default function ChatSidebar({
 
         loadHistory();
     }, [open, documentId, user?.uid, externalMessages, internalMessages.length]);
+
+    // Load recommendations when there's no chat history
+    const loadRecommendations = async () => {
+        if (!documentId || isLoadingRecommendations) return;
+
+        setIsLoadingRecommendations(true);
+        try {
+            // Fetch current document content
+            const documentData = await fetchDocument(documentId);
+            if (!documentData || !documentData.Content) {
+                console.error('Failed to fetch document content');
+                setIsLoadingRecommendations(false);
+                return;
+            }
+
+            // Call recommendations API
+            const response = await fetch(buildApiUrl('api/gemini/recommendations'), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    documentId,
+                    content: documentData.Content
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setRecommendations(data.recommendations || []);
+                console.log('✅ Loaded recommendations:', data.recommendations);
+            } else {
+                const errorData = await response.json();
+                console.error('Failed to load recommendations:', errorData);
+            }
+        } catch (error) {
+            console.error('Failed to load recommendations:', error);
+        } finally {
+            setIsLoadingRecommendations(false);
+        }
+    };
 
     // Load more history when scrolling to top
     useEffect(() => {
@@ -177,6 +278,14 @@ export default function ChatSidebar({
     // Function to render markdown content as HTML with custom code block handling
     const renderMarkdown = (content: string): string => {
         try {
+            // Check if content is already HTML (contains HTML tags)
+            const hasHtmlTags = /<[a-z][\s\S]*>/i.test(content);
+
+            // If it's already HTML, return as-is (for progress messages)
+            if (hasHtmlTags) {
+                return content;
+            }
+
             // Parse markdown to HTML
             let html = marked.parse(content) as string;
 
@@ -385,7 +494,7 @@ From structure improvements to real-time content updates, I ensure your work rem
 
         if (message && lastUserMessage && message.id === lastUserMessage.id) {
             setEditingMessageId(messageId);
-            setEditedContent(message.content);
+            setEditedContent(getContentAsString(message.content));
             setContextMenuPosition(null);
         }
     };
@@ -587,14 +696,14 @@ From structure improvements to real-time content updates, I ensure your work rem
                 // Build conversation history
                 const recentHistory = messages.slice(-5).map(msg => ({
                     role: msg.role,
-                    content: msg.content
+                    content: getContentAsString(msg.content)
                 }));
 
                 // If replying, add the original message as context
                 if (replyToMessage) {
                     recentHistory.unshift({
                         role: replyToMessage.role,
-                        content: `[Context from previous message]: ${replyToMessage.content}`
+                        content: `[Context from previous message]: ${getContentAsString(replyToMessage.content)}`
                     });
                     console.log('Added reply context to history');
                 }
@@ -602,7 +711,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                 const timestamp = Date.now();
                 let toolsUsed = 0;
                 let currentProgressMessageId: string | null = null;
-                let progressContent: string[] = []; // Store plain text content instead of JSX
+                let messageStages: ChatMessageStage[] = []; // Store structured stages
 
                 console.log('Starting AI Agent execution...');
 
@@ -694,8 +803,11 @@ From structure improvements to real-time content updates, I ensure your work rem
                     // Create or update the combined progress message
                     switch (stage.stage) {
                         case 'planning':
-                            // Add planning stage content
-                            progressContent.push(`**🎯 Planning**\n\n${stage.content}\n`);
+                            // Add planning stage
+                            messageStages.push({
+                                stage: 'planning',
+                                message: stage.content || 'Planning...'
+                            });
 
                             // Create or update combined message
                             if (!currentProgressMessageId) {
@@ -703,7 +815,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                 const newMsg: ChatMessage = {
                                     id: currentProgressMessageId,
                                     role: 'assistant',
-                                    content: progressContent.join('\n'),
+                                    content: [...messageStages],
                                     timestamp,
                                     type: 'progress',
                                     progressStage: stage.stage as any,
@@ -716,7 +828,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                     msg.id === currentProgressMessageId
                                         ? {
                                             ...msg,
-                                            content: progressContent.join('\n'),
+                                            content: [...messageStages],
                                             progressStage: stage.stage as any
                                         }
                                         : msg
@@ -725,8 +837,11 @@ From structure improvements to real-time content updates, I ensure your work rem
                             break;
 
                         case 'reasoning':
-                            // Add reasoning stage content
-                            progressContent.push(`**💭 Reasoning**\n\n${stage.content}\n`);
+                            // Add reasoning stage
+                            messageStages.push({
+                                stage: 'reasoning',
+                                message: stage.content || 'Analyzing...'
+                            });
 
                             // Update existing message
                             if (currentProgressMessageId) {
@@ -734,7 +849,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                     msg.id === currentProgressMessageId
                                         ? {
                                             ...msg,
-                                            content: progressContent.join('\n'),
+                                            content: [...messageStages],
                                             progressStage: stage.stage as any
                                         }
                                         : msg
@@ -744,11 +859,52 @@ From structure improvements to real-time content updates, I ensure your work rem
 
                         case 'toolUsed':
                             toolsUsed++;
+
+                            // Create snapshot before first tool execution
+                            if (toolsUsed === 1 && documentId && editor) {
+                                try {
+                                    const currentDoc = await fetchDocument(documentId);
+                                    const snapshot = {
+                                        content: currentDoc?.Content || editor.getHTML(),
+                                        timestamp: Date.now(),
+                                        version: Date.now(), // Use timestamp as version
+                                        toolExecutions: []
+                                    };
+                                    setDocumentSnapshot(snapshot);
+                                    console.log('📸 Created document snapshot before tool execution');
+
+                                    // Save snapshot to DocumentHistory
+                                    try {
+                                        const response = await fetch(buildApiUrl('api/document/history'), {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({
+                                                Document_Id: documentId,
+                                                Content: snapshot.content,
+                                                Version: `snapshot-${snapshot.version}`,
+                                                Edited_Time: new Date().toISOString()
+                                            })
+                                        });
+
+                                        if (response.ok) {
+                                            console.log('✅ Snapshot saved to DocumentHistory');
+                                        }
+                                    } catch (saveError) {
+                                        console.warn('Failed to save snapshot to history:', saveError);
+                                    }
+                                } catch (err) {
+                                    console.error('Failed to create snapshot:', err);
+                                }
+                            }
+
                             const toolData = typeof stage.content === 'object' ? stage.content : { description: stage.content };
                             const toolDescription = toolData.description || 'Processing...';
 
-                            // Add tool execution indicator (simple text, no result)
-                            progressContent.push(`**⚙️ Action:** ${toolDescription}`);
+                            // Add tool execution stage
+                            messageStages.push({
+                                stage: 'toolUsed',
+                                message: toolDescription
+                            });
 
                             // Update message to show tool is being used
                             if (currentProgressMessageId) {
@@ -756,7 +912,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                     msg.id === currentProgressMessageId
                                         ? {
                                             ...msg,
-                                            content: progressContent.join('\n'),
+                                            content: [...messageStages],
                                             progressStage: 'execution'
                                         }
                                         : msg
@@ -769,8 +925,11 @@ From structure improvements to real-time content updates, I ensure your work rem
                             break;
 
                         case 'summary':
-                            // Add summary content
-                            progressContent.push(`\n**✅ Complete**\n\n${stage.content}`);
+                            // Add summary stage
+                            messageStages.push({
+                                stage: 'summary',
+                                message: stage.content || 'Completed'
+                            });
 
                             // Finalize the progress message and make it permanent
                             if (currentProgressMessageId) {
@@ -778,7 +937,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                     msg.id === currentProgressMessageId
                                         ? {
                                             ...msg,
-                                            content: progressContent.join('\n'),
+                                            content: [...messageStages],
                                             progressStage: 'summary',
                                             isTemporary: false
                                         }
@@ -789,7 +948,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                 const summaryMsg: ChatMessage = {
                                     id: `summary-${Date.now()}`,
                                     role: 'assistant',
-                                    content: progressContent.join('\n'),
+                                    content: [...messageStages],
                                     timestamp,
                                     type: 'progress',
                                     progressStage: 'summary',
@@ -803,31 +962,48 @@ From structure improvements to real-time content updates, I ensure your work rem
 
                 console.log(`Tools used: ${toolsUsed}`);
 
-                // Build complete HTML representation of the AI interaction
+                // Prepare interaction session data
                 const sessionEndTime = Date.now();
-                const interactionSession: AIInteractionSession = {
-                    userPrompt: fullPrompt,
-                    stages: allStages,
-                    toolExecutions: allToolExecutions,
-                    startTime: sessionStartTime,
-                    endTime: sessionEndTime,
-                    success: true
-                };
 
-                const completeInteractionHTML = getAIInteractionStyles() + buildAIInteractionHTML(interactionSession);
-
-                // Save complete interaction HTML to Firebase
+                // Save interaction as JSON to Firebase (not HTML)
                 if (documentId && user?.uid) {
                     try {
-                        await chatHistoryService.saveMessage(documentId, {
+                        // Create structured message with all important data
+                        const structuredMessage: ChatMessage = {
                             id: crypto.randomUUID(),
-                            role: 'assistant',
-                            content: completeInteractionHTML,
+                            role: 'assistant' as const,
+                            content: messageStages, // Save structured stages instead of HTML
                             timestamp,
                             type: 'progress',
                             progressStage: 'summary'
-                        });
-                        console.log('✅ Saved complete AI interaction HTML to Firebase');
+                        };
+
+                        // Save the message with metadata in a custom field if needed
+                        await chatHistoryService.saveMessage(documentId, {
+                            ...structuredMessage,
+                            metadata: {
+                                userPrompt: fullPrompt,
+                                toolsUsed: toolsUsed,
+                                toolExecutions: allToolExecutions.map(exec => ({
+                                    tool: exec.tool,
+                                    timestamp: exec.timestamp,
+                                    success: exec.success,
+                                    args: exec.args,
+                                    result: exec.result
+                                })),
+                                stages: allStages.map(stage => ({
+                                    stage: stage.stage,
+                                    content: stage.content,
+                                    thought: stage.thought,
+                                    timestamp: stage.timestamp
+                                })),
+                                startTime: sessionStartTime,
+                                endTime: sessionEndTime,
+                                duration: sessionEndTime - sessionStartTime
+                            }
+                        } as any);
+
+                        console.log('✅ Saved structured AI interaction as JSON to Firebase');
                     } catch (error) {
                         console.error('Failed to save assistant message:', error);
                     }
@@ -838,13 +1014,16 @@ From structure improvements to real-time content updates, I ensure your work rem
                     try {
                         console.log('🎨 Applying highlights for', allToolExecutions.length, 'tool executions');
 
-                        // Get current document content
+                        // Get current document content (after all tool operations)
                         const currentDoc = await fetchDocument(documentId);
 
-                        // Apply the new content to editor first
+                        // Set the updated content to the editor first
                         if (currentDoc.Content) {
                             editor.commands.setContent(currentDoc.Content);
                         }
+
+                        // Wait for editor to render
+                        await new Promise(resolve => setTimeout(resolve, 150));
 
                         // Apply highlights directly to the editor content
                         allToolExecutions.forEach(execution => {
@@ -860,34 +1039,79 @@ From structure improvements to real-time content updates, I ensure your work rem
 
                                 // Apply highlight based on action type
                                 if (execution.tool === 'remove_document_content') {
-                                    // For deletions, highlight in red (but content is already removed)
-                                    // We can't highlight removed content, so skip
+                                    // For deletions, highlight the surrounding context in light red
+                                    // Since content is removed, we highlight from the deletion point
+                                    try {
+                                        // Highlight a small marker at the deletion point
+                                        const markerPos = Math.min(from, docSize - 1);
+                                        if (markerPos >= 0 && markerPos < docSize) {
+                                            editor.chain()
+                                                .setTextSelection({ from: markerPos, to: Math.min(markerPos + 1, docSize) })
+                                                .setHighlight({ color: '#ffcccc' })
+                                                .run();
+                                        }
+                                    } catch (e) {
+                                        console.warn('Failed to highlight deletion:', e);
+                                    }
                                 } else if (execution.tool === 'insert_document_content' ||
-                                    execution.tool === 'append_document_content') {
+                                    execution.tool === 'append_document_content' ||
+                                    execution.tool === 'insert_document_content_at_location') {
                                     // For additions, highlight in green
-                                    editor.chain()
-                                        .setTextSelection({ from, to })
-                                        .setHighlight({ color: '#ccffcc' })
-                                        .run();
+                                    try {
+                                        editor.chain()
+                                            .setTextSelection({ from, to })
+                                            .setHighlight({ color: '#ccffcc' })
+                                            .run();
+                                    } catch (e) {
+                                        console.warn('Failed to highlight addition:', e);
+                                    }
                                 } else if (execution.tool === 'replace_document_content') {
                                     // For replacements, highlight in yellow
-                                    editor.chain()
-                                        .setTextSelection({ from, to })
-                                        .setHighlight({ color: '#ffffcc' })
-                                        .run();
+                                    try {
+                                        editor.chain()
+                                            .setTextSelection({ from, to })
+                                            .setHighlight({ color: '#ffffcc' })
+                                            .run();
+                                    } catch (e) {
+                                        console.warn('Failed to highlight replacement:', e);
+                                    }
                                 }
                             }
                         });
 
-                        // Also generate preview for modal
-                        const baseContent = aiBeforeContent || currentDoc.Content || '';
-                        const { previewHtml: generatedPreview, changes } = generatePreviewWithHighlights(
-                            baseContent,
-                            allToolExecutions
-                        );
+                        // Update snapshot with all tool executions
+                        if (documentSnapshot) {
+                            setDocumentSnapshot({
+                                ...documentSnapshot,
+                                toolExecutions: allToolExecutions
+                            });
+                        }
 
-                        setPreviewHtml(generatedPreview);
-                        setPreviewChanges(changes);
+                        // For preview modal, replay operations on snapshot for accurate diff
+                        let previewContent = currentDoc.Content || editor.getHTML();
+
+                        if (documentSnapshot && documentSnapshot.content) {
+                            console.log('🔄 Replaying', allToolExecutions.length, 'operations on snapshot for preview');
+
+                            // Use snapshot as base for preview
+                            const { changes } = generatePreviewWithHighlights(
+                                documentSnapshot.content, // Use snapshot as baseline
+                                allToolExecutions
+                            );
+
+                            setPreviewHtml(previewContent);
+                            setPreviewChanges(changes);
+                        } else {
+                            // Fallback to current approach if no snapshot
+                            const { changes } = generatePreviewWithHighlights(
+                                aiBeforeContent || '',
+                                allToolExecutions
+                            );
+
+                            setPreviewHtml(previewContent);
+                            setPreviewChanges(changes);
+                        }
+
                         setShowPreviewModal(true);
 
                         console.log('✅ Highlights applied to editor content');
@@ -1005,6 +1229,8 @@ From structure improvements to real-time content updates, I ensure your work rem
                                             try {
                                                 await chatHistoryService.clearHistory(documentId);
                                                 setInternalMessages([]);
+                                                // Also clear any cached data
+                                                setHasMoreHistory(true);
                                             } catch (error) {
                                                 console.error('Failed to clear chat history:', error);
                                             } finally {
@@ -1099,7 +1325,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                         <div className={`${bgClass} rounded-lg px-4 py-3 text-[0.95rem] leading-[1.6] break-words`}>
                                                             <div className="flex items-start gap-2">
                                                                 <span className="text-lg"><CircleX /></span>
-                                                                <div className="flex-1">{m.content}</div>
+                                                                <div className="flex-1">{getContentAsString(m.content)}</div>
                                                             </div>
                                                         </div>
                                                         {/* Retry button at right bottom */}
@@ -1116,7 +1342,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                                 // Find the last user message and resend
                                                                 const lastUserMsg = [...messages].reverse().find(msg => msg.role === 'user');
                                                                 if (lastUserMsg) {
-                                                                    handleSend(lastUserMsg.content);
+                                                                    handleSend(getContentAsString(lastUserMsg.content));
                                                                 }
                                                             }}
                                                             className="h-7 text-xs mt-1 float-right text-blue-600 hover:text-blue-800 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1125,21 +1351,33 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                         </Button>
                                                     </div>
                                                 ) : m.type === "progress" ? (
-                                                    /* Progress message - no top indicator, all stages shown */
+                                                    /* Progress message - use structured rendering */
                                                     <div className="w-full">
                                                         {/* Progress message content with stages */}
                                                         <div className={`w-full bg-gray-50 bg-opacity-50 border border-gray-200 rounded-lg px-4 py-3 text-[0.95rem] leading-[1.6] break-words progress-message-content`}>
-                                                            <div
-                                                                className="prose prose-sm max-w-none
-                                                                prose-headings:mt-3 prose-headings:mb-2 prose-headings:font-semibold
-                                                                prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
-                                                                prose-p:my-2 prose-p:leading-relaxed prose-p:text-[0.95rem]
-                                                                prose-ul:my-2 prose-ul:pl-5 prose-ol:my-2 prose-ol:pl-5 
-                                                                prose-li:my-1 prose-li:leading-relaxed
-                                                                prose-strong:font-semibold
-                                                                prose-a:text-blue-600 prose-a:underline"
-                                                                dangerouslySetInnerHTML={{ __html: m.content ? renderMarkdown(m.content) : '' }}
-                                                            />
+                                                            {Array.isArray(m.content) ? renderStructuredMessage(m.content) : (
+                                                                <div
+                                                                    className="prose prose-sm max-w-none
+                                                                    prose-headings:mt-3 prose-headings:mb-2 prose-headings:font-semibold
+                                                                    prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
+                                                                    prose-p:my-2 prose-p:leading-relaxed prose-p:text-[0.95rem]
+                                                                    prose-ul:my-2 prose-ul:pl-5 prose-ol:my-2 prose-ol:pl-5 
+                                                                    prose-li:my-1 prose-li:leading-relaxed
+                                                                    prose-strong:font-semibold
+                                                                    prose-a:text-blue-600 prose-a:underline"
+                                                                    dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content as string) }}
+                                                                />
+                                                            )}
+
+                                                            {/* Progress stage indicator at the bottom of progress message */}
+                                                            {m.isTemporary && m.progressStage && (
+                                                                <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-2">
+                                                                    <span className={`text-sm font-medium ${stageConfig[m.progressStage]?.color}`}>
+                                                                        {stageConfig[m.progressStage]?.icon} {stageConfig[m.progressStage]?.label}
+                                                                    </span>
+                                                                    <div className="animate-spin h-4 w-4 border-2 border-purple-600 border-t-transparent rounded-full"></div>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 ) : (
@@ -1164,7 +1402,12 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                                         className="flex-1 text-left text-xs text-blue-700 cursor-pointer hover:text-blue-900"
                                                                     >
                                                                         <span className="font-semibold">🔁 Replying to:</span>{' '}
-                                                                        <span className="italic">{originalMsg.content.substring(0, 60)}{originalMsg.content.length > 60 ? '...' : ''}</span>
+                                                                        <span className="italic">
+                                                                            {(() => {
+                                                                                const contentStr = getContentAsString(originalMsg.content);
+                                                                                return contentStr.substring(0, 60) + (contentStr.length > 60 ? '...' : '');
+                                                                            })()}
+                                                                        </span>
                                                                     </button>
                                                                     <Button
                                                                         size="sm"
@@ -1226,12 +1469,24 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                                         break-words transition-all duration-200 hover:shadow-md cursor-context-menu`}
                                                             >
                                                                 {m.role === "user" ? (
-                                                                    m.content
+                                                                    // User messages: display as plain text
+                                                                    getContentAsString(m.content)
                                                                 ) : (
-                                                                    <div
-                                                                        className="prose prose-sm max-w-none chat-markdown-content"
-                                                                        dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
-                                                                    />
+                                                                    // Assistant messages: render structured or HTML
+                                                                    Array.isArray(m.content) ? renderStructuredMessage(m.content) : (
+                                                                        <div
+                                                                            className="prose prose-sm max-w-none
+                                                                            prose-headings:mt-3 prose-headings:mb-2 prose-headings:font-semibold
+                                                                            prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
+                                                                            prose-p:my-2 prose-p:leading-relaxed prose-p:text-[0.95rem]
+                                                                            prose-ul:my-2 prose-ul:pl-5 prose-ol:my-2 prose-ol:pl-5 
+                                                                            prose-li:my-1 prose-li:leading-relaxed
+                                                                            prose-strong:font-semibold
+                                                                            prose-a:text-blue-600 prose-a:underline
+                                                                            chat-markdown-content"
+                                                                            dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content) }}
+                                                                        />
+                                                                    )
                                                                 )}
                                                             </div>
                                                         )}
@@ -1325,6 +1580,28 @@ From structure improvements to real-time content updates, I ensure your work rem
                         </div>
                     )}
 
+                    {/* AI Recommendations - shown when no chat history */}
+                    {recommendations.length > 0 && messages.length === 0 && (
+                        <div className="px-3 pb-2">
+                            <div className="text-xs text-gray-500 mb-2 text-center font-semibold">💡 Recommended Actions</div>
+                            <div className="grid grid-cols-2 gap-2">
+                                {recommendations.map((rec, idx) => (
+                                    <button
+                                        key={idx}
+                                        className="p-3 text-left text-sm border-2 border-blue-200 rounded-lg hover:bg-gradient-to-br hover:from-blue-50 hover:to-purple-50 hover:border-blue-300 bg-white transition-all duration-200 hover:scale-105 hover:shadow-md"
+                                        onClick={() => {
+                                            setInput(rec.action);
+                                            setTimeout(() => handleSend(), 0);
+                                        }}
+                                    >
+                                        <div className="font-semibold text-blue-700 mb-1">{rec.title}</div>
+                                        <div className="text-xs text-gray-600">{rec.description}</div>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
 
                     {/* Composer */}
                     <div className="p-3 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-white">
@@ -1336,7 +1613,10 @@ From structure improvements to real-time content updates, I ensure your work rem
                                         {selectedText ? 'From Document' : `Replying to ${replyToMessage.role === 'user' ? 'your message' : 'assistant'}`}
                                     </div>
                                     <div className="text-gray-600 truncate">
-                                        {replyToMessage.content.substring(0, 60)}...
+                                        {(() => {
+                                            const contentStr = getContentAsString(replyToMessage.content);
+                                            return contentStr.substring(0, 60) + '...';
+                                        })()}
                                     </div>
                                 </div>
                                 <button
@@ -1391,7 +1671,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                 className="bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:bg-gray-300 shadow-lg transition-all duration-200 hover:scale-105"
                             >
                                 {isGenerating ? (
-                                    <CircleStop className="w-4 h-4" />
+                                    <CircleStop className="w-4 h-4 animate-pulse-stop" />
                                 ) : (
                                     <SendHorizonal className="w-4 h-4" />
                                 )}

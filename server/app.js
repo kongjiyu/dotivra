@@ -10,7 +10,7 @@ import { Octokit } from '@octokit/rest';
 const dashboardSessions = new Map();
 
 export function createApp(options = {}) {
-  const { 
+  const {
     db, // Firestore instance (Admin or Client SDK)
     isFirebaseFunction = false,
     geminiBalancer = null,
@@ -36,9 +36,9 @@ export function createApp(options = {}) {
   // Helper functions
   function generateProjectId() {
     const now = new Date();
-    const dateStr = now.getFullYear().toString().slice(-2) + 
-                    String(now.getMonth() + 1).padStart(2, '0') + 
-                    String(now.getDate()).padStart(2, '0');
+    const dateStr = now.getFullYear().toString().slice(-2) +
+      String(now.getMonth() + 1).padStart(2, '0') +
+      String(now.getDate()).padStart(2, '0');
     const sequence = String(Math.floor(Math.random() * 10000)).padStart(4, '0');
     return "P" + dateStr + sequence;
   }
@@ -112,7 +112,7 @@ export function createApp(options = {}) {
       cleanExpiredSessions();
 
       logger.log('✅ Dashboard session created:', sessionId.slice(0, 12), '...');
-      
+
       res.json({
         sessionId,
         expiresAt: new Date(expiresAt).toISOString(),
@@ -148,7 +148,7 @@ export function createApp(options = {}) {
     try {
       const { sessionId } = req.body;
       const isValid = verifySession(sessionId);
-      
+
       if (isValid) {
         const session = dashboardSessions.get(sessionId);
         res.json({
@@ -179,6 +179,92 @@ export function createApp(options = {}) {
     }
   });
 
+  // Generate document recommendations
+  app.post('/api/gemini/recommendations', async (req, res) => {
+    try {
+      const { documentId } = req.body;
+
+      if (!documentId || !db) {
+        return res.status(400).json({ error: 'Missing required parameters' });
+      }
+
+      if (!geminiBalancer) {
+        return res.status(503).json({ error: 'Gemini service not available' });
+      }
+
+      logger.log('🎯 Generating recommendations for document:', documentId);
+
+      // Fetch document from Firestore
+      const docRef = db.collection('Documents').doc(documentId);
+      const docSnap = await docRef.get();
+
+      if (!docSnap.exists) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+
+      const docData = docSnap.data();
+      const content = docData.Content || '';
+      const summary = docData.Summary || '';
+
+      // Generate recommendations using Gemini
+      const prompt = `Analyze this document and provide exactly 4 actionable recommendations.
+
+Document Content (first 3000 chars): ${content.substring(0, 3000)}
+Document Summary: ${summary}
+
+Provide 4 specific, actionable recommendations for improving or extending this document. Each recommendation should be:
+1. Specific and actionable
+2. Relevant to the document's content
+3. Something that adds value
+
+Format your response as JSON:
+{
+  "recommendations": [
+    {"title": "Short title", "description": "Brief description", "action": "Specific action to take"},
+    {"title": "Short title", "description": "Brief description", "action": "Specific action to take"},
+    {"title": "Short title", "description": "Brief description", "action": "Specific action to take"},
+    {"title": "Short title", "description": "Brief description", "action": "Specific action to take"}
+  ]
+}`;
+
+      const result = await geminiBalancer.generate({
+        model: 'gemini-2.0-flash-exp',
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 1024,
+        },
+      });
+
+      const responseText = result.text.trim();
+
+      // Try to parse JSON response
+      let recommendations;
+      try {
+        // Remove markdown code blocks if present
+        const jsonText = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '');
+        const parsed = JSON.parse(jsonText);
+        recommendations = parsed.recommendations || [];
+      } catch (parseError) {
+        logger.error('Failed to parse recommendations JSON:', parseError);
+        // Fallback: extract text recommendations
+        recommendations = [
+          { title: "Review Document", description: "Review and update the document content", action: "Review the document" },
+          { title: "Add Details", description: "Add more detailed information", action: "Expand key sections" },
+          { title: "Organize Content", description: "Improve document structure", action: "Reorganize sections" },
+          { title: "Update Summary", description: "Update the document summary", action: "Revise summary" }
+        ];
+      }
+
+      logger.log(`✅ Generated ${recommendations.length} recommendations`);
+      res.json({ recommendations });
+
+    } catch (error) {
+      logger.error('❌ Recommendations generation error:', error);
+      res.status(500).json({ error: 'Failed to generate recommendations' });
+    }
+  });
+
   // ============================================================================
   // GITHUB OAUTH ENDPOINTS
   // ============================================================================
@@ -186,7 +272,7 @@ export function createApp(options = {}) {
   app.post('/api/github/oauth/token', async (req, res) => {
     try {
       const { code, client_id, redirect_uri } = req.body;
-      
+
       if (!code || !client_id) {
         return res.status(400).json({ error: 'Missing required parameters' });
       }
@@ -218,18 +304,18 @@ export function createApp(options = {}) {
       const tokenData = await tokenResponse.json();
 
       if (tokenData.error) {
-        return res.status(400).json({ 
-          error: tokenData.error, 
-          error_description: tokenData.error_description 
+        return res.status(400).json({
+          error: tokenData.error,
+          error_description: tokenData.error_description
         });
       }
 
       res.json(tokenData);
     } catch (error) {
       logger.error('GitHub OAuth error:', error);
-      res.status(500).json({ 
-        error: 'Internal server error', 
-        message: error.message 
+      res.status(500).json({
+        error: 'Internal server error',
+        message: error.message
       });
     }
   });
@@ -257,9 +343,9 @@ export function createApp(options = {}) {
       res.json(repos);
     } catch (error) {
       logger.error('GitHub repos fetch error:', error);
-      res.status(500).json({ 
-        error: 'Failed to fetch repositories', 
-        message: error.message 
+      res.status(500).json({
+        error: 'Failed to fetch repositories',
+        message: error.message
       });
     }
   });
@@ -269,7 +355,7 @@ export function createApp(options = {}) {
       const { owner, repo } = req.params;
       const path = req.params[0] || '';
       const authorization = req.headers.authorization;
-      
+
       if (!authorization) {
         return res.status(401).json({ error: 'Authorization header required' });
       }
@@ -291,9 +377,9 @@ export function createApp(options = {}) {
       res.json(contents);
     } catch (error) {
       logger.error('GitHub contents fetch error:', error);
-      res.status(500).json({ 
-        error: 'Failed to fetch repository contents', 
-        message: error.message 
+      res.status(500).json({
+        error: 'Failed to fetch repository contents',
+        message: error.message
       });
     }
   });

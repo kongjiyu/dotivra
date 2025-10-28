@@ -4,6 +4,7 @@ import type { User } from 'firebase/auth';
 import { buildApiUrl } from '@/lib/apiConfig';
 
 const GENERATE_API = buildApiUrl('api/gemini/generate');
+const TOOLS_EXECUTE_API = buildApiUrl('api/tools/execute');
 
 class AIService {
     private defaultModel = 'gemini-2.5-pro';
@@ -219,8 +220,8 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"Summar
                     maxTokens = 1024; // Tool requests are usually short
                 }
 
-                // Call Gemini API TEMP - USE LOCALHOST
-                const response = await fetch('http://localhost:3001/api/gemini/generate', {
+                // Call Gemini API
+                const response = await fetch(GENERATE_API, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -367,8 +368,8 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"Summar
                     console.log(`🔧 Executing tool: ${toolData.tool}`, toolData.args);
                     
                     // Execute actual tool via API
-                    try { //USE LOCALHOST TEMP
-                        const toolResponse = await fetch('http://localhost:3001/api/tools/execute', {
+                    try {
+                        const toolResponse = await fetch(TOOLS_EXECUTE_API, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({

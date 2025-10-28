@@ -239,7 +239,6 @@
 .tiptap mark,
 .tiptap .tiptap-highlight {
   color: inherit;
-  padding: 0.1em 0.2em;
   border-radius: 2px;
 }
 

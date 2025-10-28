@@ -1211,7 +1211,7 @@ const ToolBar = ({
                                                 }}
                                                 title="No Background"
                                             >
-                                                �?
+
                                             </button>
                                             <span className="text-xs text-gray-500">No Background</span>
                                         </div>
@@ -1709,6 +1709,79 @@ D --> E`;
                                                 </SelectContent>
                                             </Select>
                                         </div>
+
+                                        {/* Text Color Picker */}
+                                        <div className="px-2 py-2">
+                                            <div className="text-xs text-gray-500 mb-2">Text Color</div>
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {[
+                                                    { color: '#000000', name: 'Black' },
+                                                    { color: '#6B7280', name: 'Gray' },
+                                                    { color: '#DC2626', name: 'Red' },
+                                                    { color: '#2563EB', name: 'Blue' },
+                                                    { color: '#059669', name: 'Green' },
+                                                    { color: '#D97706', name: 'Orange' },
+                                                    { color: '#7C2D12', name: 'Brown' },
+                                                    { color: '#7C3AED', name: 'Purple' }
+                                                ].map(({ color, name }) => (
+                                                    <button
+                                                        key={color}
+                                                        className="w-8 h-8 rounded-lg border-2 hover:scale-105 transition-all duration-200 shadow-sm"
+                                                        style={{
+                                                            backgroundColor: `${color}20`,
+                                                            borderColor: color
+                                                        }}
+                                                        onClick={() => {
+                                                            if (!isEditingDisabled) {
+                                                                editor.chain().focus().setColor(color).run();
+                                                                setCurrentTextColor(color);
+                                                            }
+                                                        }}
+                                                        title={name}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Background Color Picker */}
+                                        <div className="px-2 py-2">
+                                            <div className="text-xs text-gray-500 mb-2">Background Color</div>
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {[
+                                                    { color: '#FEF3C7', name: 'Light Yellow' },
+                                                    { color: '#DBEAFE', name: 'Light Blue' },
+                                                    { color: '#DCFCE7', name: 'Light Green' },
+                                                    { color: '#FEE2E2', name: 'Light Red' },
+                                                    { color: '#F3E8FF', name: 'Light Purple' },
+                                                    { color: '#FED7AA', name: 'Light Orange' },
+                                                    { color: '#F3F4F6', name: 'Light Gray' },
+                                                    { color: '#FDF2F8', name: 'Light Pink' }
+                                                ].map(({ color, name }) => (
+                                                    <button
+                                                        key={color}
+                                                        className="w-8 h-8 rounded-lg border-2 hover:scale-105 transition-all duration-200 shadow-sm"
+                                                        style={{
+                                                            backgroundColor: `${color}80`,
+                                                            borderColor: color
+                                                        }}
+                                                        onClick={() => {
+                                                            if (!isEditingDisabled) {
+                                                                if (editor?.isActive('tableCell')) {
+                                                                    (editor.chain().focus() as any).setTableCellBackgroundColor(color).run();
+                                                                } else if (editor?.isActive('tableHeader')) {
+                                                                    (editor.chain().focus() as any).setTableHeaderBackgroundColor(color).run();
+                                                                } else {
+                                                                    editor.chain().focus().setHighlight({ color }).run();
+                                                                }
+                                                                setCurrentBackgroundColor(color);
+                                                            }
+                                                        }}
+                                                        title={name}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </div>
+
                                         <DropdownMenuSeparator />
                                     </>
                                 )}

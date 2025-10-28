@@ -114,6 +114,7 @@ export default function DocumentSummary() {
                 onEditorReady={handleSummaryEditorReady}
                 showToolbar={showToolbar}
                 className="min-h-[500px]"
+                forceUpdate={true}
             />
         </DocumentLayout>
     );

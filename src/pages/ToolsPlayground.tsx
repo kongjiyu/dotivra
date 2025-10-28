@@ -90,7 +90,7 @@ export default function ToolsPlayground() {
     }
   }, [tool, tools, documentId]);
 
-  const execEndpoint = useMemo(() => 'http://localhost:3001/api/tools/execute', []);
+  const execEndpoint = useMemo(() => buildApiUrl('api/tools/execute'), []);
 
   // Fetch original content before modification
   const fetchOriginalContent = async () => {

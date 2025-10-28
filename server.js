@@ -132,7 +132,7 @@ try {
 }
 
 // Import toolService and AIAgent
-import { initFirestore , getToolService } from './server/services/toolService.js';
+import { initFirestore, getToolService } from './server/services/toolService.js';
 import { AIAgent } from './server/aiAgent.js';
 
 // Initialize firestore in toolService
@@ -277,6 +277,72 @@ app.post('/api/gemini/generate', async (req, res) => {
 		});
 		const status = error?.status || 500;
 		res.status(status).json({ ok: false, error: error?.message || 'Failed to generate' });
+	}
+});
+
+// Generate document recommendations
+app.post('/api/gemini/recommendations', async (req, res) => {
+	try {
+		const { documentId, content } = req.body;
+
+		if (!documentId || !content) {
+			return res.status(400).json({ error: 'Missing documentId or content' });
+		}
+
+		console.log('🎯 Generating recommendations for document:', documentId);
+
+		// Generate recommendations using Gemini
+		const prompt = `Analyze this document and provide exactly 4 actionable recommendations.
+
+Document Content:
+${content}
+
+Provide 4 specific, actionable recommendations for improving or extending this document. Each recommendation should be:
+- Brief (1-2 sentences)
+- Actionable (user can immediately act on it)
+- Relevant to the document content
+
+Format your response as JSON:
+{
+  "recommendations": [
+    { "title": "...", "description": "..." },
+    { "title": "...", "description": "..." },
+    { "title": "...", "description": "..." },
+    { "title": "...", "description": "..." }
+  ]
+}`;
+
+		const result = await geminiBalancer.generate({
+			model: 'gemini-2.5-pro',
+			contents: [{ role: 'user', parts: [{ text: prompt }] }],
+			generationConfig: {
+				temperature: 0.7,
+				maxOutputTokens: 1024
+			}
+		});
+
+		// Parse JSON from response
+		let recommendations;
+		try {
+			const parsed = JSON.parse(result.text);
+			recommendations = parsed.recommendations || [];
+		} catch (parseError) {
+			console.error('Failed to parse recommendations JSON:', parseError);
+			// Fallback: extract text recommendations
+			recommendations = [
+				{ title: 'Review Content', description: 'Review and verify the generated recommendations' },
+				{ title: 'Add Details', description: 'Consider adding more specific details based on the context' },
+				{ title: 'Improve Structure', description: 'Enhance document structure for better readability' },
+				{ title: 'Add Examples', description: 'Include practical examples where appropriate' }
+			];
+		}
+
+		console.log(`✅ Generated ${recommendations.length} recommendations`);
+		res.json({ recommendations });
+
+	} catch (error) {
+		console.error('❌ Recommendations generation error:', error);
+		res.status(500).json({ error: 'Failed to generate recommendations' });
 	}
 });
 
@@ -1605,6 +1671,38 @@ app.get("/api/document/editor/history/:docId", async (req, res) => {
 	} catch (err) {
 		console.error('❌ Error fetching version history:', err.message);
 		console.error('Full error:', err);
+		res.status(500).json({ error: "SERVER_ERROR", details: err.message });
+	}
+});
+
+// ✅ Save document history snapshot
+app.post("/api/document/history", async (req, res) => {
+	try {
+		const { Document_Id, Content, Version, Edited_Time } = req.body;
+
+		if (!Document_Id || !Content || !Version) {
+			return res.status(400).json({ error: "Missing required fields" });
+		}
+
+		console.log('💾 Saving document history snapshot:', Document_Id, Version);
+
+		const historyData = {
+			Document_Id,
+			Content,
+			Version,
+			Edited_Time: Edited_Time || new Date().toISOString()
+		};
+
+		const historyRef = await addDoc(collection(firestore, "DocumentHistory"), historyData);
+
+		console.log('✅ Document history saved with ID:', historyRef.id);
+		res.status(201).json({
+			success: true,
+			id: historyRef.id,
+			...historyData
+		});
+	} catch (err) {
+		console.error('❌ Error saving document history:', err.message);
 		res.status(500).json({ error: "SERVER_ERROR", details: err.message });
 	}
 });
