@@ -703,20 +703,20 @@ app.post('/api/gemini/recommendations', async (req, res) => {
     }
 
     // Generate recommendations using Gemini
-    const prompt = `Analyze this document and provide exactly 4 actionable recommendations.
+    const prompt = `Analyze this document and provide exactly 3 actionable recommendations for the chat agent.
 
 Document Content:
 ${content}
 
-Provide 4 specific, actionable recommendations for improving or extending this document. Each recommendation should be:
+As a document editing AI assistant, provide 3 specific, actionable recommendations that would help improve or work with this document. Each recommendation should be:
 - Brief (1-2 sentences)
-- Actionable (user can immediately act on it)
-- Relevant to the document content
+- Actionable (user can immediately act on it through chat)
+- Relevant to the document content and editing tasks
+- Focused on document improvement, content enhancement, or structural changes
 
 Format your response as JSON:
 {
   "recommendations": [
-    { "title": "...", "description": "..." },
     { "title": "...", "description": "..." },
     { "title": "...", "description": "..." },
     { "title": "...", "description": "..." }
@@ -741,10 +741,9 @@ Format your response as JSON:
       logger.error('Failed to parse recommendations JSON:', parseError);
       // Fallback: extract text recommendations
       recommendations = [
-        { title: 'Review Content', description: 'Review and verify the generated recommendations' },
-        { title: 'Add Details', description: 'Consider adding more specific details based on the context' },
-        { title: 'Improve Structure', description: 'Enhance document structure for better readability' },
-        { title: 'Add Examples', description: 'Include practical examples where appropriate' }
+        { title: 'Review Content', description: 'Review and verify the document content for accuracy' },
+        { title: 'Improve Structure', description: 'Enhance document organization and readability' },
+        { title: 'Add Details', description: 'Consider adding more specific details and examples' }
       ];
     }
 
@@ -2402,13 +2401,20 @@ app.post('/api/mcp/generate', async (req, res) => {
     const availableTools = geminiWithMcp.getAvailableTools();
     logger.info(`📋 Available tools (${availableTools.length}):`, availableTools.map(t => t.name).join(', '));
 
-    const systemPrompt = `You are a document manipulation assistant with access to MCP (Model Context Protocol) tools.
+    const systemPrompt = `You are a professional document editor assistant with access to MCP (Model Context Protocol) tools. Your role is to help users create, edit, and improve their documents efficiently.
+
+YOUR PRIMARY RESPONSIBILITIES:
+1. Document Editing: Assist with content creation, modification, and formatting
+2. Content Enhancement: Suggest improvements, fix errors, and optimize structure
+3. Tool Execution: Use MCP tools immediately when users request document operations
+4. Collaborative Support: Provide helpful suggestions and answer questions about the document
 
 CRITICAL RULES:
 1. When users ask to perform ANY document operation, you MUST call the appropriate function tool
 2. DO NOT explain what you would do - IMMEDIATELY CALL THE FUNCTION
 3. DO NOT ask for confirmation - JUST DO IT
 4. DO NOT suggest alternatives - USE THE TOOLS
+5. Always maintain document quality and professional formatting standards
 
 DOCUMENT EDITOR HTML FORMATTING RULES:
 When creating or replacing content, you MUST follow these strict HTML formatting rules:

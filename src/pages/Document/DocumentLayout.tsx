@@ -51,6 +51,7 @@ export default function DocumentLayout({
     const [isAIGenerating, setIsAIGenerating] = useState(false);
     const [initialChatMessage, setInitialChatMessage] = useState<string>('');
     const [selectedTextForChat, setSelectedTextForChat] = useState<string>('');
+
     const navigate = useNavigate();
     const location = useLocation();
 
@@ -58,7 +59,6 @@ export default function DocumentLayout({
     const shouldShowChatBot = () => {
         const path = location.pathname;
         return path.includes('/document/editor') ||
-            path.includes('/document/summary') ||
             (path.includes('/document/') &&
                 !path.includes('/project') &&
                 !path.includes('/history'));
@@ -68,16 +68,37 @@ export default function DocumentLayout({
     const shouldShowSyncStatus = () => {
         const path = location.pathname;
         return path.includes('/document/editor') ||
-            path.includes('/document/summary') ||
             (path.includes('/document/') &&
                 !path.includes('/project') &&
                 !path.includes('/history'));
     };
 
-    // Helper function to check if title editing is allowed (only on editor/summary tabs)
+    // Helper function to check if title editing is allowed (only on editor tab)
     const shouldAllowTitleEdit = () => {
         const path = location.pathname;
-        return path.includes('/document/editor') || path.includes('/document/summary');
+        console.log('[DocumentLayout] Checking title edit permission for path:', path);
+
+        // Allow title editing on:
+        // 1. /document/editor
+        // 2. /document/:documentId (main document editor route)
+        // Exclude history and project pages
+        const isEditor = path === '/document/editor' || path.endsWith('/document/editor');
+        const isDocumentWithId = /\/document\/[a-zA-Z0-9\-_]+$/.test(path);
+        const isHistory = path.includes('/history');
+        const isProject = path.includes('/project');
+
+        const allowed = isEditor || (isDocumentWithId && !isHistory && !isProject);
+
+        console.log('[DocumentLayout] Title edit check:', {
+            path,
+            isEditor,
+            isDocumentWithId,
+            isHistory,
+            isProject,
+            allowed
+        });
+
+        return allowed;
     };
 
     // Note: Chat sidebar state now persists across tab navigation
@@ -89,9 +110,7 @@ export default function DocumentLayout({
         const path = location.pathname;
         switch (tabName) {
             case 'editor':
-                return path.includes('/document/editor') || (path.includes('/document/') && !path.includes('/summary') && !path.includes('/history'));
-            case 'summary':
-                return path.includes('/summary');
+                return path.includes('/document/editor') || (path.includes('/document/') && !path.includes('/history'));
             case 'history':
                 return path.includes('/history');
             default:
@@ -152,13 +171,6 @@ export default function DocumentLayout({
                     navigate(`${basePath}/editor`);
                 }
                 break;
-            case 'summary':
-                if (documentId) {
-                    navigate(`${basePath}/summary/${documentId}`);
-                } else {
-                    navigate(`${basePath}/summary`);
-                }
-                break;
             case 'history':
                 if (documentId) {
                     navigate(`${basePath}/history/${documentId}`);
@@ -177,12 +189,13 @@ export default function DocumentLayout({
 
     const handleTitleChange = async (newTitle: string) => {
         setDocumentTitle(newTitle);
+        console.log(newTitle);
 
         // Save title to Firebase if we have a documentId
         if (documentId) {
             try {
                 await FirestoreService.updateDocument(documentId, {
-                    DocumentName: newTitle,
+                    Title: newTitle,
                     Updated_Time: new Date()
                 });
             } catch (error) {
@@ -197,37 +210,13 @@ export default function DocumentLayout({
         setTimeout(() => setIsAIGenerating(false), 600);
     };
 
-    const handleSaveAsTemplate = async () => {
-        try {
-            const { saveDocumentAsTemplate, showNotification } = await import('@/services/documentService');
-
-            const documentToSave = {
-                id: documentId,
-                DocumentName: documentTitle,
-                Content: documentContent,
-                DocumentType: 'Document',
-                DocumentCategory: 'general',
-                Project_Id: 'current-project',
-                User_Id: 'current-user',
-                Created_Time: new Date(),
-                Updated_Time: new Date(),
-                IsDraft: true
-            };
-
-            const template = await saveDocumentAsTemplate(documentToSave);
-            showNotification(`Template "${template.TemplateName}" created successfully!`, 'success');
-        } catch (error) {
-            console.error('Error creating template:', error);
-        }
-    };
-
     const handleCopyDocument = async () => {
         try {
             const { copyDocument, showNotification } = await import('@/services/documentService');
 
             const documentToCopy = {
                 id: documentId,
-                DocumentName: documentTitle,
+                Title: documentTitle,
                 Content: documentContent,
                 DocumentType: 'Document',
                 DocumentCategory: 'general',
@@ -239,7 +228,7 @@ export default function DocumentLayout({
             };
 
             const copiedDoc = await copyDocument(documentToCopy);
-            showNotification(`Document copy "${copiedDoc.DocumentName}" created successfully!`, 'success');
+            showNotification(`Document copy "${copiedDoc.Title || copiedDoc.DocumentName}" created successfully!`, 'success');
         } catch (error) {
             console.error('Error copying document:', error);
         }
@@ -352,7 +341,6 @@ export default function DocumentLayout({
                     <div className="fixed top-20 left-0 right-0 z-30 bg-white border-b border-gray-200">
                         <DocumentMenu
                             onUpdate={setDocumentContent}
-                            onSaveAsTemplate={handleSaveAsTemplate}
                             onCopyDocument={handleCopyDocument}
                             documentTitle={documentTitle}
                             editor={currentEditor}
@@ -360,7 +348,7 @@ export default function DocumentLayout({
                             context="main"
                             currentDocument={{
                                 id: documentId,
-                                DocumentName: documentTitle,
+                                Title: documentTitle,
                                 Content: documentContent,
                                 DocumentType: 'Document',
                                 DocumentCategory: 'general',
@@ -372,7 +360,6 @@ export default function DocumentLayout({
                             }}
                             onToolbarToggle={setShowToolbar}
                             onNavigationPaneToggle={setShowNavigationPane}
-                            isSummaryPage={isTabActive('summary')}
                             documentId={documentId}
                         />
                     </div>
@@ -390,7 +377,7 @@ export default function DocumentLayout({
                     }
                 >
                     {/* Navigation Pane Column - 15% width - Conditionally Rendered */}
-                    {/* Only show NavigationPane on editor/summary pages, not on history tab */}
+                    {/* Only show NavigationPane on editor pages, not on history tab */}
                     {showNavigationPane && !isTabActive('history') && (
                         <div className="w-[15%] min-w-[200px] border-r border-gray-200 bg-gray-50/50 relative">
                             <NavigationPane
@@ -419,7 +406,7 @@ export default function DocumentLayout({
                     )}
 
                     {/* Expand button - Top left when collapsed (chatbar style) */}
-                    {/* Only show expand button on editor/summary pages, not on history tab */}
+                    {/* Only show expand button on editor pages, not on history tab */}
                     {!showNavigationPane && !isTabActive('history') && (
                         <button
                             onClick={() => {
@@ -445,7 +432,7 @@ export default function DocumentLayout({
                     </div>
 
                     {/* ChatSidebar Column - Same level as Document Editor - Conditionally Rendered */}
-                    {/* Only show ChatSidebar on editor/summary pages when open */}
+                    {/* Only show ChatSidebar on editor pages when open */}
                     {chatSidebarOpen && shouldShowChatBot() && (
                         <div className="w-[27%] border-l border-gray-200 bg-white flex-shrink-0 relative">
                             <div className="h-full">
@@ -463,14 +450,12 @@ export default function DocumentLayout({
                                     onClearSelection={() => setSelectedTextForChat('')}
                                     suggestions={repositoryInfo ? [
                                         "Analyze repository structure",
-                                        "Explain codebase patterns",
-                                        "Improve React components",
-                                        "Debug authentication flow",
+                                        "Improve Document Structure",
+                                        "Summarize my Document",
                                     ] : [
-                                        "Strengthen success metrics",
-                                        "Review executive summary",
-                                        "Add competitor analysis",
-                                        "Outline next steps",
+                                        "Improve document structure",
+                                        "Review and enhance content",
+                                        "Add supporting details",
                                     ]}
                                 />
                             </div>

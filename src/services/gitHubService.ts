@@ -226,6 +226,112 @@ class GitHubService {
       };
     }
   }
+
+  // Get repository file structure (tree)
+  async getRepositoryTree(
+    owner: string,
+    repo: string,
+    options: {
+      branch?: string;
+      recursive?: boolean;
+    } = {}
+  ): Promise<{
+    sha: string;
+    url: string;
+    tree: Array<{
+      path: string;
+      mode: string;
+      type: 'blob' | 'tree';
+      sha: string;
+      size?: number;
+      url: string;
+    }>;
+    truncated: boolean;
+  }> {
+    const { branch = 'main', recursive = true } = options;
+
+    // First get the branch to find the tree SHA
+    const branchData = await this.githubFetch(`/repos/${owner}/${repo}/branches/${branch}`);
+    const treeSha = branchData.commit.commit.tree.sha;
+
+    // Get the tree with recursive option
+    const params = recursive ? '?recursive=1' : '';
+    return await this.githubFetch(`/repos/${owner}/${repo}/git/trees/${treeSha}${params}`);
+  }
+
+  // Get repository commits
+  async getCommits(
+    owner: string,
+    repo: string,
+    options: {
+      branch?: string;
+      page?: number;
+      per_page?: number;
+      path?: string;
+      author?: string;
+      since?: string;
+      until?: string;
+    } = {}
+  ): Promise<Array<{
+    sha: string;
+    commit: {
+      author: {
+        name: string;
+        email: string;
+        date: string;
+      };
+      committer: {
+        name: string;
+        email: string;
+        date: string;
+      };
+      message: string;
+      tree: {
+        sha: string;
+        url: string;
+      };
+      url: string;
+      comment_count: number;
+    };
+    url: string;
+    html_url: string;
+    author: {
+      login: string;
+      avatar_url: string;
+    } | null;
+    committer: {
+      login: string;
+      avatar_url: string;
+    } | null;
+    parents: Array<{
+      sha: string;
+      url: string;
+      html_url: string;
+    }>;
+  }>> {
+    const {
+      branch = 'main',
+      page = 1,
+      per_page = 30,
+      path,
+      author,
+      since,
+      until
+    } = options;
+
+    const params = new URLSearchParams({
+      sha: branch,
+      page: page.toString(),
+      per_page: per_page.toString()
+    });
+
+    if (path) params.append('path', path);
+    if (author) params.append('author', author);
+    if (since) params.append('since', since);
+    if (until) params.append('until', until);
+
+    return await this.githubFetch(`/repos/${owner}/${repo}/commits?${params}`);
+  }
 }
 
 export default GitHubService;

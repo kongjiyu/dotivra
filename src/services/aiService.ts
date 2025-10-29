@@ -3,7 +3,7 @@ import { repositoryContextService } from './repositoryContextService';
 import type { User } from 'firebase/auth';
 import { buildApiUrl } from '@/lib/apiConfig';
 
-const GENERATE_API = buildApiUrl('api/gemini/generate');
+const GENERATE_API = buildApiUrl('api/api/gemini/generate');
 const TOOLS_EXECUTE_API = buildApiUrl('api/tools/execute');
 
 class AIService {
@@ -66,11 +66,10 @@ You will be called MULTIPLE TIMES. Each call should return ONE stage. Track your
 
 4. **SUMMARY STAGE** (Final call - wrap up)
    - Provide a clear summary with a title (use ## for markdown heading)
-   - **IMPORTANT: Always start summary content with "Summary" as the heading in html**
    - Explain what was accomplished
    - Content: Full summary in natural language with formatting
    - **Set nextStage: "done"**
-   - Example: {"stage":"summary","thought":"Done","content":"Summary\\n\\nI've added the introduction section to your document!","nextStage":"done"}
+   - Example: {"stage":"summary","thought":"Done","content":"I've added the introduction section to your document!","nextStage":"done"}
 
 **YOUR TOOLS (use exact arg shapes):**
 - get_document_content: Read the entire document (args: {documentId, reason})
@@ -88,6 +87,18 @@ You will be called MULTIPLE TIMES. Each call should return ONE stage. Track your
 - replace_doument_summary: Replace summary range (args: {position:{from:number, to:number}, content, reason})
 - remove_document_summary: Remove summary range (args: {position:{from:number, to:number}, reason})
 - search_document_summary: Search within summary (args: {query, reason})
+
+**GITHUB REPOSITORY TOOLS:**
+- get_repo_structure: Get complete file tree of a GitHub repository (args: {repoLink, branch?, reason})
+  * repoLink: GitHub URL (https://github.com/owner/repo) or "owner/repo" format
+  * branch: Branch name (optional, defaults to "main")
+  * Returns: Complete tree of all files and directories with paths and types
+- get_repo_commits: Get commit history from a GitHub repository (args: {repoLink, branch?, page?, per_page?, reason})
+  * repoLink: GitHub URL or "owner/repo" format
+  * branch: Branch name (optional, defaults to "main")
+  * page: Page number for pagination (optional, default: 1)
+  * per_page: Commits per page (optional, default: 30, max: 100)
+  * Returns: List of commits with SHA, message, author, date, and URL
 
 **CRITICAL: ACCURATE POSITION CALCULATION FOR remove_document_content and replace_document_content**
 
@@ -165,7 +176,7 @@ Call 2 - Reasoning: {"stage":"reasoning","thought":"Based on planning: need to f
 Call 3 - ToolUsed: {"stage":"toolUsed","thought":"Executing search for intro","content":{"tool":"search_document_content","args":{"documentId":"123","query":"introduction","reason":"Finding intro section"},"description":"Looking for the introduction section..."},"nextStage":"reasoning"}
 Call 4 - Reasoning: {"stage":"reasoning","thought":"Found intro, now insert content","content":"Great! I found the introduction. Now I'll add your content right after it.","nextStage":"toolUsed"}
 Call 5 - ToolUsed: {"stage":"toolUsed","thought":"Inserting content","content":{"tool":"insert_document_content","args":{"documentId":"123","content":"New content here","position":"after-intro","reason":"Adding user content"},"description":"Adding your content after the introduction..."},"nextStage":"summary"}
-Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"Summary\\n\\nI've added your content right after the introduction section!","nextStage":"done"}`;
+Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've added your content right after the introduction section!","nextStage":"done"}`;
 
             // Build full prompt with selected text
             let fullPrompt = prompt;
@@ -821,9 +832,40 @@ Analyze the request, leverage the repository knowledge, and provide a comprehens
 You are generating content for a TipTap rich text editor. Follow these HTML formatting rules:
 
 **Headings:** Use <h1> to <h5> (H6 not supported)
-- <h1>Main Title</h1>
-- <h2>Section</h2>
-- <h3>Subsection</h3>
+- <h1>Main Title</h1> - Use ONLY for document title or project name (ONCE per document)
+- <h2>Section</h2> - Major sections (Overview, Installation, Usage, API Reference, etc.)
+- <h3>Subsection</h3> - Subsections within a section (Installation Steps, Configuration, Examples)
+- <h4>Detail</h4> - Detailed subsections (Step 1, Option A, Specific feature)
+- <h5>Minor Detail</h5> - Minor details or sub-items
+
+**Heading Hierarchy Rules:**
+1. Start with H1 for the main document title (e.g., "User Manual", "API Documentation", "Project Overview")
+2. Use H2 for major sections that divide the document (e.g., "Overview", "Getting Started", "Features")
+3. Use H3 for subsections under H2 (e.g., under "Installation": "Prerequisites", "Steps", "Troubleshooting")
+4. Use H4 for detailed items under H3 (e.g., under "Steps": "Step 1: Download", "Step 2: Configure")
+5. Never skip levels (e.g., don't go from H2 to H4 without H3)
+6. Keep heading hierarchy logical and consistent throughout the document
+
+**Heading Examples:**
+<h1>Project User Manual</h1>
+<h2>Overview</h2>
+<p>This manual covers...</p>
+<h2>Installation</h2>
+<h3>Prerequisites</h3>
+<p>Before installing...</p>
+<h3>Installation Steps</h3>
+<h4>Step 1: Download</h4>
+<p>Download from...</p>
+<h4>Step 2: Install</h4>
+<p>Run the installer...</p>
+<h2>Usage</h2>
+<h3>Basic Usage</h3>
+<p>To use the application...</p>
+<h3>Advanced Features</h3>
+<h4>Feature A</h4>
+<p>Description...</p>
+<h4>Feature B</h4>
+<p>Description...</p>
 
 **Text Formatting:**
 - <strong>Bold</strong>

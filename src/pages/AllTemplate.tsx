@@ -30,7 +30,7 @@ const AllTemplate: React.FC = () => {
   const [templates, setTemplates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   // AI Generation states
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationRepository, setGenerationRepository] = useState('');
@@ -43,11 +43,11 @@ const AllTemplate: React.FC = () => {
       try {
         setLoading(true);
         const response = await fetch('/api/templates');
-        
+
         if (!response.ok) {
           throw new Error(`Failed to fetch templates: ${response.status}`);
         }
-        
+
         const data = await response.json();
         setTemplates(data.templates || []);
         setError(null);
@@ -74,27 +74,27 @@ const AllTemplate: React.FC = () => {
         icon: FileText,
         category: (t.Category as 'user' | 'developer' | 'general') ?? 'general',
       };
-      
+
       return result;
     });
-    
+
     return mapped;
   }, [templates]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let result = uiTemplates;
-    
+
     // Filter by category
     if (selectedCategory !== 'all') {
       result = result.filter(t => t.category === selectedCategory);
     }
-    
+
     // Filter by search query
     if (q) {
       result = result.filter(t => (t.name + ' ' + t.description).toLowerCase().includes(q));
     }
-    
+
     return result;
   }, [query, uiTemplates, selectedCategory]);
 
@@ -148,9 +148,9 @@ const AllTemplate: React.FC = () => {
 
     try {
       const idToken = await user.getIdToken();
-      
+
       let finalProjectId = projectId;
-      
+
       // Create new project if needed
       if (!projectId && newProjectName) {
         const createProjectRes = await fetch('/api/projects', {
@@ -171,7 +171,7 @@ const AllTemplate: React.FC = () => {
           const errorData = await createProjectRes.json().catch(() => ({}));
           throw new Error(errorData.error || 'Failed to create project');
         }
-        
+
         const newProject = await createProjectRes.json();
         finalProjectId = newProject.project?.Project_Id || newProject.projectId;
       }
@@ -183,7 +183,7 @@ const AllTemplate: React.FC = () => {
 
       // Determine repository URL - either from modal selection or from existing project
       let repositoryUrl = selectedRepo;
-      
+
       // If using existing project and no repo selected in modal, fetch project's GitHub repo
       if (!repositoryUrl && finalProjectId && projectId) {
         try {
@@ -209,14 +209,14 @@ const AllTemplate: React.FC = () => {
 
       if (repositoryUrl && user) {
         const repoMatch = repositoryUrl.match(/(?:https?:\/\/github\.com\/)?([^\/]+)\/([^\/\s]+)/);
-        
+
         if (repoMatch) {
           const [, owner, repo] = repoMatch;
           const repoFullName = `${owner}/${repo}`;
-          
+
           setGenerationRepository(repoFullName);
           setIsGenerating(true);
-          
+
           const steps: GenerationStep[] = [
             { id: 'parse', label: 'Parsing repository information', status: 'completed', details: repoFullName },
             { id: 'structure', label: 'Fetching repository structure', status: 'in-progress', details: 'Analyzing files and directories...' },
@@ -228,13 +228,13 @@ const AllTemplate: React.FC = () => {
           ];
           setGenerationSteps(steps);
           setCurrentGenerationStep('structure');
-          
+
           // Progress callback for iterative AI
           const handleProgress = (step: string, detail?: string) => {
             setGenerationSteps(prev => prev.map(s => {
               // Mark completed steps based on workflow
               const completedSteps = ['parse'];
-              
+
               if (step === 'analysis' || step === 'iteration' || step === 'files' || step === 'generate' || step === 'done') {
                 completedSteps.push('structure');
               }
@@ -250,21 +250,21 @@ const AllTemplate: React.FC = () => {
               if (step === 'done') {
                 completedSteps.push('generate');
               }
-              
+
               // Mark completed
               if (completedSteps.includes(s.id) && s.id !== step) {
                 return { ...s, status: 'completed' as const };
               }
-              
+
               // Update current step
               if (s.id === step) {
-                return { 
-                  ...s, 
+                return {
+                  ...s,
                   status: step === 'done' ? 'completed' as const : 'in-progress' as const,
-                  details: detail || s.details 
+                  details: detail || s.details
                 };
               }
-              
+
               // Map 'analysis' and 'files' to 'iteration' step
               if ((step === 'analysis' || step === 'files') && s.id === 'iteration') {
                 return {
@@ -273,7 +273,7 @@ const AllTemplate: React.FC = () => {
                   details: detail || s.details
                 };
               }
-              
+
               // Map final content generation to 'generate' step
               if (step === 'init' && s.id === 'structure') {
                 return {
@@ -282,12 +282,12 @@ const AllTemplate: React.FC = () => {
                   details: detail || s.details
                 };
               }
-              
+
               return s;
             }));
             setCurrentGenerationStep(step);
           };
-          
+
           try {
             // Generate content using section-by-section generation for better handling of long documents
             console.log('🚀 Starting section-by-section AI generation...');
@@ -301,22 +301,22 @@ const AllTemplate: React.FC = () => {
             );
             console.log('✅ AI generation completed, content length:', content.length);
             console.log('📄 Generated content preview:', content.substring(0, 300));
-            
+
             // Finalize
             handleProgress('done', 'Document ready!');
             await new Promise(resolve => setTimeout(resolve, 500));
-            
+
             console.log('✅ All steps completed, proceeding to create document');
           } catch (aiError) {
             console.error('❌ AI generation failed:', aiError);
-            
+
             // Update steps to show error
-            setGenerationSteps(prev => prev.map(step => 
-              step.status === 'in-progress' 
+            setGenerationSteps(prev => prev.map(step =>
+              step.status === 'in-progress'
                 ? { ...step, status: 'error' as const, details: 'Failed - using fallback' }
                 : step
             ));
-            
+
             // Wait a bit to show error
             await new Promise(resolve => setTimeout(resolve, 1500));
           }
@@ -348,7 +348,7 @@ const AllTemplate: React.FC = () => {
           'Authorization': `Bearer ${idToken}`
         },
         body: JSON.stringify({
-          DocumentName: documentName,
+          Title: documentName,
           DocumentType: template.TemplateName || 'user-manual',
           DocumentCategory: documentCategory,
           Content: content,
@@ -366,9 +366,9 @@ const AllTemplate: React.FC = () => {
 
       const docData = await createDocRes.json();
       const createdDocument = docData.document || docData;
-      
+
       setIsGenerating(false);
-      
+
       // Navigate to document editor, passing the full document data including content
       // This allows the editor to display content immediately without waiting for Firestore
       navigate(`/document/${docData.documentId}`, {
@@ -407,11 +407,10 @@ const AllTemplate: React.FC = () => {
         <div className="flex gap-2 mb-6 border-b border-gray-200">
           <button
             onClick={() => setSelectedCategory('all')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-              selectedCategory === 'all'
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${selectedCategory === 'all'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             All Templates
             <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-gray-100">
@@ -420,11 +419,10 @@ const AllTemplate: React.FC = () => {
           </button>
           <button
             onClick={() => setSelectedCategory('developer')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-              selectedCategory === 'developer'
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${selectedCategory === 'developer'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             Developer
             <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
@@ -433,11 +431,10 @@ const AllTemplate: React.FC = () => {
           </button>
           <button
             onClick={() => setSelectedCategory('user')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${
-              selectedCategory === 'user'
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${selectedCategory === 'user'
                 ? 'border-blue-600 text-blue-600'
                 : 'border-transparent text-gray-600 hover:text-gray-900'
-            }`}
+              }`}
           >
             User
             <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700">

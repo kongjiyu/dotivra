@@ -4,6 +4,15 @@ import { db } from '@/config/firebase';
 import { API_ENDPOINTS } from '@/lib/apiConfig';
 
 export type SyncStatus = 'synced' | 'syncing' | 'pending' | 'error';
+
+/**
+ * SyncChannel Types:
+ * - 'content': Editor content (document.Content field) - Tracked in version history
+ * - 'summary': Summary content (document.Summary field) - NOT tracked in version history
+ * 
+ * ⚠️ Version history only saves snapshots of 'content' channel changes,
+ * not 'summary' channel changes.
+ */
 export type SyncChannel = 'content' | 'summary';
 
 interface UseDocumentSyncOptions {

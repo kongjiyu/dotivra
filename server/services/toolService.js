@@ -93,6 +93,8 @@ export const getToolService = () => {
                 'search_document_summary': search_document_summary,
                 'get_all_documents_metadata_within_project': get_all_documents_metadata_within_project,
                 'get_document_summary': get_document_summary,
+                'get_repo_structure': get_repo_structure,
+                'get_repo_commits': get_repo_commits,
             };
 
             const tool = toolMap[toolName];
@@ -340,6 +342,36 @@ export const getToolsRegistry = async () => {
                     required: ['query']
                 },
                 annotations: { title: 'Search Summary', readOnlyHint: true, idempotentHint: true }
+            },
+            {
+                name: 'get_repo_structure',
+                description: 'Get the file structure of a GitHub repository. Returns a complete tree of files and directories.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        repoLink: { type: 'string', description: 'GitHub repository URL (e.g., https://github.com/owner/repo) or owner/repo format' },
+                        branch: { type: 'string', description: 'Branch name (default: main)', default: 'main' },
+                        reason: { type: 'string', description: 'Why retrieving the repository structure' }
+                    },
+                    required: ['repoLink', 'reason']
+                },
+                annotations: { title: 'Get Repo Structure', readOnlyHint: true, idempotentHint: true }
+            },
+            {
+                name: 'get_repo_commits',
+                description: 'Get commit history from a GitHub repository with pagination support.',
+                inputSchema: {
+                    type: 'object',
+                    properties: {
+                        repoLink: { type: 'string', description: 'GitHub repository URL or owner/repo format' },
+                        branch: { type: 'string', description: 'Branch name (default: main)', default: 'main' },
+                        page: { type: 'number', description: 'Page number for pagination (default: 1)', default: 1 },
+                        per_page: { type: 'number', description: 'Number of commits per page (default: 30, max: 100)', default: 30 },
+                        reason: { type: 'string', description: 'Why retrieving the commit history' }
+                    },
+                    required: ['repoLink', 'reason']
+                },
+                annotations: { title: 'Get Repo Commits', readOnlyHint: true, idempotentHint: true }
             }
         ]
     }
@@ -1139,3 +1171,160 @@ export const resetDocument = () => {
     currentDocumentId = null;
     currentDocumentContent = '';
 }
+
+// Parse GitHub repository link to extract owner and repo
+const parseGitHubRepo = (repoLink) => {
+    // Handle both full URLs and owner/repo format
+    if (repoLink.includes('github.com')) {
+        const match = repoLink.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+        if (match) {
+            return { owner: match[1], repo: match[2].replace('.git', '') };
+        }
+    } else if (repoLink.includes('/')) {
+        const [owner, repo] = repoLink.split('/');
+        return { owner, repo: repo.replace('.git', '') };
+    }
+    throw new Error('Invalid GitHub repository link format. Use "owner/repo" or full GitHub URL');
+};
+
+// Tool: Get repository structure
+export const get_repo_structure = async ({ repoLink, branch = 'main', reason }) => {
+    console.log(`🌳 get_repo_structure called for repo: ${repoLink}, branch: ${branch}`);
+
+    try {
+        const { owner, repo } = parseGitHubRepo(repoLink);
+
+        // Import node-fetch for server-side API calls
+        const fetch = (await import('node-fetch')).default;
+
+        // Get branch to find tree SHA
+        const branchUrl = `https://api.github.com/repos/${owner}/${repo}/branches/${branch}`;
+        const branchResponse = await fetch(branchUrl, {
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'Dotivra-Document-App'
+            }
+        });
+
+        if (!branchResponse.ok) {
+            const error = await branchResponse.json().catch(() => ({}));
+            throw new Error(error.message || `Failed to fetch branch: ${branchResponse.statusText}`);
+        }
+
+        const branchData = await branchResponse.json();
+        const treeSha = branchData.commit.commit.tree.sha;
+
+        // Get tree recursively
+        const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${treeSha}?recursive=1`;
+        const treeResponse = await fetch(treeUrl, {
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'Dotivra-Document-App'
+            }
+        });
+
+        if (!treeResponse.ok) {
+            const error = await treeResponse.json().catch(() => ({}));
+            throw new Error(error.message || `Failed to fetch tree: ${treeResponse.statusText}`);
+        }
+
+        const treeData = await treeResponse.json();
+
+        // Format tree structure for readability
+        const formattedTree = treeData.tree.map(item => ({
+            path: item.path,
+            type: item.type, // 'blob' (file) or 'tree' (directory)
+            size: item.size || 0
+        }));
+
+        const result = {
+            success: true,
+            reason,
+            operation: 'get_repo_structure',
+            owner,
+            repo,
+            branch,
+            totalItems: formattedTree.length,
+            tree: formattedTree,
+            truncated: treeData.truncated
+        };
+
+        logToolUsage('get_repo_structure', { repoLink, branch, reason }, result);
+        return result;
+
+    } catch (error) {
+        console.error('❌ Error getting repo structure:', error);
+        return {
+            success: false,
+            reason,
+            error: error.message,
+            tree: []
+        };
+    }
+};
+
+// Tool: Get repository commits
+export const get_repo_commits = async ({ repoLink, branch = 'main', page = 1, per_page = 30, reason }) => {
+    console.log(`📜 get_repo_commits called for repo: ${repoLink}, branch: ${branch}, page: ${page}`);
+
+    try {
+        const { owner, repo } = parseGitHubRepo(repoLink);
+
+        // Validate pagination parameters
+        const validPage = Math.max(1, parseInt(page) || 1);
+        const validPerPage = Math.min(100, Math.max(1, parseInt(per_page) || 30));
+
+        // Import node-fetch for server-side API calls
+        const fetch = (await import('node-fetch')).default;
+
+        const commitsUrl = `https://api.github.com/repos/${owner}/${repo}/commits?sha=${branch}&page=${validPage}&per_page=${validPerPage}`;
+        const response = await fetch(commitsUrl, {
+            headers: {
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'Dotivra-Document-App'
+            }
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.message || `Failed to fetch commits: ${response.statusText}`);
+        }
+
+        const commits = await response.json();
+
+        // Format commits for readability
+        const formattedCommits = commits.map(commit => ({
+            sha: commit.sha.substring(0, 7), // Short SHA
+            message: commit.commit.message.split('\n')[0], // First line only
+            author: commit.commit.author.name,
+            email: commit.commit.author.email,
+            date: commit.commit.author.date,
+            url: commit.html_url
+        }));
+
+        const result = {
+            success: true,
+            reason,
+            operation: 'get_repo_commits',
+            owner,
+            repo,
+            branch,
+            page: validPage,
+            per_page: validPerPage,
+            commitsCount: formattedCommits.length,
+            commits: formattedCommits
+        };
+
+        logToolUsage('get_repo_commits', { repoLink, branch, page, per_page, reason }, result);
+        return result;
+
+    } catch (error) {
+        console.error('❌ Error getting repo commits:', error);
+        return {
+            success: false,
+            reason,
+            error: error.message,
+            commits: []
+        };
+    }
+};

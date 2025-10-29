@@ -129,145 +129,67 @@ function isContentModifyingTool(tool: string): boolean {
 
 /**
  * Apply color-coded highlights to HTML content based on changes
- * This version preserves HTML structure while highlighting changes
+ * This version creates a complete diff view showing all changes
  */
 function applyHighlightsToHtml(htmlContent: string, changes: HighlightedChange[]): string {
-    // Create a temporary div to parse HTML
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlContent, 'text/html');
-    const body = doc.body;
+    if (changes.length === 0) {
+        return htmlContent; // No changes, return original
+    }
 
-    // Sort changes by position (reverse order to apply from end to start)
-    const sortedChanges = [...changes].sort((a, b) => b.from - a.from);
+    // Sort changes by position (start from beginning)
+    const sortedChanges = [...changes].sort((a, b) => a.from - b.from);
 
-    // Apply highlights by wrapping content at specified positions
+    let result = '';
+    let lastPosition = 0;
+
     for (const change of sortedChanges) {
-        try {
-            const { type, from, to, content: newContent } = change;
+        const { type, from, to, content: newContent, originalContent } = change;
 
-            // Find the text node and offset at the specified position
-            const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-            
-            let currentPos = 0;
-            let startNode: Node | null = null;
-            let startOffset = 0;
-            let endNode: Node | null = null;
-            let endOffset = 0;
+        // Add unchanged content before this change
+        if (from > lastPosition) {
+            result += htmlContent.substring(lastPosition, from);
+        }
 
-            // Find start position
-            let node = walker.nextNode();
-            while (node) {
-                const textLength = node.textContent?.length || 0;
-                if (currentPos + textLength >= from) {
-                    startNode = node;
-                    startOffset = from - currentPos;
-                    break;
-                }
-                currentPos += textLength;
-                node = walker.nextNode();
-            }
+        // Apply highlighting based on change type
+        switch (type) {
+            case 'deletion':
+                // Show deleted content in red with strikethrough
+                const deletedText = originalContent || htmlContent.substring(from, to);
+                result += `<span class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px;">${escapeHtml(deletedText)}</span>`;
+                lastPosition = to;
+                break;
 
-            // Find end position for deletions and replacements
-            if (type === 'deletion' || type === 'replacement') {
-                currentPos = 0;
-                walker.currentNode = body;
-                node = walker.nextNode();
-                while (node) {
-                    const textLength = node.textContent?.length || 0;
-                    if (currentPos + textLength >= to) {
-                        endNode = node;
-                        endOffset = to - currentPos;
-                        break;
-                    }
-                    currentPos += textLength;
-                    node = walker.nextNode();
-                }
-            }
+            case 'addition':
+                // Show new content in green
+                result += `<span class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px;">${newContent || ''}</span>`;
+                lastPosition = from; // Don't advance past the insertion point
+                break;
 
-            // Apply highlighting based on change type
-            if (startNode) {
-                switch (type) {
-                    case 'deletion':
-                        // Wrap deleted content in red background (don't remove it)
-                        if (endNode && startNode === endNode) {
-                            const textNode = startNode as Text;
-                            const beforeText = textNode.textContent?.substring(0, startOffset) || '';
-                            const deletedText = textNode.textContent?.substring(startOffset, endOffset) || '';
-                            const afterText = textNode.textContent?.substring(endOffset) || '';
-
-                            const span = document.createElement('span');
-                            span.style.backgroundColor = '#ffcccc';
-                            span.style.textDecoration = 'line-through';
-                            span.className = 'deletion-highlight';
-                            span.textContent = deletedText;
-
-                            const parent = textNode.parentNode;
-                            if (parent) {
-                                parent.insertBefore(document.createTextNode(beforeText), textNode);
-                                parent.insertBefore(span, textNode);
-                                parent.insertBefore(document.createTextNode(afterText), textNode);
-                                parent.removeChild(textNode);
-                            }
-                        }
-                        break;
-
-                    case 'addition':
-                        // Insert new content with green background
-                        const textNode = startNode as Text;
-                        const beforeText = textNode.textContent?.substring(0, startOffset) || '';
-                        const afterText = textNode.textContent?.substring(startOffset) || '';
-
-                        const addSpan = document.createElement('span');
-                        addSpan.style.backgroundColor = '#ccffcc';
-                        addSpan.className = 'addition-highlight';
-                        addSpan.textContent = newContent || '';
-
-                        const parent = textNode.parentNode;
-                        if (parent) {
-                            parent.insertBefore(document.createTextNode(beforeText), textNode);
-                            parent.insertBefore(addSpan, textNode);
-                            parent.insertBefore(document.createTextNode(afterText), textNode);
-                            parent.removeChild(textNode);
-                        }
-                        break;
-
-                    case 'replacement':
-                        // Show deleted content in red, then new content in green
-                        if (endNode && startNode === endNode) {
-                            const replaceTextNode = startNode as Text;
-                            const beforeText = replaceTextNode.textContent?.substring(0, startOffset) || '';
-                            const replacedText = replaceTextNode.textContent?.substring(startOffset, endOffset) || '';
-                            const afterText = replaceTextNode.textContent?.substring(endOffset) || '';
-
-                            const delSpan = document.createElement('span');
-                            delSpan.style.backgroundColor = '#ffcccc';
-                            delSpan.style.textDecoration = 'line-through';
-                            delSpan.className = 'deletion-highlight';
-                            delSpan.textContent = replacedText;
-
-                            const addSpan = document.createElement('span');
-                            addSpan.style.backgroundColor = '#ccffcc';
-                            addSpan.className = 'addition-highlight';
-                            addSpan.textContent = newContent || '';
-
-                            const parent = replaceTextNode.parentNode;
-                            if (parent) {
-                                parent.insertBefore(document.createTextNode(beforeText), replaceTextNode);
-                                parent.insertBefore(delSpan, replaceTextNode);
-                                parent.insertBefore(addSpan, replaceTextNode);
-                                parent.insertBefore(document.createTextNode(afterText), replaceTextNode);
-                                parent.removeChild(replaceTextNode);
-                            }
-                        }
-                        break;
-                }
-            }
-        } catch (err) {
-            console.warn('Failed to apply highlight:', err);
+            case 'replacement':
+                // Show old content struck through in red, then new content in green
+                const replacedText = originalContent || htmlContent.substring(from, to);
+                result += `<span class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px;">${escapeHtml(replacedText)}</span>`;
+                result += `<span class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px; margin-left: 4px;">${newContent || ''}</span>`;
+                lastPosition = to;
+                break;
         }
     }
 
-    return body.innerHTML;
+    // Add remaining unchanged content
+    if (lastPosition < htmlContent.length) {
+        result += htmlContent.substring(lastPosition);
+    }
+
+    return result;
+}
+
+/**
+ * Escape HTML special characters to prevent XSS
+ */
+function escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 /**

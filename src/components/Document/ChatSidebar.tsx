@@ -95,6 +95,7 @@ export default function ChatSidebar({
     const [aiBeforeContent, setAiBeforeContent] = useState<string>("");
     const lastUserPromptRef = useRef<string>("");
     const abortControllerRef = useRef<AbortController | null>(null);
+    const wasAbortedRef = useRef<boolean>(false);
 
     // Preview modal state
     const [showPreviewModal, setShowPreviewModal] = useState(false);
@@ -210,6 +211,7 @@ export default function ChatSidebar({
             }
 
             // Call recommendations API
+            // Note: API_BASE_URL already includes /api, so we don't add it again
             const response = await fetch(buildApiUrl('api/gemini/recommendations'), {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -613,6 +615,9 @@ From structure improvements to real-time content updates, I ensure your work rem
     const handleStopGeneration = () => {
         console.log('🛑 User requested to stop generation');
 
+        // Set abort flag to prevent preview modal
+        wasAbortedRef.current = true;
+
         // Abort the ongoing request
         if (abortControllerRef.current) {
             abortControllerRef.current.abort();
@@ -621,6 +626,9 @@ From structure improvements to real-time content updates, I ensure your work rem
 
         // Reset generating state
         setIsGenerating(false);
+
+        // Remove all temporary progress messages
+        setInternalMessages(prev => prev.filter(msg => !msg.isTemporary));
 
         // Add a system message to indicate generation was stopped
         const stopMsg: ChatMessage = {
@@ -636,6 +644,9 @@ From structure improvements to real-time content updates, I ensure your work rem
     const handleSend = async (messageText?: string, isReply: boolean = false) => {
         const text = (messageText || input).trim();
         if (!text) return;
+
+        // Reset abort flag for new generation
+        wasAbortedRef.current = false;
 
         console.log('Sending message:', text);
         if (replyToMessage) {
@@ -732,6 +743,14 @@ From structure improvements to real-time content updates, I ensure your work rem
                 const allToolExecutions: ToolExecution[] = [];
                 const allStages: AIInteractionStage[] = [];
                 const sessionStartTime = Date.now();
+
+                // Validate documentId before proceeding
+                if (!documentId) {
+                    console.error('❌ No document ID available - AI agent needs a document context');
+                    throw new Error('Document ID is required for AI agent execution. Please make sure you have a document open.');
+                }
+
+                console.log(`✅ Document ID validated: ${documentId}`);
 
                 // Create abort controller for this generation
                 abortControllerRef.current = new AbortController();
@@ -1088,31 +1107,32 @@ From structure improvements to real-time content updates, I ensure your work rem
                         }
 
                         // For preview modal, replay operations on snapshot for accurate diff
-                        let previewContent = currentDoc.Content || editor.getHTML();
-
                         if (documentSnapshot && documentSnapshot.content) {
                             console.log('🔄 Replaying', allToolExecutions.length, 'operations on snapshot for preview');
 
-                            // Use snapshot as base for preview
-                            const { changes } = generatePreviewWithHighlights(
+                            // Use snapshot as base for preview with diff highlighting
+                            const { previewHtml: diffHtml, changes } = generatePreviewWithHighlights(
                                 documentSnapshot.content, // Use snapshot as baseline
                                 allToolExecutions
                             );
 
-                            setPreviewHtml(previewContent);
+                            setPreviewHtml(diffHtml); // Use the diff-highlighted HTML
                             setPreviewChanges(changes);
                         } else {
                             // Fallback to current approach if no snapshot
-                            const { changes } = generatePreviewWithHighlights(
+                            const { previewHtml: diffHtml, changes } = generatePreviewWithHighlights(
                                 aiBeforeContent || '',
                                 allToolExecutions
                             );
 
-                            setPreviewHtml(previewContent);
+                            setPreviewHtml(diffHtml); // Use the diff-highlighted HTML
                             setPreviewChanges(changes);
                         }
 
-                        setShowPreviewModal(true);
+                        // Only show preview if generation wasn't aborted
+                        if (!wasAbortedRef.current) {
+                            setShowPreviewModal(true);
+                        }
 
                         console.log('✅ Highlights applied to editor content');
                     } catch (err) {
@@ -1142,6 +1162,8 @@ From structure improvements to real-time content updates, I ensure your work rem
                 // Check if it's an abort error (user stopped generation)
                 if (error instanceof Error && error.name === 'AbortError') {
                     console.log('Generation stopped by user');
+                    // Remove temporary progress messages
+                    setInternalMessages(prev => prev.filter(msg => !msg.isTemporary));
                     // Don't show error message for user-initiated stops
                     return;
                 }
@@ -1316,7 +1338,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                             className={`flex ${m.role === "user" ? "justify-end" : "w-full"} mb-3 transition-all duration-300`}
                                         >
                                             <div
-                                                className={`${m.role === "user" ? "max-w-[80%]" : "w-full"
+                                                className={`${m.role === "user" ? "w-auto max-w-[80%]" : "w-full"
                                                     }`}
                                             >
                                                 {/* Error message with retry */}
@@ -1369,13 +1391,13 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                                 />
                                                             )}
 
-                                                            {/* Progress stage indicator at the bottom of progress message */}
-                                                            {m.isTemporary && m.progressStage && (
+                                                                { }
+                                                            {m.isTemporary && (
                                                                 <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-2">
-                                                                    <span className={`text-sm font-medium ${stageConfig[m.progressStage]?.color}`}>
-                                                                        {stageConfig[m.progressStage]?.icon} {stageConfig[m.progressStage]?.label}
-                                                                    </span>
                                                                     <div className="animate-spin h-4 w-4 border-2 border-purple-600 border-t-transparent rounded-full"></div>
+                                                                    <span className="text-sm font-medium text-purple-800">
+                                                                        Reasoning...
+                                                                    </span>
                                                                 </div>
                                                             )}
                                                         </div>
@@ -1428,7 +1450,7 @@ From structure improvements to real-time content updates, I ensure your work rem
 
                                                         {/* Edit mode */}
                                                         {editingMessageId === m.id ? (
-                                                            <div className="bg-white border-2 border-blue-500 rounded-lg p-3">
+                                                            <div className=" w-full bg-white border-2 border-blue-500 rounded-lg p-3">
                                                                 <textarea
                                                                     value={editedContent}
                                                                     onChange={(e) => setEditedContent(e.target.value)}
@@ -1450,14 +1472,14 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                                         size="sm"
                                                                         className="bg-blue-600 hover:bg-blue-700 text-white"
                                                                     >
-                                                                        Save & Resend (Enter)
+                                                                        Resend
                                                                     </Button>
                                                                     <Button
                                                                         onClick={handleCancelEdit}
                                                                         size="sm"
                                                                         variant="outline"
                                                                     >
-                                                                        Cancel (Esc)
+                                                                        Cancel
                                                                     </Button>
                                                                 </div>
                                                             </div>
@@ -1551,18 +1573,14 @@ From structure improvements to real-time content updates, I ensure your work rem
                         <div className="px-3 pb-2">
                             <div className="flex flex-wrap justify-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-300">
                                 {(suggestions ?? (repositoryInfo ? [
-                                    "Analyze repository",
-                                    "Explain codebase",
-                                    "Document the code",
-                                    "Find best practices",
-                                    "Suggest improvements",
+                                    "Analyze repository structure",
+                                    "Improve Document Structure",
+                                    "Summarize my Document",
                                 ] : [
-                                    "Add a summary",
-                                    "Improve this section",
-                                    "Search for keywords",
-                                    "Expand on this topic",
-                                    "Check document structure",
-                                ])).slice(0, 5).map((s, idx) => (
+                                    "Improve document structure",
+                                    "Review and enhance content",
+                                    "Add supporting details",
+                                ])).slice(0, 3).map((s, idx) => (
                                     <Button
                                         key={`${idx}-${s.slice(0, 12)}`}
                                         variant="outline"

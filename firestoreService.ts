@@ -52,7 +52,8 @@ export interface User {
 
 export interface Document {
     id?: string; // Firestore auto-generated ID (will be set after creation)
-    DocumentName: string;
+    Title: string; // Document title (replaces DocumentName)
+    DocumentName?: string; // Deprecated - kept for backward compatibility
     DocumentType: string; // 'SRS', 'User Manual', etc.
     DocumentCategory?: string; // 'User', 'Developer'
     Project_Id: string; // Foreign key - references Project's Firestore document ID

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Folder, FileText, AlertCircle } from 'lucide-react';
 import { API_ENDPOINTS } from '@/lib/apiConfig';
+import { useDocument } from '@/context/DocumentContext';
 import type { Document } from '@/types';
 
 interface ProjectDocumentsDropdownProps {
@@ -26,6 +27,7 @@ export default function ProjectDocumentsDropdown({
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const navigate = useNavigate();
+    const { setDocumentContent, setDocumentTitle, setCurrentEditor } = useDocument();
 
     useEffect(() => {
         const fetchDocuments = async () => {
@@ -77,6 +79,13 @@ export default function ProjectDocumentsDropdown({
     }, [projectId, currentDocumentId]);
 
     const handleDocumentClick = (documentId: string) => {
+        console.log('[ProjectDocuments] Clearing state before navigation to:', documentId);
+        // Clear all document-related state before navigation
+        setDocumentContent('');
+        setDocumentTitle('Untitled Document');
+        setCurrentEditor(null);
+
+        // Navigate to new document
         navigate(`/document/${documentId}`);
     };
 

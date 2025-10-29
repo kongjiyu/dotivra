@@ -66,6 +66,32 @@ export default function DocumentEditor() {
 
     // Ref to track current content and prevent unnecessary re-renders
     const documentContentRef = useRef(documentContent);
+    // Ref to track previous documentId to detect actual navigation
+    const previousDocumentIdRef = useRef<string | undefined>(documentId);
+
+    // Clear state ONLY when switching to a different document (not on title edits)
+    useEffect(() => {
+        // Check if documentId actually changed (navigation to different document)
+        if (previousDocumentIdRef.current !== undefined && previousDocumentIdRef.current !== documentId) {
+            console.log('[DocumentEditor] Switching documents - clearing state. From:', previousDocumentIdRef.current, 'To:', documentId);
+            // Clear editor content state
+            setDocumentContent('');
+            setDocumentTitle('Untitled Document');
+            // Clear AI operation states
+            setShowAIAction(false);
+            setCurrentOperation(null);
+            setCurrentOperationId(null);
+            setOperationType(null);
+            setIsRegenerating(false);
+            setBeforeAIContent('');
+            // Reset refs
+            latestContentRef.current = '';
+            documentContentRef.current = '';
+        }
+
+        // Update the previous documentId ref
+        previousDocumentIdRef.current = documentId;
+    }, [documentId, setDocumentContent, setDocumentTitle]);
 
     // Update ref when documentContent changes
     useEffect(() => {
@@ -113,21 +139,21 @@ export default function DocumentEditor() {
 
             // Check if we have document data passed through navigation state (from document creation or version restore)
             const navigationState = location.state as { documentData?: any, skipFetch?: boolean } | null;
-            
+
             // If skipFetch flag is set, use existing content from context (e.g., from version restore)
             if (navigationState?.skipFetch) {
                 console.log('📄 Skipping document fetch - using content from context (restored version)');
                 setDocumentId(documentId);
-                
+
                 // Clear any pending autosave and sync the ref with context content
                 if (autoSaveTimeoutRef.current) {
                     clearTimeout(autoSaveTimeoutRef.current);
                 }
                 latestContentRef.current = documentContent || "";
-                
+
                 return;
             }
-            
+
             if (navigationState?.documentData) {
                 const documentData = navigationState.documentData;
                 console.log('📄 Using document data from navigation state:', {
@@ -136,16 +162,16 @@ export default function DocumentEditor() {
                 });
 
                 setDocumentId(documentId);
-                setDocumentTitle(documentData.DocumentName || documentData.Title || "Untitled Document");
+                setDocumentTitle(documentData.Title || documentData.DocumentName || "Untitled Document");
                 const content = documentData.Content || "";
                 setDocumentContent(content);
-                
+
                 // Clear any pending autosave and sync the ref with loaded content
                 if (autoSaveTimeoutRef.current) {
                     clearTimeout(autoSaveTimeoutRef.current);
                 }
                 latestContentRef.current = content;
-                
+
                 // Load project info if available
                 const projectIdFromDoc = documentData.Project_Id || documentData.ProjectId;
                 if (projectIdFromDoc) {
@@ -188,7 +214,7 @@ export default function DocumentEditor() {
 
                 if (documentData && documentData.id) {
                     setDocumentId(documentId);
-                    setDocumentTitle(documentData.DocumentName || "Untitled Document");
+                    setDocumentTitle(documentData.Title || documentData.DocumentName || "Untitled Document");
                     const content = documentData.Content || "";
 
                     // Clear any pending autosave and sync the ref with loaded content
@@ -196,7 +222,7 @@ export default function DocumentEditor() {
                         clearTimeout(autoSaveTimeoutRef.current);
                     }
                     latestContentRef.current = content;
-                    
+
                     setDocumentContent(content); // Use exact content from DB, empty if empty
 
                     // Load project information if document has a project ID
@@ -502,9 +528,15 @@ export default function DocumentEditor() {
     // Function to show AI actions - this will be called from ChatSidebar (memoized to prevent re-renders)
     const showAIActionsContainer = useCallback((content: string, beforeContent: string) => {
 
-        // Always show for AI operations from chat (more permissive)
-        if (content && content.trim()) {
-            setBeforeAIContent(beforeContent || documentContent);
+        // Check if content actually changed before showing preview
+        const actualBeforeContent = beforeContent || documentContent || '';
+        const safeContent = content || '';
+        const contentChanged = safeContent !== actualBeforeContent &&
+            safeContent.trim() !== actualBeforeContent.trim();
+
+        // Only show preview if there are actual changes to the document
+        if (safeContent && safeContent.trim() && contentChanged) {
+            setBeforeAIContent(actualBeforeContent);
 
             // Use a more explicit state setting with callback to confirm
             setShowAIAction(prev => {

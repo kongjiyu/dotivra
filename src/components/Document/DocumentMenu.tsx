@@ -2,8 +2,6 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { marked } from 'marked';
-import mammoth from 'mammoth';
-import mermaid from 'mermaid';
 import { Input } from "@/components/ui/input";
 import { addDividersAfterHeadings } from "@/utils/addDividersAfterHeadings";
 import {
@@ -48,11 +46,7 @@ import {
 
 // Import document context
 import { useDocument } from "@/context/DocumentContext";
-import { useAuth } from "@/context/AuthContext";
-import { aiService } from "@/services/aiService";
-import { fetchDocument } from "@/services/apiService";
 import { showNotification } from "@/services/documentService";
-import { FirestoreService } from "@/../firestoreService";
 
 // Import Mermaid export utilities
 import { processMermaidForExport } from "@/utils/mermaidExportUtils";
@@ -64,7 +58,6 @@ import type { Editor } from "@tiptap/react";
 
 interface DocumentMenuProps {
 	onUpdate?: (content: string) => void;
-	onSaveAsTemplate?: () => void;
 	onCopyDocument?: () => void;
 	documentTitle?: string;
 	editor?: Editor; // TipTap editor instance
@@ -73,13 +66,11 @@ interface DocumentMenuProps {
 	currentDocument?: any; // Current document data for template/copy operations
 	onToolbarToggle?: (show: boolean) => void; // Callback when toolbar visibility changes
 	onNavigationPaneToggle?: (show: boolean) => void; // Callback when navigation pane visibility changes
-	isSummaryPage?: boolean; // Whether we're on the summary page
-	documentId?: string; // Document ID for summary generation
+	documentId?: string; // Document ID
 }
 
 export default function DocumentMenu({
 	onUpdate,
-	onSaveAsTemplate,
 	onCopyDocument,
 	documentTitle = "Untitled Document",
 	editor,
@@ -88,8 +79,6 @@ export default function DocumentMenu({
 	currentDocument,
 	onToolbarToggle,
 	onNavigationPaneToggle,
-	isSummaryPage = false,
-	documentId,
 }: DocumentMenuProps) {
 	const navigate = useNavigate();
 	// Get context state for navigation pane
@@ -117,11 +106,6 @@ export default function DocumentMenu({
 	// Import confirmation modal state
 	const [showImportConfirm, setShowImportConfirm] = useState(false);
 	const [pendingImport, setPendingImport] = useState<{ content: string; fileName: string } | null>(null);
-
-	// Summary generation state
-	const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
-	const { user } = useAuth();
-	const { setSummaryContent } = useDocument();
 
 	// Save preferences when they change
 	useEffect(() => {
@@ -250,46 +234,7 @@ export default function DocumentMenu({
 		}
 	};
 
-	const handleGenerateSummary = async () => {
-		if (!documentId || !user?.uid) {
-			showNotification("Document ID or user not found", "error");
-			return;
-		}
 
-		setIsGeneratingSummary(true);
-
-		try {
-			// Fetch the full document content
-			const docData = await fetchDocument(documentId);
-			if (!docData || !docData.Content) {
-				throw new Error('Document content not found');
-			}
-
-			// Generate summary using AI
-			const summary = await aiService.summarizeContent(docData.Content);
-
-			if (!summary) {
-				throw new Error('Failed to generate summary');
-			}
-
-			// Update summary in Firebase
-			await FirestoreService.updateDocument(documentId, { Summary: summary });
-
-			// Update local state
-			setSummaryContent(summary);
-
-			showNotification("Document summary generated successfully", "success");
-
-		} catch (error) {
-			console.error('Error generating summary:', error);
-			showNotification(
-				error instanceof Error ? error.message : 'Failed to generate summary',
-				"error"
-			);
-		} finally {
-			setIsGeneratingSummary(false);
-		}
-	};
 
 	const handlePrint = async () => {
 		// Get content from props first, then fallback to editor
@@ -728,49 +673,55 @@ export default function DocumentMenu({
 		const fileName = file.name;
 		const fileExtension = fileName.split('.').pop()?.toLowerCase();
 
-		// Accept Markdown and Word documents
-		if (!['md', 'docx', 'doc'].includes(fileExtension || '')) {
-			alert('Please select a Markdown (.md) or Word (.docx, .doc) file');
+		console.log('[Import] File selected:', fileName, 'Extension:', fileExtension);
+
+		// Only accept Markdown files
+		if (fileExtension !== 'md') {
+			alert('Please select a Markdown (.md) file');
 			return;
 		}
 
 		try {
-			let htmlContent: string;
+			console.log('[Import] Reading markdown file...');
+			// Handle Markdown files
+			const markdownContent = await file.text();
+			console.log('[Import] Markdown content length:', markdownContent.length);
 
-			if (fileExtension === 'md') {
-				// Handle Markdown files
-				const markdownContent = await file.text();
-				htmlContent = await marked(markdownContent);
-			} else if (fileExtension === 'docx' || fileExtension === 'doc') {
-				// Handle Word documents
-				const arrayBuffer = await file.arrayBuffer();
-				const result = await mammoth.convertToHtml({ arrayBuffer });
-				htmlContent = result.value;
-
-				if (result.messages.length > 0) {
-					console.warn('Word conversion warnings:', result.messages);
-				}
-			} else {
-				alert('Unsupported file format');
-				return;
-			}
+			// Convert markdown to HTML
+			const htmlContent = await marked(markdownContent);
+			console.log('[Import] Converted HTML length:', htmlContent.length);
 
 			// Check if there's existing content
 			const hasContent = editor && editor.getText().trim().length > 0;
+			console.log('[Import] Has existing content:', hasContent);
 
 			if (hasContent) {
 				// Show confirmation modal
 				setPendingImport({ content: htmlContent, fileName });
 				setShowImportConfirm(true);
+				console.log('[Import] Showing confirmation modal');
 			} else {
 				// No existing content, just import directly
-				if (onUpdate) {
+				console.log('[Import] Importing directly (no existing content)');
+				if (editor) {
+					// Use editor's setContent for better control
+					editor.commands.setContent(htmlContent);
+					// Add dividers after headings
+					setTimeout(() => {
+						addDividersAfterHeadings(editor);
+					}, 100);
+					console.log('[Import] Content set in editor');
+				} else if (onUpdate) {
 					onUpdate(htmlContent);
+					console.log('[Import] Content sent via onUpdate callback');
+				} else {
+					console.warn('[Import] No editor or onUpdate callback available');
 				}
+				showNotification(`Imported ${fileName} successfully`, 'success');
 			}
 		} catch (error) {
-			console.error('Error importing file:', error);
-			alert('Error importing file. Please check the file format and try again.');
+			console.error('[Import] Error importing file:', error);
+			showNotification('Error importing file. Please check the file format and try again.', 'error');
 		}
 
 		setShowImportOptions(false);
@@ -780,30 +731,39 @@ export default function DocumentMenu({
 	const handleImportConfirm = (action: 'overwrite' | 'append') => {
 		if (!pendingImport) return;
 
+		console.log('[Import] Confirmed action:', action);
+
 		if (action === 'overwrite') {
 			// Replace all content
-			if (onUpdate) {
-				onUpdate(pendingImport.content);
+			if (editor) {
+				editor.commands.setContent(pendingImport.content);
 				// Add dividers after H1/H2 headings after a short delay to ensure content is loaded
 				setTimeout(() => {
-					if (editor) {
-						addDividersAfterHeadings(editor);
-					}
+					addDividersAfterHeadings(editor);
 				}, 100);
+				console.log('[Import] Content replaced in editor');
+			} else if (onUpdate) {
+				onUpdate(pendingImport.content);
+				console.log('[Import] Content replaced via onUpdate');
 			}
+			showNotification(`Imported ${pendingImport.fileName} successfully (overwrite)`, 'success');
 		} else if (action === 'append') {
 			// Append to existing content
-			if (editor && onUpdate) {
+			if (editor) {
 				const currentContent = editor.getHTML();
 				const combinedContent = currentContent + '<p></p>' + pendingImport.content;
-				onUpdate(combinedContent);
+				editor.commands.setContent(combinedContent);
 				// Add dividers after H1/H2 headings after a short delay
 				setTimeout(() => {
-					if (editor) {
-						addDividersAfterHeadings(editor);
-					}
+					addDividersAfterHeadings(editor);
 				}, 100);
+				console.log('[Import] Content appended in editor');
+			} else if (onUpdate) {
+				const combinedContent = (documentContent || '') + '<p></p>' + pendingImport.content;
+				onUpdate(combinedContent);
+				console.log('[Import] Content appended via onUpdate');
 			}
+			showNotification(`Imported ${pendingImport.fileName} successfully (append)`, 'success');
 		}
 
 		// Cleanup
@@ -870,40 +830,6 @@ export default function DocumentMenu({
 		setShowImportOptions(false);
 	};
 
-	const handleSaveAsTemplate = async () => {
-		if (onSaveAsTemplate) {
-			onSaveAsTemplate();
-			return;
-		}
-
-		// If no custom handler, use the built-in service
-		if (!currentDocument) {
-			console.warn("No document data available for template creation");
-			return;
-		}
-
-		try {
-			const { saveDocumentAsTemplate, showNotification } = await import('@/services/documentService');
-
-			// Get current content from editor
-			const content = editor ? editor.getHTML() : (documentContent || '');
-
-			// Create document object with current content
-			const documentToSave = {
-				...currentDocument,
-				Content: content,
-				DocumentName: documentTitle
-			};
-
-			const template = await saveDocumentAsTemplate(documentToSave);
-			showNotification(`Template "${template.TemplateName}" created successfully!`, 'success');
-		} catch (error) {
-			console.error('Error creating template:', error);
-			const { showNotification } = await import('@/services/documentService');
-			showNotification('Failed to create template', 'error');
-		}
-	};
-
 	const handleCopyDocument = async () => {
 		if (onCopyDocument) {
 			onCopyDocument();
@@ -926,11 +852,11 @@ export default function DocumentMenu({
 			const documentToCopy = {
 				...currentDocument,
 				Content: content,
-				DocumentName: documentTitle
+				Title: documentTitle
 			};
 
 			const copiedDoc = await copyDocument(documentToCopy);
-			showNotification(`Document copy "${copiedDoc.DocumentName}" created successfully!`, 'success');
+			showNotification(`Document copy "${copiedDoc.Title || copiedDoc.DocumentName}" created successfully!`, 'success');
 		} catch (error) {
 			console.error('Error copying document:', error);
 			const { showNotification } = await import('@/services/documentService');
@@ -1024,12 +950,12 @@ export default function DocumentMenu({
 									<label className="flex items-center p-2 hover:bg-gray-100 rounded cursor-pointer">
 										<input
 											type="file"
-											accept=".md,.docx,.doc"
+											accept=".md"
 											onChange={handleImport}
 											className="hidden"
 										/>
 										<Upload className="w-4 h-4 mr-2" />
-										<span className="text-sm font-semibold">Import (.md, .docx)</span>
+										<span className="text-sm font-semibold">Import Markdown (.md)</span>
 									</label>
 
 									<div className="border-t border-gray-200 my-1"></div>
@@ -1143,20 +1069,6 @@ export default function DocumentMenu({
 										)}
 									</Button>
 
-									<div className="border-t border-gray-200 my-1" />
-
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => {
-											setShowToolsMenu(false);
-											navigate('/tools/playground');
-										}}
-										className="w-full justify-start h-8 px-2 text-gray-700"
-									>
-										<Wrench className="w-4 h-4 mr-2" />
-										<span className="text-sm">Tools Playground</span>
-									</Button>
 								</div>
 							</PopoverContent>
 						</Popover>
@@ -1203,26 +1115,6 @@ export default function DocumentMenu({
 								</div>
 							</PopoverContent>
 						</Popover>
-
-						{/* Generate Summary Button - Only on Summary Page */}
-						{isSummaryPage && (
-							<>
-								<div className="w-px h-4 bg-gray-300 mx-1"></div>
-								<Button
-									variant="ghost"
-									size="sm"
-									onClick={handleGenerateSummary}
-									disabled={isGeneratingSummary}
-									className="h-7 px-2 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50"
-									title="Generate AI Summary"
-								>
-									<Sparkles className={`text-purple-800  w-4 h-4 mr-1 ${isGeneratingSummary ? 'animate-pulse' : ''}`} />
-									<span className="text-xs text-purple-800 ">
-										{isGeneratingSummary ? 'Generating...' : 'Generate Summary'}
-									</span>
-								</Button>
-							</>
-						)}
 					</div>
 				</div>
 			</div>
