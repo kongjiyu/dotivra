@@ -6,6 +6,16 @@ import { useState } from "react";
 import { API_ENDPOINTS } from "@/lib/apiConfig";
 import { useAuth } from "@/context/AuthContext";
 
+/**
+ * DocumentHistory Component
+ * 
+ * ⚠️ IMPORTANT: Version history only tracks the Editor content (Content field),
+ * NOT the Summary tab content (Summary field). This component is only accessible
+ * from the Editor tab and is hidden when viewing the Summary tab.
+ * 
+ * Version history saves snapshots of document.Content field to the DocumentHistory
+ * collection via the backend saveVersion function.
+ */
 export default function DocumentHistory() {
     const navigate = useNavigate();
     const { documentId: urlDocId } = useParams<{ documentId: string }>();

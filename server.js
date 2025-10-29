@@ -1089,7 +1089,8 @@ app.post('/api/documents', async (req, res) => {
 	try {
 		console.log('🔥 POST /api/documents received:', req.body);
 		const {
-			DocumentName,
+			Title,
+			DocumentName, // Keep for backward compatibility
 			DocumentType,
 			DocumentCategory,
 			Project_Id,
@@ -1099,12 +1100,16 @@ app.post('/api/documents', async (req, res) => {
 			IsDraft
 		} = req.body;
 
+		// Use Title field, fallback to DocumentName for backward compatibility
+		const documentTitle = Title || DocumentName;
+
 		// Validate required fields
-		if (!DocumentName || !DocumentType || !DocumentCategory || !Project_Id || !User_Id) {
+		if (!documentTitle || !DocumentType || !DocumentCategory || !Project_Id || !User_Id) {
 			console.log('❌ Document validation failed: missing required fields');
 			return res.status(400).json({
-				error: 'DocumentName, DocumentType, DocumentCategory, Project_Id, and User_Id are required',
+				error: 'Title (or DocumentName), DocumentType, DocumentCategory, Project_Id, and User_Id are required',
 				received: {
+					Title: !!Title,
 					DocumentName: !!DocumentName,
 					DocumentType: !!DocumentType,
 					DocumentCategory: !!DocumentCategory,
@@ -1118,7 +1123,8 @@ app.post('/api/documents', async (req, res) => {
 
 		// Create the document object
 		const document = {
-			DocumentName: DocumentName.trim(),
+			Title: documentTitle.trim(),
+			DocumentName: documentTitle.trim(), // Keep for backward compatibility
 			DocumentType: DocumentType.trim(),
 			DocumentCategory: DocumentCategory,
 			Project_Id: Project_Id,
@@ -1221,7 +1227,7 @@ app.get('/api/documents/:documentId', async (req, res) => {
 			Updated_Time: docSnap.data().Updated_Time?.toDate?.()?.toISOString() || new Date().toISOString()
 		};
 
-		console.log('📄 Returning document:', document.DocumentName);
+		console.log('📄 Returning document:', document.Title || document.DocumentName);
 
 		res.json({
 			success: true,
@@ -1246,11 +1252,11 @@ app.put('/api/documents/:documentId', async (req, res) => {
 
 		const docRef = doc(firestore, 'Documents', documentId);
 		const docSnap = await getDoc(docRef);
-		
+
 		if (!docSnap.exists()) {
 			return res.status(404).json({ error: 'Document not found' });
 		}
-		
+
 		const docData = docSnap.data();
 		const currentVersion = docData?.version || 0;
 		const newVersion = currentVersion + 1;
@@ -1578,11 +1584,11 @@ app.put("/api/document/editor/content/:docId", async (req, res) => {
 
 		const docRef = doc(firestore, 'Documents', docId);
 		const docSnap = await getDoc(docRef);
-		
+
 		if (!docSnap.exists()) {
 			return res.status(404).json({ error: 'NOT_FOUND' });
 		}
-		
+
 		const docData = docSnap.data();
 		const currentVersion = docData?.version || 0;
 		const newVersion = currentVersion + 1;

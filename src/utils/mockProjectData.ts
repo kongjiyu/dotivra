@@ -28,7 +28,7 @@ export const mockProjects: Project[] = [
 export const mockDocuments: Document[] = [
   {
     id: "mock-doc-1",
-    DocumentName: "Project Overview & Requirements",
+    Title: "Project Overview & Requirements",
     DocumentType: "SRS",
     DocumentCategory: "general",
     Project_Id: "mock-project-1",
@@ -64,7 +64,7 @@ export const mockDocuments: Document[] = [
   },
   {
     id: "mock-doc-2",
-    DocumentName: "User Guide - Getting Started", 
+    Title: "User Guide - Getting Started", 
     DocumentType: "User Manual",
     DocumentCategory: "user",
     Project_Id: "mock-project-1",
@@ -101,7 +101,7 @@ export const mockDocuments: Document[] = [
   },
   {
     id: "mock-doc-3",
-    DocumentName: "API Documentation",
+    Title: "API Documentation",
     DocumentType: "Technical Manual",
     DocumentCategory: "developer", 
     Project_Id: "mock-project-1",
@@ -145,7 +145,7 @@ export const mockDocuments: Document[] = [
   },
   {
     id: "mock-doc-4",
-    DocumentName: "Meeting Notes - Sprint Planning",
+    Title: "Meeting Notes - Sprint Planning",
     DocumentType: "Meeting Notes",
     DocumentCategory: "general",
     Project_Id: "mock-project-1",
@@ -189,7 +189,7 @@ export const mockDocuments: Document[] = [
   },
   {
     id: "mock-doc-5",
-    DocumentName: "Architecture Overview",
+    Title: "Architecture Overview",
     DocumentType: "Technical Manual",
     DocumentCategory: "developer",
     Project_Id: "mock-project-1", 
@@ -253,7 +253,7 @@ export const getMockDocumentsByProject = (projectId: string): Document[] => {
 export const createMockDocument = (documentId: string): Document => {
   return {
     id: documentId,
-    DocumentName: `Sample Document (${documentId})`,
+    Title: `Sample Document (${documentId})`,
     DocumentType: "General Document", 
     DocumentCategory: "general",
     Project_Id: "mock-project-1",

@@ -6,7 +6,6 @@ import DocumentEditor from "./pages/Document/DocumentEditor";
 import GithubConnect from "./pages/GithubConnect";
 import Login from "./pages/Login";
 import ProjectView from "./pages/ProjectOverview";
-import DocumentSummary from "@/pages/Document/DocumentSummary";
 import DocumentProject from "@/pages/Document/DocumentProject";
 import DocumentProjectList from "@/pages/Document/DocumentProjectList";
 import DocumentHistory from "@/pages/Document/DocumentHistory";
@@ -85,14 +84,6 @@ const router = createBrowserRouter([
       {
         path: "/document/:documentId",
         element: <ProtectedDocumentWrapper><DocumentEditor /></ProtectedDocumentWrapper>,
-      },
-      {
-        path: "/document/summary/:documentId",
-        element: <ProtectedDocumentWrapper><DocumentSummary /></ProtectedDocumentWrapper>,
-      },
-      {
-        path: "/document/summary/:documentId",
-        element: <ProtectedDocumentWrapper><DocumentSummary /></ProtectedDocumentWrapper>,
       },
       {
         path: "/document/project",

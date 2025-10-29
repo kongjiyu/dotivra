@@ -7,8 +7,6 @@ interface DocumentContextType {
     setDocumentTitle: (title: string) => void;
     documentContent: string;
     setDocumentContent: (content: string) => void;
-    summaryContent: string;
-    setSummaryContent: (content: string) => void;
     currentEditor: any;
     setCurrentEditor: (editor: any) => void;
     isDocumentModified: boolean;
@@ -40,7 +38,6 @@ interface DocumentProviderProps {
 export function DocumentProvider({ children }: DocumentProviderProps) {
     const [documentTitle, setDocumentTitle] = useState<string>('Untitled Document');
     const [documentContent, setDocumentContent] = useState<string>('');
-    const [summaryContent, setSummaryContent] = useState<string>('');
     const [currentEditor, setCurrentEditor] = useState<any>(null);
     const [isDocumentModified, setIsDocumentModified] = useState<boolean>(false);
     const [documentId, setDocumentId] = useState<string>('');
@@ -69,18 +66,11 @@ export function DocumentProvider({ children }: DocumentProviderProps) {
         setIsDocumentModified(true);
     };
 
-    const handleSummaryChange = (content: string) => {
-        setSummaryContent(content);
-        setIsDocumentModified(true);
-    };
-
     const value: DocumentContextType = {
         documentTitle,
         setDocumentTitle: handleTitleChange,
         documentContent,
         setDocumentContent: handleContentChange,
-        summaryContent,
-        setSummaryContent: handleSummaryChange,
         currentEditor,
         setCurrentEditor,
         isDocumentModified,

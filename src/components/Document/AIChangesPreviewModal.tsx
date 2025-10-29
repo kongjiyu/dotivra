@@ -105,8 +105,13 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
                             <span>= Added content</span>
                         </div>
                         <div className="flex items-center gap-2">
-                            <mark style={{ backgroundColor: '#ffcccc', textDecoration: 'line-through', padding: '2px 4px' }}>red</mark>
+                            <mark style={{ backgroundColor: '#ffcccc', textDecoration: 'line-through', padding: '2px 4px' }}>red strikethrough</mark>
                             <span>= Removed content</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <mark style={{ backgroundColor: '#ffcccc', textDecoration: 'line-through', padding: '2px 4px', marginRight: '2px' }}>old</mark>
+                            <mark style={{ backgroundColor: '#ccffcc', padding: '2px 4px' }}>new</mark>
+                            <span>= Replacement</span>
                         </div>
                     </div>
                 </div>

@@ -27,7 +27,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
   };
 
   const handleCardClick = () => {
-    console.log('Opening document:', document.DocumentName, 'ID:', document.id);
+    console.log('Opening document:', document.Title || document.DocumentName, 'ID:', document.id);
     if (document.id) {
       navigate(`/document/${document.id}`);
     }
@@ -63,7 +63,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
       {/* Compact Thumbnail Section - Google Docs style */}
       <div className={`relative h-32 flex items-center justify-center ${getIconBgColor()} transition-colors border-b border-gray-200`}>
         <FileText className={`h-10 w-10 ${getIconColor()}`} />
-        
+
         {/* Actions Dropdown - Top Right */}
         <div className="absolute top-2 right-2">
           <button
@@ -110,7 +110,7 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
       <div className="p-3">
         {/* Document Title - Smaller, truncated */}
         <h3 className="font-medium text-sm text-gray-900 group-hover:text-blue-600 transition-colors truncate mb-2">
-          {document.DocumentName}
+          {document.Title || document.DocumentName}
         </h3>
 
         {/* Bottom Row: Badge and Date */}
@@ -124,11 +124,11 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
           <div className="flex items-center text-xs text-gray-400">
             <Clock className="h-3 w-3 mr-1" />
             <span className="hidden sm:inline">
-              {document.Updated_Time 
-                ? new Date(document.Updated_Time).toLocaleDateString('en-US', { 
-                    month: 'short', 
-                    day: 'numeric'
-                  })
+              {document.Updated_Time
+                ? new Date(document.Updated_Time).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric'
+                })
                 : 'Never'}
             </span>
           </div>
