@@ -32,9 +32,22 @@ service cloud.firestore {
       allow read, write: if true; // In production, add proper authentication
     }
     
-    // Gemini Metrics collection - for tracking API usage
+        // Gemini Metrics collection - for tracking API usage
     match /gemini-metrics/{id} {
       allow read, write: if true;
+    }
+    
+    // Feedback collection - allow authenticated and anonymous users to create feedback
+    match /Feedback/{feedbackId} {
+      // Anyone can create feedback (both authenticated and anonymous users)
+      allow create: if true;
+      // Only admins or the feedback creator can read their own feedback
+      allow read: if request.auth != null && 
+                  (resource.data.User_Id == request.auth.uid || 
+                   request.auth.token.admin == true);
+      // Only admins can update or delete feedback
+      allow update, delete: if request.auth != null && 
+                             request.auth.token.admin == true;
     }
   }
 }

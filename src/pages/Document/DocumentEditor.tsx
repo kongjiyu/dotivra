@@ -105,6 +105,12 @@ export default function DocumentEditor() {
                 return;
             }
 
+            // IMPORTANT: Clear previous document content immediately to prevent showing old content
+            setDocumentContent("");
+            setDocumentTitle("Loading...");
+            latestContentRef.current = "";
+            documentContentRef.current = "";
+
             // Check if we have document data passed through navigation state (from document creation or version restore)
             const navigationState = location.state as { documentData?: any, skipFetch?: boolean } | null;
             
@@ -249,7 +255,8 @@ export default function DocumentEditor() {
         };
 
         loadDocument();
-    }, [documentId]); // Remove state setters from dependencies to prevent infinite loop
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [documentId, location.pathname]); // Re-run when documentId OR pathname changes to ensure fresh document load
 
     // Track if we're in the initial loading phase
     const isInitialLoadingRef = useRef(true);
@@ -589,6 +596,7 @@ export default function DocumentEditor() {
             {/* Main Editor Area - Full Width */}
             <div ref={documentContainerRef} className="w-full h-full relative">
                 <TipTap
+                    key={documentId || 'no-doc'} // Force re-mount when document changes
                     initialContent={effectiveContent}
                     onUpdate={handleDocumentUpdateOptimized}
                     onEditorReady={handleEditorReady}

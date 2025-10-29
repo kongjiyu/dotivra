@@ -1,6 +1,6 @@
 // src/components/project/ProjectHeader.tsx
 import React from 'react';
-import { ExternalLink, FolderOpen, Plus, PencilLine } from 'lucide-react';
+import { ExternalLink, FolderOpen, Plus, PencilLine, Trash2 } from 'lucide-react';
 import type { Project } from '../../types';
 
 interface ProjectHeaderProps {
@@ -8,6 +8,7 @@ interface ProjectHeaderProps {
   onBackToDashboard: () => void;
   onAddDocument: () => void;
   onEditProject?: () => void;
+  onDeleteProject?: () => void;
 }
 
 /**
@@ -47,7 +48,8 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
   project,
   onBackToDashboard: _onBackToDashboard,
   onAddDocument,
-  onEditProject
+  onEditProject,
+  onDeleteProject
 }) => {
 
 
@@ -63,17 +65,30 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 mb-0.5">
                 <h1 className="text-xl font-semibold text-gray-900 truncate">{project.ProjectName}</h1>
-                {onEditProject && (
-                  <button
-                    type="button"
-                    onClick={onEditProject}
-                    className="inline-flex items-center justify-center rounded-md p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
-                    aria-label="Edit project"
-                    title="Edit project details"
-                  >
-                    <PencilLine className="h-4 w-4" />
-                  </button>
-                )}
+                <div className="flex items-center gap-1">
+                  {onEditProject && (
+                    <button
+                      type="button"
+                      onClick={onEditProject}
+                      className="inline-flex items-center justify-center rounded-md p-1 text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                      aria-label="Edit project"
+                      title="Edit project details"
+                    >
+                      <PencilLine className="h-4 w-4" />
+                    </button>
+                  )}
+                  {onDeleteProject && (
+                    <button
+                      type="button"
+                      onClick={onDeleteProject}
+                      className="inline-flex items-center justify-center rounded-md p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                      aria-label="Delete project"
+                      title="Delete project"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
               </div>
               <p className="text-sm text-gray-600 truncate">{project.Description}</p>
             </div>
@@ -86,20 +101,21 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
                 href={formatGitHubUrl(project.GitHubRepo)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors"
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors max-w-[250px]"
+                title={formatGitHubDisplayText(project.GitHubRepo)}
               >
-                <ExternalLink className="h-3.5 w-3.5" />
-                <span className="max-w-[200px] truncate">{formatGitHubDisplayText(project.GitHubRepo)}</span>
+                <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
+                <span className="truncate">{formatGitHubDisplayText(project.GitHubRepo)}</span>
               </a>
             )}
 
             <button
               onClick={onAddDocument}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-sm"
             >
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Add Document</span>
-              <span className="sm:hidden">Add</span>
+              <Plus className="h-4 w-4 text-white" />
+              <span className="hidden sm:inline text-white">Add Document</span>
+              <span className="sm:hidden text-white">Add</span>
             </button>
           </div>
         </div>

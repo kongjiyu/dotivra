@@ -79,7 +79,7 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
               <button
                 type="button"
                 onClick={onAddProject}
-                className="group w-full cursor-pointer bg-white border-2 border-dotted border-gray-300 rounded-xl transition-all hover:border-blue-500 hover:bg-blue-50/60 hover:shadow-lg px-6 py-8 flex flex-col items-center gap-4 text-center h-56 justify-center transform hover:scale-[1.02]"
+                className="group w-full cursor-pointer bg-white border-2 border-dotted border-gray-300 rounded-xl transition-all hover:border-blue-500 hover:bg-blue-50/60 hover:shadow-lg px-6 py-8 flex flex-col items-center gap-4 text-center h-64 justify-center transform hover:scale-[1.02]"
               >
                 <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg transition-transform group-hover:scale-110 group-hover:shadow-xl">
                   <Plus className="h-7 w-7" />
@@ -95,7 +95,7 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
             {loading ? (
               // Loading skeleton
               <div className="flex-shrink-0 w-72 snap-start p-2">
-                <div className="bg-white border border-gray-200 rounded-xl h-56 animate-pulse">
+                <div className="bg-white border border-gray-200 rounded-xl h-64 animate-pulse">
                   <div className="h-20 bg-gray-200"></div>
                   <div className="p-6 space-y-3">
                     <div className="h-4 bg-gray-200 rounded w-3/4"></div>
@@ -125,7 +125,7 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
                     onClick={() => onTemplateClick(template)}
                     className="flex-shrink-0 w-72 snap-start cursor-pointer group p-2"
                   >
-                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-xl hover:border-blue-200 transition-all duration-300 h-56 transform hover:scale-[1.02] hover:-translate-y-1">
+                    <div className="bg-white border border-gray-200 rounded-xl overflow-hidden hover:shadow-xl hover:border-blue-200 transition-all duration-300 h-64 transform hover:scale-[1.02] hover:-translate-y-1">
                       {/* Card Header with Gradient */}
                       <div className={`h-20 bg-gradient-to-r ${gradientClass} flex items-center justify-center relative overflow-hidden`}>
                         <div className="absolute inset-0 bg-black/10"></div>
@@ -135,17 +135,17 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
                       </div>
 
                       {/* Card Content */}
-                      <div className="p-6 h-36 flex flex-col justify-between">
-                        <div className="space-y-2">
-                          <h3 className="font-semibold text-gray-900 text-lg leading-tight group-hover:text-blue-600 transition-colors">
+                      <div className="p-6 h-44 flex flex-col">
+                        <div className="space-y-2 flex-1 min-h-0 mb-3">
+                          <h3 className="font-semibold text-gray-900 text-base leading-tight group-hover:text-blue-600 transition-colors line-clamp-1">
                             {template.TemplateName}
                           </h3>
-                          <p className="text-sm text-gray-600 leading-relaxed line-clamp-2">
+                          <p className="text-sm text-gray-600 leading-relaxed line-clamp-3">
                             {(template as any)['Description '] || template.Description}
                           </p>
                         </div>
 
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between flex-shrink-0">
                           <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium ${template.Category === 'user'
                               ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
                               : template.Category === 'developer'

@@ -45,6 +45,10 @@ const ProjectOverview: React.FC = () => {
   const [documentToDelete, setDocumentToDelete] = useState<Document | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Delete project confirmation dialog state
+  const [deleteProjectDialogOpen, setDeleteProjectDialogOpen] = useState(false);
+  const [isDeletingProject, setIsDeletingProject] = useState(false);
+
   // AI Generation Progress Modal State
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationRepository, setGenerationRepository] = useState('');
@@ -189,6 +193,58 @@ const ProjectOverview: React.FC = () => {
 
   const handleEditProject = () => {
     setEditedProjectModalOpen(true);  
+  };
+
+  const handleDeleteProject = () => {
+    setDeleteProjectDialogOpen(true);
+  };
+
+  const confirmDeleteProject = async () => {
+    if (!project?.id && !project?.Project_Id) {
+      console.error('❌ Project ID is missing');
+      return;
+    }
+
+    setIsDeletingProject(true);
+
+    try {
+      const projectId = (project.Project_Id || project.id) as string;
+      console.log('🗑️ Deleting project:', projectId);
+      
+      const response = await fetch(API_ENDPOINTS.deleteProject(projectId), {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to delete project');
+      }
+
+      const result = await response.json();
+      console.log('✅ Project deleted successfully:', result);
+
+      // Close the dialog
+      setDeleteProjectDialogOpen(false);
+      
+      // Show success message
+      await showSuccess(
+        'Project Deleted!',
+        `"${project.ProjectName}" and all its documents have been deleted successfully.`
+      );
+      
+      // Navigate back to projects page
+      navigate('/projects');
+    } catch (error) {
+      console.error('❌ Error deleting project:', error);
+      // Close the dialog and show error
+      setDeleteProjectDialogOpen(false);
+      showError(
+        'Delete Failed',
+        `Failed to delete project: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    } finally {
+      setIsDeletingProject(false);
+    }
   };
 
   const handleEditDocument = (document: Document) => {
@@ -453,6 +509,7 @@ const ProjectOverview: React.FC = () => {
         onBackToDashboard={handleBackToDashboard}
         onAddDocument={handleAddDocumentClick}
         onEditProject={handleEditProject}
+        onDeleteProject={handleDeleteProject}
       />
 
       <div className="max-w-7xl mx-auto px-6 py-10">
@@ -516,6 +573,16 @@ const ProjectOverview: React.FC = () => {
         description="Are you sure you want to delete this document?"
         itemName={documentToDelete?.DocumentName}
         isDeleting={isDeleting}
+      />
+
+      <ConfirmDeleteDialog
+        open={deleteProjectDialogOpen}
+        onOpenChange={setDeleteProjectDialogOpen}
+        onConfirm={confirmDeleteProject}
+        title="Delete Project"
+        description="Are you sure you want to delete this project? This will also delete all documents in this project. This action cannot be undone."
+        itemName={project?.ProjectName}
+        isDeleting={isDeletingProject}
       />
 
     </div>

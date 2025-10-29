@@ -1,0 +1,24 @@
+# robots.txt for Dotivra
+User-agent: *
+Allow: /
+
+# Disallow private/admin areas
+Disallow: /api/
+Disallow: /admin/
+Disallow: /document/editor/
+Disallow: /document/summary/
+Disallow: /document/history/
+Disallow: /profile/
+Disallow: /projects/
+Disallow: /dashboard/
+
+# Allow public pages
+Allow: /$
+Allow: /login
+Allow: /github-connect
+
+# Sitemap location
+Sitemap: https://dotivra.web.app/sitemap.xml
+
+# Crawl-delay (polite crawling)
+Crawl-delay: 1

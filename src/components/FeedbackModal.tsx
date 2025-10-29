@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, CheckCircle2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { FirebaseService } from '../services/firebaseService';
 import { 
   GeneralFeedback, 
   FeedbackSubmit
@@ -14,6 +16,7 @@ interface FeedbackModalProps {
 
 const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
   const location = useLocation();
+  const { user } = useAuth();
   
   const [feedbackData, setFeedbackData] = useState<FeedbackData>({
     email: '',
@@ -21,6 +24,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
     pageLink: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
   const [errors, setErrors] = useState<Partial<FeedbackData>>({});
 
   // Auto-detect current page when modal opens
@@ -59,19 +63,28 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
     setIsSubmitting(true);
     
     try {
-      // TODO: Implement API call to submit feedback
-      console.log('Submitting feedback:', feedbackData);
+      // Submit feedback to Firestore
+      await FirebaseService.submitFeedback(
+        feedbackData.comment,
+        {
+          email: feedbackData.email || undefined,
+          pageLink: feedbackData.pageLink || undefined,
+          userId: user?.uid || undefined
+        }
+      );
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Show success state
+      setSubmitSuccess(true);
       
-      // Show success message
-      alert('Thank you for your feedback! We appreciate your input.');
+      // Wait a moment to show success message
+      setTimeout(() => {
+        // Reset form and close modal
+        setFeedbackData({ email: '', comment: '', pageLink: '' });
+        setErrors({});
+        setSubmitSuccess(false);
+        onClose();
+      }, 2000);
       
-      // Reset form and close modal
-      setFeedbackData({ email: '', comment: '', pageLink: '' });
-      setErrors({});
-      onClose();
     } catch (error) {
       console.error('Failed to submit feedback:', error);
       alert('Failed to submit feedback. Please try again.');
@@ -110,11 +123,11 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
       {/* Modal */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div 
-          className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+          className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Modal Header */}
-          <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between">
+          <div className="border-b border-gray-200 px-6 py-4 flex items-center justify-between flex-shrink-0">
             <div>
               <h2 className="text-xl font-bold text-gray-900">Share Your Feedback</h2>
               <p className="text-sm text-gray-500 mt-0.5">Help us improve Dotivra</p>
@@ -130,17 +143,31 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
           </div>
 
           {/* Content */}
-          <form onSubmit={handleSubmit} className="p-6">
-            <GeneralFeedback
-              data={feedbackData}
-              errors={errors}
-              onChange={handleInputChange}
-            />
-            
-            <FeedbackSubmit
-              isSubmitting={isSubmitting}
-              onSubmit={handleSubmit}
-            />
+          <form onSubmit={handleSubmit} className="p-6 overflow-y-auto">
+            {submitSuccess ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <CheckCircle2 className="h-16 w-16 text-green-500 mb-4" />
+                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+                  Thank You!
+                </h3>
+                <p className="text-gray-600 text-center">
+                  Your feedback has been submitted successfully. We appreciate your input!
+                </p>
+              </div>
+            ) : (
+              <>
+                <GeneralFeedback
+                  data={feedbackData}
+                  errors={errors}
+                  onChange={handleInputChange}
+                />
+                
+                <FeedbackSubmit
+                  isSubmitting={isSubmitting}
+                  onSubmit={handleSubmit}
+                />
+              </>
+            )}
           </form>
         </div>
       </div>
