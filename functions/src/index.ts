@@ -497,17 +497,33 @@ function initializeGeminiBalancer() {
   }
 }
 
-// Initialize on startup
-geminiBalancer = initializeGeminiBalancer();
+// Lazy initialization - don't block startup
+// geminiBalancer = initializeGeminiBalancer();
 
 // Initialize MCP integration if balancer is available
-if (geminiBalancer) {
-  try {
-    geminiWithMcp = createGeminiWithMcp(geminiBalancer, db);
-    logger.info("✅ MCP integration initialized with 7 document tools");
-  } catch (error) {
-    logger.error("❌ Failed to initialize MCP integration:", error);
+// if (geminiBalancer) {
+//   try {
+//     geminiWithMcp = createGeminiWithMcp(geminiBalancer, db);
+//     logger.info("✅ MCP integration initialized with 7 document tools");
+//   } catch (error) {
+//     logger.error("❌ Failed to initialize MCP integration:", error);
+//   }
+// }
+
+// Helper to ensure balancer is initialized
+function ensureBalancerInitialized() {
+  if (!geminiBalancer) {
+    geminiBalancer = initializeGeminiBalancer();
+    if (geminiBalancer) {
+      try {
+        geminiWithMcp = createGeminiWithMcp(geminiBalancer, db);
+        logger.info("✅ MCP integration initialized with 7 document tools");
+      } catch (error) {
+        logger.error("❌ Failed to initialize MCP integration:", error);
+      }
+    }
   }
+  return geminiBalancer;
 }
 
 // Create Express app
@@ -567,7 +583,8 @@ app.post('/api/gemini/reasoning', async (req, res) => {
       toolConfig,
     } = req.body || {};
 
-    if (!geminiBalancer) {
+    const balancer = ensureBalancerInitialized();
+    if (!balancer) {
       logger.error("❌ geminiBalancer not initialized");
       return res.status(503).json({ error: "Balancer not configured" });
     }
@@ -609,7 +626,8 @@ app.post('/api/gemini/generate', async (req, res) => {
     logger.info('🔵 Gemini API Request received');
     logger.info('  Request body keys:', Object.keys(req.body || {}));
     
-    if (!geminiBalancer) {
+    const balancer = ensureBalancerInitialized();
+    if (!balancer) {
       logger.error('❌ Balancer not configured!');
       return res.status(503).json({ error: 'Balancer not configured' });
     }
@@ -636,7 +654,7 @@ app.post('/api/gemini/generate', async (req, res) => {
     }
 
     logger.info('  Calling geminiBalancer.generate with model:', model);
-    const result = await geminiBalancer.generate({
+    const result = await balancer.generate({
       model,
       contents: effectiveContents,
       tools,
@@ -679,7 +697,8 @@ app.post('/api/gemini/recommendations', async (req, res) => {
 
     logger.info('🎯 Generating recommendations for document:', documentId);
 
-    if (!geminiBalancer) {
+    const balancer = ensureBalancerInitialized();
+    if (!balancer) {
       return res.status(503).json({ error: 'Gemini balancer not initialized' });
     }
 
@@ -704,7 +723,7 @@ Format your response as JSON:
   ]
 }`;
 
-    const result = await geminiBalancer.generate({
+    const result = await balancer.generate({
       model: 'gemini-2.5-pro',
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
@@ -753,12 +772,13 @@ app.post('/api/gemini/generate-with-tools', async (req, res) => {
       return res.status(400).json({ error: 'Missing prompt' });
     }
 
-    if (!geminiBalancer) {
+    const balancer = ensureBalancerInitialized();
+    if (!balancer) {
       return res.status(503).json({ error: 'Gemini balancer not initialized' });
     }
 
     // Fallback to regular generation (MCP removed)
-    const result = await geminiBalancer.generate({
+    const result = await balancer.generate({
       model,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig
@@ -854,13 +874,14 @@ app.get('/api/gemini/dashboard', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized. Please authenticate.' });
     }
 
-    if (!geminiBalancer) {
+    const balancer = ensureBalancerInitialized();
+    if (!balancer) {
       return res.status(503).json({ error: 'Balancer not configured' });
     }
 
     // Read directly from Firebase
     logger.info('📊 Dashboard requested, reading from Firebase...');
-    const usage = await geminiBalancer.getUsageFromFirebase();
+    const usage = await balancer.getUsageFromFirebase();
     logger.info('📊 Dashboard data retrieved:', JSON.stringify(usage, null, 2));
     res.json(usage);
   } catch (error) {
@@ -3261,8 +3282,11 @@ export const api = onRequest(
       'GEMINI_LIMIT_RPD',
       'GEMINI_LIMIT_TPM'
     ],
-    memory: '1GiB',
+    memory: '2GiB',
     timeoutSeconds: 540,
+    maxInstances: 10,
+    minInstances: 0,
+    cpu: 2,
   },
   app
 );

@@ -21,7 +21,6 @@ import AllTemplate from "./pages/AllTemplate";
 import FeedbackForm from "./pages/FeedbackForm";
 import GeminiDashboard from "./pages/gemini/geminiDashboard";
 import GeminiTestBalancer from "./pages/gemini/geminiTestBalancer";
-import ToolsPlayground from "./pages/ToolsPlayground";
 
 // Error page component
 const ErrorPage = () => (
@@ -66,10 +65,6 @@ const router = createBrowserRouter([
       {
         path: "/",
         element: <Login />,
-      },
-      {
-        path: "/tools/playground",
-        element: <ProtectedDocumentWrapper><ToolsPlayground /></ProtectedDocumentWrapper>,
       },
       {
         path: "/dashboard",

@@ -20,6 +20,7 @@ const TEMPLATES_COLLECTION = 'Templates';
 const USERS_COLLECTION = 'Users';
 const DOCUMENT_HISTORY_COLLECTION = 'Document History';
 const CHATBOX_HISTORY_COLLECTION = 'Chatbox History';
+const FEEDBACK_COLLECTION = 'Feedback';
 // const CHAT_HISTORY_COLLECTION = 'ChatHistory';
 // const AI_GENERATION_COLLECTION = 'AI';
 
@@ -108,6 +109,18 @@ export interface AIGeneration {
     PromptText: string; // User's input prompt
     GeneratedContent: string; // AI-generated content
     createdAt: string; // ISO timestamp
+}
+
+// Feedback interface for user feedback
+export interface Feedback {
+    id?: string; // Firestore auto-generated ID
+    User_Id?: string; // Foreign key - references User ID (optional for anonymous feedback)
+    Email?: string; // User email (optional)
+    Comment: string; // Feedback comment/message
+    PageLink?: string; // Page/route where feedback was submitted
+    Status?: 'new' | 'reviewed' | 'resolved'; // Feedback status for admin tracking
+    Created_Time?: any; // Firestore Timestamp
+    UserAgent?: string; // Browser/device info for context
 }
 
 export class FirestoreService {
@@ -665,6 +678,126 @@ export class FirestoreService {
             await deleteDoc(docRef);
         } catch (error) {
             console.error('Error deleting chatbox history:', error);
+            throw error;
+        }
+    }
+
+    // --------------------------
+    // Feedback operations
+    // --------------------------
+    static async createFeedback(
+        feedbackData: Omit<Feedback, 'id' | 'Created_Time'>
+    ): Promise<Feedback> {
+        try {
+            const newFeedback = {
+                ...feedbackData,
+                Status: feedbackData.Status || 'new',
+                Created_Time: Timestamp.now(),
+                UserAgent: typeof navigator !== 'undefined' ? navigator.userAgent : undefined
+            };
+
+            const docRef = await addDoc(collection(db, FEEDBACK_COLLECTION), newFeedback);
+            
+            return {
+                id: docRef.id,
+                ...newFeedback
+            };
+        } catch (error) {
+            console.error('Error creating feedback:', error);
+            throw error;
+        }
+    }
+
+    static async getFeedback(feedbackId: string): Promise<Feedback | null> {
+        try {
+            const docRef = doc(db, FEEDBACK_COLLECTION, feedbackId);
+            const docSnap = await getDoc(docRef);
+            
+            if (docSnap.exists()) {
+                return {
+                    id: docSnap.id,
+                    ...docSnap.data()
+                } as Feedback;
+            }
+            return null;
+        } catch (error) {
+            console.error('Error fetching feedback:', error);
+            throw error;
+        }
+    }
+
+    static async getAllFeedback(): Promise<Feedback[]> {
+        try {
+            const q = query(
+                collection(db, FEEDBACK_COLLECTION),
+                orderBy('Created_Time', 'desc')
+            );
+            const querySnapshot = await getDocs(q);
+            
+            return querySnapshot.docs.map(docSnap => ({
+                id: docSnap.id,
+                ...docSnap.data()
+            } as Feedback));
+        } catch (error) {
+            console.error('Error fetching all feedback:', error);
+            throw error;
+        }
+    }
+
+    static async getFeedbackByUser(userId: string): Promise<Feedback[]> {
+        try {
+            const q = query(
+                collection(db, FEEDBACK_COLLECTION),
+                where('User_Id', '==', userId),
+                orderBy('Created_Time', 'desc')
+            );
+            const querySnapshot = await getDocs(q);
+            
+            return querySnapshot.docs.map(docSnap => ({
+                id: docSnap.id,
+                ...docSnap.data()
+            } as Feedback));
+        } catch (error) {
+            console.error('Error fetching user feedback:', error);
+            throw error;
+        }
+    }
+
+    static async getFeedbackByStatus(status: 'new' | 'reviewed' | 'resolved'): Promise<Feedback[]> {
+        try {
+            const q = query(
+                collection(db, FEEDBACK_COLLECTION),
+                where('Status', '==', status),
+                orderBy('Created_Time', 'desc')
+            );
+            const querySnapshot = await getDocs(q);
+            
+            return querySnapshot.docs.map(docSnap => ({
+                id: docSnap.id,
+                ...docSnap.data()
+            } as Feedback));
+        } catch (error) {
+            console.error('Error fetching feedback by status:', error);
+            throw error;
+        }
+    }
+
+    static async updateFeedback(feedbackId: string, updates: Partial<Feedback>): Promise<void> {
+        try {
+            const docRef = doc(db, FEEDBACK_COLLECTION, feedbackId);
+            await updateDoc(docRef, updates);
+        } catch (error) {
+            console.error('Error updating feedback:', error);
+            throw error;
+        }
+    }
+
+    static async deleteFeedback(feedbackId: string): Promise<void> {
+        try {
+            const docRef = doc(db, FEEDBACK_COLLECTION, feedbackId);
+            await deleteDoc(docRef);
+        } catch (error) {
+            console.error('Error deleting feedback:', error);
             throw error;
         }
     }

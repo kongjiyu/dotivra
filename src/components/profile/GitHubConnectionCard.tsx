@@ -17,7 +17,7 @@ interface GitHubConnectionCardProps {
 }
 
 const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectionChange }) => {
-  const { user: firebaseUser, userProfile } = useAuth();
+  const { user: firebaseUser, userProfile, refreshUserProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [connected, setConnected] = useState(false);
   const [githubUser, setGitHubUser] = useState<GitHubUser | null>(null);
@@ -69,6 +69,8 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
       
       if (result.success) {
         await checkConnectionStatus();
+        // Refresh user profile to update GitHub username immediately
+        await refreshUserProfile();
       } else if (result.needsLinking && result.pendingCredential) {
         // Handle account linking case
         setError('Linking your GitHub account to your existing email account...');
@@ -78,6 +80,8 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
         if (linkResult.success) {
           setError('✅ GitHub account successfully linked to your profile!');
           await checkConnectionStatus();
+          // Refresh user profile to update GitHub username immediately
+          await refreshUserProfile();
           // Clear success message after 3 seconds
           setTimeout(() => setError(null), 3000);
         } else {
@@ -222,9 +226,9 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
                 className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
                 {loading ? (
-                  <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                  <Loader2 className="w-4 h-4 animate-spin mx-auto text-white" />
                 ) : (
-                  'Test Connection'
+                  <span className="text-white">Test Connection</span>
                 )}
               </button>
               <button

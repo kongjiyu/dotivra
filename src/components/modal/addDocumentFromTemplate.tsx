@@ -5,6 +5,17 @@ import { useAuth } from '../../context/AuthContext';
 import { githubRepoService, type GitHubRepository as ServiceGitHubRepository } from '../../services/githubRepoService';
 import type { Template, Project } from '../../types';
 
+// Utility function for user-friendly error messages
+const getErrorMessage = (error: unknown): string => {
+  if (error instanceof Error) {
+    return error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return 'An unexpected error occurred';
+};
+
 
 
 
@@ -42,6 +53,8 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
   const [projects, setProjects] = useState<Project[]>([]);
   const [repositories, setRepositories] = useState<ServiceGitHubRepository[]>([]);
   const [loading, setLoading] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [errorMessage, setErrorMessage] = useState<string>('');
 
   // Load existing projects when modal opens
   useEffect(() => {
@@ -54,6 +67,8 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
       setNewProjectDescription('');
       setSelectedRepo('');
       setDocumentName('');
+      setValidationErrors({});
+      setErrorMessage('');
       // Load user's GitHub repositories immediately
       loadUserRepositories();
     }
@@ -70,6 +85,7 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
   const loadUserRepositories = async () => {
     try {
       setLoading(true);
+      setErrorMessage(''); // Clear any previous errors
       
       if (!user) {
         console.warn('User not authenticated, cannot load repositories');
@@ -81,6 +97,8 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
       setRepositories(repositories);
     } catch (error) {
       console.warn('Failed to load GitHub repositories:', error);
+      const message = getErrorMessage(error);
+      setErrorMessage(`Failed to load GitHub repositories: ${message}. Please make sure your GitHub account is connected in your profile.`);
       setRepositories([]);
     } finally {
       setLoading(false);
@@ -90,6 +108,7 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
   const loadProjects = async () => {
     try {
       setLoading(true);
+      setErrorMessage(''); // Clear any previous errors
       
       if (!user) {
         console.warn('User not authenticated, cannot load projects');
@@ -119,11 +138,15 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
         
         setProjects(userProjects);
       } else {
-        console.error('Failed to load projects:', response.status);
+        const errorText = await response.text();
+        console.error('Failed to load projects:', response.status, errorText);
+        setErrorMessage(`Failed to load projects: ${response.status} ${response.statusText}. Please try again later.`);
         setProjects([]);
       }
     } catch (error) {
       console.error('Error loading projects:', error);
+      const message = getErrorMessage(error);
+      setErrorMessage(`Error loading projects: ${message}. Please check your connection and try again.`);
       setProjects([]);
     } finally {
       setLoading(false);
@@ -132,6 +155,34 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
 
   const handleSubmit = () => {
     if (!template) return;
+
+    // Validate form
+    const errors: Record<string, string> = {};
+    
+    if (!documentName.trim()) {
+      errors.documentName = 'Document name is required';
+    }
+
+    if (projectOption === 'new') {
+      if (!newProjectName.trim()) {
+        errors.newProjectName = 'Project name is required';
+      }
+      if (!newProjectDescription.trim()) {
+        errors.newProjectDescription = 'Project description is required';
+      }
+      if (!selectedRepo.trim()) {
+        errors.selectedRepo = 'Please select a repository';
+      }
+    } else if (projectOption === 'existing' && !selectedProjectId) {
+      errors.selectedProjectId = 'Please select a project';
+    }
+
+    setValidationErrors(errors);
+
+    // If there are validation errors, don't proceed
+    if (Object.keys(errors).length > 0) {
+      return;
+    }
 
     const data = {
       template,
@@ -190,6 +241,13 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
 
           {/* Content */}
           <div className="p-6">
+            {/* Error Message Banner */}
+            {errorMessage && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800">{errorMessage}</p>
+              </div>
+            )}
+            
             <div className="space-y-6">
               {/* Document Name Field */}
               <div>
@@ -199,10 +257,22 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                 <input
                   type="text"
                   value={documentName}
-                  onChange={(e) => setDocumentName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  onChange={(e) => {
+                    setDocumentName(e.target.value);
+                    if (validationErrors.documentName) {
+                      setValidationErrors(prev => {
+                        const newErrors = { ...prev };
+                        delete newErrors.documentName;
+                        return newErrors;
+                      });
+                    }
+                  }}
+                  className={`w-full px-3 py-2 border ${validationErrors.documentName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                   placeholder="Enter document name"
                 />
+                {validationErrors.documentName && (
+                  <p className="mt-1 text-sm text-red-600">{validationErrors.documentName}</p>
+                )}
               </div>
 
               <div className="space-y-6">
@@ -266,10 +336,22 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                       <input
                         type="text"
                         value={newProjectName}
-                        onChange={(e) => setNewProjectName(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        onChange={(e) => {
+                          setNewProjectName(e.target.value);
+                          if (validationErrors.newProjectName) {
+                            setValidationErrors(prev => {
+                              const newErrors = { ...prev };
+                              delete newErrors.newProjectName;
+                              return newErrors;
+                            });
+                          }
+                        }}
+                        className={`w-full px-3 py-2 border ${validationErrors.newProjectName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                         placeholder="Enter project name"
                       />
+                      {validationErrors.newProjectName && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.newProjectName}</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -277,11 +359,23 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                       </label>
                       <textarea
                         value={newProjectDescription}
-                        onChange={(e) => setNewProjectDescription(e.target.value)}
+                        onChange={(e) => {
+                          setNewProjectDescription(e.target.value);
+                          if (validationErrors.newProjectDescription) {
+                            setValidationErrors(prev => {
+                              const newErrors = { ...prev };
+                              delete newErrors.newProjectDescription;
+                              return newErrors;
+                            });
+                          }
+                        }}
                         rows={3}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        className={`w-full px-3 py-2 border ${validationErrors.newProjectDescription ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                         placeholder="Describe your project"
                       />
+                      {validationErrors.newProjectDescription && (
+                        <p className="mt-1 text-sm text-red-600">{validationErrors.newProjectDescription}</p>
+                      )}
                     </div>
                     
                     {/* Repository Selection */}
@@ -297,20 +391,34 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                           </div>
                         </div>
                       ) : repositories.length > 0 ? (
-                        <select
-                          value={selectedRepo}
-                          onChange={(e) => setSelectedRepo(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          required
-                        >
-                          <option value="">Select a repository ({repositories.length} available)</option>
-                          {repositories.map((repo) => (
-                            <option key={repo.id} value={repo.full_name}>
-                              {repo.full_name}
-                              {repo.description && ` - ${repo.description}`}
-                            </option>
-                          ))}
-                        </select>
+                        <>
+                          <select
+                            value={selectedRepo}
+                            onChange={(e) => {
+                              setSelectedRepo(e.target.value);
+                              if (validationErrors.selectedRepo) {
+                                setValidationErrors(prev => {
+                                  const newErrors = { ...prev };
+                                  delete newErrors.selectedRepo;
+                                  return newErrors;
+                                });
+                              }
+                            }}
+                            className={`w-full px-3 py-2 border ${validationErrors.selectedRepo ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
+                            required
+                          >
+                            <option value="">Select a repository ({repositories.length} available)</option>
+                            {repositories.map((repo) => (
+                              <option key={repo.id} value={repo.full_name}>
+                                {repo.full_name}
+                                {repo.description && ` - ${repo.description}`}
+                              </option>
+                            ))}
+                          </select>
+                          {validationErrors.selectedRepo && (
+                            <p className="mt-1 text-sm text-red-600">{validationErrors.selectedRepo}</p>
+                          )}
+                        </>
                       ) : (
                         <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
                           <span className="text-sm text-gray-600">No repositories found. Please connect your GitHub account in your profile settings.</span>
@@ -336,27 +444,41 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
                         <p>No projects found. Create a new project instead.</p>
                       </div>
                     ) : (
-                      <div className="max-h-48 overflow-y-auto space-y-2">
-                        {projects.map((project) => (
-                          <label
-                            key={project.id}
-                            className="flex items-center p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-colors"
-                          >
-                            <input
-                              type="radio"
-                              name="selectedProject"
-                              value={project.id || project.Project_Id}
-                              checked={selectedProjectId === (project.id || project.Project_Id)}
-                              onChange={() => setSelectedProjectId(project.id || project.Project_Id || null)}
-                              className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
-                            />
-                            <div className="ml-3 flex-1">
-                              <div className="font-medium text-gray-900">{project.ProjectName}</div>
-                              <div className="text-sm text-gray-600 truncate">{project.Description}</div>
-                            </div>
-                          </label>
-                        ))}
-                      </div>
+                      <>
+                        <div className="max-h-48 overflow-y-auto space-y-2">
+                          {projects.map((project) => (
+                            <label
+                              key={project.id}
+                              className="flex items-center p-3 border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-colors"
+                            >
+                              <input
+                                type="radio"
+                                name="selectedProject"
+                                value={project.id || project.Project_Id}
+                                checked={selectedProjectId === (project.id || project.Project_Id)}
+                                onChange={() => {
+                                  setSelectedProjectId(project.id || project.Project_Id || null);
+                                  if (validationErrors.selectedProjectId) {
+                                    setValidationErrors(prev => {
+                                      const newErrors = { ...prev };
+                                      delete newErrors.selectedProjectId;
+                                      return newErrors;
+                                    });
+                                  }
+                                }}
+                                className="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500"
+                              />
+                              <div className="ml-3 flex-1">
+                                <div className="font-medium text-gray-900">{project.ProjectName}</div>
+                                <div className="text-sm text-gray-600 truncate">{project.Description}</div>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                        {validationErrors.selectedProjectId && (
+                          <p className="mt-1 text-sm text-red-600">{validationErrors.selectedProjectId}</p>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
@@ -377,7 +499,11 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
               <button
                 onClick={handleSubmit}
                 disabled={!isFormValid()}
-                className="px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors flex items-center"
+                className={`px-6 py-2 text-sm font-medium rounded-lg transition-colors flex items-center ${
+                  isFormValid()
+                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                    : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                }`}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Create Document

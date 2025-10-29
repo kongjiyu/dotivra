@@ -39,6 +39,8 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
   const [selectedRole, setSelectedRole] = useState(roleOptions[0]?.value ?? 'author');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'user' | 'developer' | 'general'>(initialCategory || 'user');
+  const [useTemplate, setUseTemplate] = useState(true); // Toggle for template vs no template
+  const [validationError, setValidationError] = useState('');
 
   // Filter templates by active tab
   const relevantTemplates = useMemo(
@@ -55,19 +57,40 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
     setDocumentName('');
     setSelectedTemplateId(null);
     setSelectedRole(roleOptions[0]?.value ?? 'author');
+    setUseTemplate(true);
+    setValidationError('');
   }, []);
 
   const handleTemplateClick = (template: Template) => {
     setSelectedTemplateId(template.id || null);
+    setValidationError('');
   };
 
   const handleCreate = () => {
-    if (!selectedTemplate || !documentName.trim()) {
+    // Validate document name
+    if (!documentName.trim()) {
+      setValidationError('Please enter a document name to continue');
       return;
     }
 
+    // If using template, validate template selection
+    if (useTemplate && !selectedTemplate) {
+      setValidationError('Please select a template or choose "No Template"');
+      return;
+    }
+
+    // Create a blank template for no-template option
+    const finalTemplate: Template = useTemplate && selectedTemplate ? selectedTemplate : {
+      id: 'blank',
+      Template_Id: 'blank',
+      TemplateName: 'Blank Document',
+      Description: 'Start from scratch',
+      TemplatePrompt: '',
+      Category: activeTab
+    };
+
     onCreateDocument({
-      template: selectedTemplate,
+      template: finalTemplate,
       category: activeTab,
       name: documentName.trim(),
       role: selectedRole,
@@ -92,7 +115,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
     }
   }, [isOpen, initialCategory, resetForm]);
 
-  const canCreate = Boolean(selectedTemplate && documentName.trim());
+  const canCreate = Boolean(documentName.trim());
 
   return (
     <>
@@ -118,20 +141,38 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
           </div>
 
           <div className="px-6 py-6 overflow-y-auto flex-1">
+            {/* Validation Error Message */}
+            {validationError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
+                <svg className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+                <p className="text-sm text-red-800">{validationError}</p>
+              </div>
+            )}
+
             <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="document-name">
-                    Document Name
+                    Document Name <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="document-name"
                     value={documentName}
-                    onChange={(event) => setDocumentName(event.target.value)}
+                    onChange={(event) => {
+                      setDocumentName(event.target.value);
+                      if (validationError && event.target.value.trim()) {
+                        setValidationError('');
+                      }
+                    }}
                     placeholder="e.g. Getting Started Guide"
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className={`w-full rounded-lg border ${validationError && !documentName.trim() ? 'border-red-300' : 'border-gray-300'} px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500`}
                     type="text"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Enter a descriptive name for your document
+                  </p>
                 </div>
 
                 {/* GitHub Repository - Disabled, shows project repo */}
@@ -156,12 +197,56 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* Template Toggle */}
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Template Option
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUseTemplate(true);
+                        setValidationError('');
+                      }}
+                      className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border-2 transition-all ${
+                        useTemplate
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                      }`}
+                    >
+                      Use Template
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUseTemplate(false);
+                        setSelectedTemplateId(null);
+                        setValidationError('');
+                      }}
+                      className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border-2 transition-all ${
+                        !useTemplate
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                      }`}
+                    >
+                      No Template
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {useTemplate 
+                      ? 'Select a template below to start with pre-defined content' 
+                      : 'Start with a blank document and write from scratch'}
+                  </p>
+                </div>
               </div>
 
-              <div className="flex flex-col min-w-0">
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">Document Template</h4>
-                
-                {/* Tab Bar */}
+              {useTemplate && (
+                <div className="flex flex-col min-w-0">
+                  <h4 className="text-sm font-semibold text-gray-700 mb-3">Document Template</h4>
+                  
+                  {/* Tab Bar */}
                 <div className="flex space-x-1 mb-4 border-b border-gray-200">
                   <button
                     onClick={() => setActiveTab('user')}
@@ -271,19 +356,26 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                   })}
                 </div>
               </div>
+            )}
             </div>
           </div>
 
           {/* Modal Footer */}
           <div className="p-6 border-t border-gray-200 bg-gray-50">
             <div className="flex items-center justify-between">
-              {selectedTemplate && (
+              {useTemplate ? (
+                selectedTemplate && (
+                  <div className="text-sm text-gray-600">
+                    Selected template:
+                    <span className="ml-1 font-medium text-gray-900">{selectedTemplate.TemplateName}</span>
+                  </div>
+                )
+              ) : (
                 <div className="text-sm text-gray-600">
-                  Selected template:
-                  <span className="ml-1 font-medium text-gray-900">{selectedTemplate.TemplateName}</span>
+                  <span className="font-medium text-gray-900">Blank Document</span> - Start from scratch
                 </div>
               )}
-              <div className="flex gap-3">
+              <div className="flex gap-3 ml-auto">
                 <button
                   onClick={handleCancel}
                   className="px-4 py-2 text-sm text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"

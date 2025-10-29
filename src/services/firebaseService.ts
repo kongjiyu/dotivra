@@ -7,7 +7,8 @@ import type {
   Template, 
   DocumentHistory, 
   ChatHistory,
-  AIGeneration 
+  AIGeneration,
+  Feedback 
 } from '../../firestoreService';
 
 /**
@@ -284,6 +285,33 @@ export class FirebaseService {
   ): () => void {
     // Implementation would use Firestore real-time listeners
     return () => {};
+  }
+
+  // Feedback operations
+  static async submitFeedback(
+    comment: string,
+    options?: {
+      email?: string;
+      pageLink?: string;
+      userId?: string;
+    }
+  ): Promise<void> {
+    try {
+      await FirestoreService.createFeedback({
+        Comment: comment,
+        Email: options?.email,
+        PageLink: options?.pageLink,
+        User_Id: options?.userId,
+        Status: 'new'
+      });
+    } catch (error) {
+      console.error('Error submitting feedback:', error);
+      throw new Error('Failed to submit feedback. Please try again.');
+    }
+  }
+
+  static async getUserFeedback(userId: string): Promise<Feedback[]> {
+    return await FirestoreService.getFeedbackByUser(userId);
   }
 }
 

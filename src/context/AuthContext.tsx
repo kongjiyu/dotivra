@@ -8,6 +8,7 @@ interface AuthContextType {
   userProfile: UserProfile | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  refreshUserProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,11 +62,33 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setLoading(false);
   };
 
+  const refreshUserProfile = async () => {
+    if (!user) return;
+    
+    try {
+      // Reload Firebase Auth user to get latest provider data
+      await user.reload();
+      
+      // Get the updated user object from Firebase Auth
+      const updatedUser = authService.getCurrentUser();
+      if (updatedUser) {
+        setUser(updatedUser);
+      }
+      
+      // Also refresh the Firestore user profile
+      const profile = await authService.getUserProfile(user.uid);
+      setUserProfile(profile);
+    } catch (error) {
+      console.error('Error refreshing user profile:', error);
+    }
+  };
+
   const value: AuthContextType = {
     user,
     userProfile,
     loading,
     signOut,
+    refreshUserProfile,
   };
 
   return (

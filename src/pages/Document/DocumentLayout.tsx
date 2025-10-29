@@ -8,7 +8,6 @@ import {
     CloudOff,
     FileText,
     FolderOpen,
-    Dock,
     Sparkles,
     AlignJustify
 } from "lucide-react";
@@ -325,15 +324,6 @@ export default function DocumentLayout({
                         >
                             <FileText className="w-4 h-4 mr-2" />
                             Editor
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className={getTabButtonClasses("summary")}
-                            onClick={() => handleTabChange("summary")}
-                        >
-                            <Dock className="w-4 h-4 mr-2" />
-                            Summary
                         </Button>
 
                         {/* Project Documents Dropdown - Replaces Project Tab */}
