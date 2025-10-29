@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import ProjectsGridView from '../components/allProject/ProjectGridLayout';
 import type { Project } from '../types';
 import AddProjectModal from '../components/modal/addProject';
+import EditProjectModal from '../components/modal/EditProject';
 import { API_ENDPOINTS } from '../lib/apiConfig';
 import { Plus, Search } from 'lucide-react';
 import Header from '../components/header/Header';
 import { useAuth } from '../context/AuthContext';
 import { getUserDisplayInfo } from '../utils/user';
 import { useFeedback } from '../components/AppLayout';
-import { showError } from '@/utils/sweetAlert';
+import { showError, showSuccess } from '@/utils/sweetAlert';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 
 const Projects: React.FC = () => {
@@ -18,6 +19,8 @@ const Projects: React.FC = () => {
   const { openFeedbackModal } = useFeedback();
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [projectToEdit, setProjectToEdit] = useState<Project | null>(null);
   const [allProjects, setAllProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +124,45 @@ const Projects: React.FC = () => {
 
   const handleProjectEdit = (project: Project) => {
     console.log('Edit project:', project.ProjectName);
+    setProjectToEdit(project);
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSubmit = async (data: { name: string; description: string }) => {
+    if (!projectToEdit || !projectToEdit.id) return;
+
+    try {
+      console.log('Updating project:', projectToEdit.id, data);
+
+      const response = await fetch(API_ENDPOINTS.project(projectToEdit.id), {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          ProjectName: data.name,
+          Description: data.description,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update project');
+      }
+
+      console.log('✅ Project updated successfully');
+      showSuccess('Success', 'Project updated successfully');
+
+      // Close modal and reload projects
+      setIsEditModalOpen(false);
+      setProjectToEdit(null);
+      await loadProjects();
+    } catch (err) {
+      console.error('❌ Error updating project:', err);
+      showError(
+        'Failed to Update Project',
+        err instanceof Error ? err.message : 'Unknown error'
+      );
+    }
   };
 
   const handleProjectDelete = (project: Project) => {
@@ -261,6 +303,20 @@ const Projects: React.FC = () => {
             );
           }
         }}
+      />
+
+      {/* EditProjectModal */}
+      <EditProjectModal
+        isOpen={isEditModalOpen}
+        initialData={projectToEdit ? {
+          name: projectToEdit.ProjectName,
+          description: projectToEdit.Description
+        } : undefined}
+        onClose={() => {
+          setIsEditModalOpen(false);
+          setProjectToEdit(null);
+        }}
+        onSubmit={handleEditSubmit}
       />
     </div>
   );

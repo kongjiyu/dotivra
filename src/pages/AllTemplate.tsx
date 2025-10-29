@@ -349,7 +349,7 @@ const AllTemplate: React.FC = () => {
         },
         body: JSON.stringify({
           DocumentName: documentName,
-          DocumentType: 'user-manual', // or another appropriate type based on template
+          DocumentType: template.TemplateName || 'user-manual',
           DocumentCategory: documentCategory,
           Content: content,
           Project_Id: finalProjectId,
