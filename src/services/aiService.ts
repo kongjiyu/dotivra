@@ -3,7 +3,7 @@ import { repositoryContextService } from './repositoryContextService';
 import type { User } from 'firebase/auth';
 import { buildApiUrl } from '@/lib/apiConfig';
 
-const GENERATE_API = buildApiUrl('api/api/gemini/generate');
+const GENERATE_API = buildApiUrl('api/gemini/generate');
 const TOOLS_EXECUTE_API = buildApiUrl('api/tools/execute');
 
 class AIService {
