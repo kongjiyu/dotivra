@@ -1,6 +1,6 @@
 // GitHub OAuth Service for user-specific authentication
 import { auth, db } from '@/config/firebase';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
 
 interface GitHubToken {
@@ -172,12 +172,11 @@ class GitHubOAuthService {
    */
   async disconnectGitHub(user: User): Promise<void> {
     const userRef = doc(db, 'Users', user.uid);
-    await setDoc(userRef, {
-      github: {
-        connected: false,
-        disconnected_at: new Date().toISOString()
-      }
-    }, { merge: true });
+    
+    // Delete the entire github field to ensure clean disconnect
+    await updateDoc(userRef, {
+      github: deleteField()
+    });
   }
 
   /**

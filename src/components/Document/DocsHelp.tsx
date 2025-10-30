@@ -121,10 +121,13 @@ export default function DocsHelp({ isOpen, onClose }: DocsHelpProps) {
                                             <strong>Auto-Link Conversion:</strong> When you paste a URL into the document editor, it will automatically be converted to a clickable link.
                                         </p>
                                         <p>
+                                            <strong>Opening Links:</strong> Hold <strong>Ctrl</strong> (Windows/Linux) or <strong>⌘ Cmd</strong> (Mac) and click on any link to open it in a new tab.
+                                        </p>
+                                        <p>
                                             <strong>Edit Link:</strong> Click on a link and use the link toolbar to edit or remove it.
                                         </p>
                                         <p>
-                                            <strong>Link Preview:</strong> Hover over a link to see a preview of the destination page. Click the link to open it in a new tab.
+                                            <strong>Link Preview:</strong> Hover over a link to see a preview of the destination page with editing options.
                                         </p>
                                         <p>
                                             <strong>Horizontal Dividers:</strong> Insert a horizontal rule (divider line) by clicking the Divider button in the toolbar or right-click context menu to visually separate sections of content.

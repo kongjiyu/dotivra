@@ -488,14 +488,37 @@
   text-decoration-color: #000000;
 }
 
-/* Disable all link hover tooltips */
-.tiptap a:hover::after,
+/* Add a subtle tooltip hint for Ctrl/Cmd+Click on links */
+.tiptap a::after {
+  content: attr(title);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: rgba(0, 0, 0, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+  margin-bottom: 4px;
+  z-index: 1000;
+}
+
+.tiptap a:hover::after {
+  opacity: 1;
+  transition-delay: 0.5s;
+}
+
+/* Disable all other link hover tooltips */
 .tiptap a:hover::before {
   display: none !important;
 }
 
 /* Disable TipTap default link tooltip */
-.tiptap a[data-type="link"]:hover::after,
 .tiptap a[data-type="link"]:hover::before {
   display: none !important;
 }

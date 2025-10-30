@@ -74,7 +74,7 @@ export const getTipTapExtensions = () => [
     Underline,
     // Simple link extension for basic link support
     Link.configure({
-        openOnClick: true, // Enable opening links normally
+        openOnClick: false, // We'll handle clicks manually to allow Ctrl/Cmd+Click
         linkOnPaste: true,
         autolink: true,
         protocols: ['http', 'https', 'mailto', 'tel'],
@@ -82,6 +82,7 @@ export const getTipTapExtensions = () => [
             class: 'tiptap-link',
             rel: 'noopener noreferrer',
             target: '_blank',
+            title: '⌘+Click (Mac) or Ctrl+Click (Windows) to open link', // Helpful tooltip
         },
         validate: (href: string) => /^https?:\/\//.test(href) || /^mailto:/.test(href) || /^tel:/.test(href),
     }),

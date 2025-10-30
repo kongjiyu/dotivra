@@ -6,7 +6,11 @@ import GitHubConnectionCard from '../components/profile/GitHubConnectionCard';
 import { useAuth } from '../context/AuthContext';
 import { getUserDisplayInfo } from '../utils/user';
 import { useFeedback } from '../components/AppLayout';
-import { showInfo, showError } from '@/utils/sweetAlert';
+import { showError } from '@/utils/sweetAlert';
+import { deleteUser } from 'firebase/auth';
+import { doc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { db } from '../config/firebase';
+import Swal from 'sweetalert2';
 
 const Profile: React.FC = () => {
   const { user: firebaseUser, userProfile, loading } = useAuth();
@@ -67,26 +71,105 @@ const Profile: React.FC = () => {
   // Logout is handled via the global header dropdown
 
   const handleDeleteAccount = async () => {
+    if (!firebaseUser) return;
+
     try {
-      if (firebaseUser) {
-        // In a real implementation, you would:
-        // 1. Delete user data from Firestore
-        // 2. Delete Firebase Auth account
-        // 3. Handle any cleanup
+      // Show confirmation dialog
+      const result = await Swal.fire({
+        title: 'Delete Account?',
+        html: `
+          <p class="text-gray-700 mb-4">This will permanently delete:</p>
+          <ul class="text-left text-sm text-gray-600 mb-4 list-disc list-inside">
+            <li>Your profile and account data</li>
+            <li>All your projects</li>
+            <li>All your documents</li>
+            <li>Your GitHub connection</li>
+          </ul>
+          <p class="text-red-600 font-semibold">This action cannot be undone!</p>
+        `,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        cancelButtonColor: '#6b7280',
+        confirmButtonText: 'Yes, delete everything',
+        cancelButtonText: 'Cancel',
+        reverseButtons: true,
+      });
+
+      if (!result.isConfirmed) return;
+
+      // Show loading state
+      Swal.fire({
+        title: 'Deleting Account...',
+        html: 'Please wait while we delete your account and all associated data.',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
+      });
+
+      // 1. Delete user's projects and associated documents
+      const projectsQuery = query(
+        collection(db, 'Projects'),
+        where('User_Id', '==', firebaseUser.uid)
+      );
+      const projectsSnapshot = await getDocs(projectsQuery);
+
+      // Delete each project's documents first
+      for (const projectDoc of projectsSnapshot.docs) {
+        const projectId = projectDoc.id;
         
-        // For now, just show a message
-        showInfo(
-          'Account Deletion',
-          'Account deletion would be implemented here. This would delete all your data and sign you out.'
+        // Delete all documents for this project
+        const documentsQuery = query(
+          collection(db, 'Documents'),
+          where('Project_Id', '==', projectId)
         );
+        const documentsSnapshot = await getDocs(documentsQuery);
         
-        // Uncomment below for actual deletion (WARNING: This will permanently delete the account)
-        // await firebaseUser.delete();
-        // await signOut();
+        for (const documentDoc of documentsSnapshot.docs) {
+          await deleteDoc(doc(db, 'Documents', documentDoc.id));
+        }
+        
+        // Delete the project
+        await deleteDoc(doc(db, 'Projects', projectDoc.id));
       }
-    } catch (error) {
+
+      // 2. Delete user profile from Firestore
+      await deleteDoc(doc(db, 'Users', firebaseUser.uid));
+
+      // 3. Delete Firebase Auth account
+      await deleteUser(firebaseUser);
+
+      // 4. Show success and redirect
+      Swal.fire({
+        title: 'Account Deleted',
+        text: 'Your account and all data have been permanently deleted.',
+        icon: 'success',
+        timer: 2000,
+        showConfirmButton: false
+      });
+
+      // Redirect to home page after a short delay
+      setTimeout(() => {
+        window.location.href = '/';
+      }, 2000);
+
+    } catch (error: any) {
       console.error('Error deleting account:', error);
-      showError('Delete Failed', 'Failed to delete account. Please try again.');
+      
+      // Handle specific errors
+      if (error.code === 'auth/requires-recent-login') {
+        showError(
+          'Re-authentication Required',
+          'For security reasons, please log out and log back in before deleting your account.'
+        );
+      } else {
+        showError(
+          'Delete Failed',
+          error.message || 'Failed to delete account. Please try again.'
+        );
+      }
     }
   };
 

@@ -105,12 +105,26 @@ const Tiptap = ({
             const target = event.target as HTMLElement;
             const linkElement = target.closest('a[href]') as HTMLAnchorElement | null;
 
-            // If clicking on a link, hide the preview immediately to allow the link to open
+            // If clicking on a link
             if (linkElement) {
-                console.log('🖱️ Link clicked, hiding preview');
-                clearHideTimeout();
-                hidePreview();
-                // Don't prevent default - let the link open naturally
+                const href = linkElement.getAttribute('href');
+                
+                // Check if Ctrl (Windows/Linux) or Cmd (Mac) key is pressed
+                const isModifierClick = event.ctrlKey || event.metaKey;
+                
+                if (isModifierClick && href) {
+                    // Ctrl/Cmd+Click: Open link in new tab
+                    event.preventDefault();
+                    console.log('🖱️ Ctrl/Cmd+Click detected, opening link:', href);
+                    window.open(href, '_blank', 'noopener,noreferrer');
+                    clearHideTimeout();
+                    hidePreview();
+                } else {
+                    // Regular click: hide preview but allow normal editor behavior
+                    console.log('🖱️ Link clicked, hiding preview');
+                    clearHideTimeout();
+                    hidePreview();
+                }
             }
         };
 

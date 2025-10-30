@@ -58,88 +58,88 @@ const ProjectOverview: React.FC = () => {
   // Get project data from URL parameter
   const currentProjectId = projectId; // Keep as string, don't parse as integer
 
-  // Load project data and documents from API
-  useEffect(() => {
-    const loadProjectAndDocuments = async () => {
-      if (!currentProjectId) {
-        setError('No project ID provided');
-        setLoading(false);
-        return;
+  // Load project data and documents from API - extracted as separate function for reusability
+  const loadProjectAndDocuments = async () => {
+    if (!currentProjectId) {
+      setError('No project ID provided');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Load project data
+      const projectResponse = await fetch(API_ENDPOINTS.project(currentProjectId));
+      if (!projectResponse.ok) {
+        if (projectResponse.status === 404) {
+          throw new Error('Project not found');
+        }
+        throw new Error('Failed to load project');
       }
 
-      try {
-        setLoading(true);
-        setError(null);
+      const projectData = await projectResponse.json();
+      setProject(projectData.project);
 
-        // Load project data
-        const projectResponse = await fetch(API_ENDPOINTS.project(currentProjectId));
-        if (!projectResponse.ok) {
-          if (projectResponse.status === 404) {
-            throw new Error('Project not found');
+      // Load documents for this project
+      const documentsResponse = await fetch(API_ENDPOINTS.projectDocuments(currentProjectId));
+
+      if (documentsResponse.ok) {
+        const documentsData = await documentsResponse.json();
+
+        // Handle both array response and object with documents property
+        const rawDocuments = Array.isArray(documentsData) ? documentsData : (documentsData.documents || []);
+
+        // Transform Cloud Function document format to expected frontend format
+        const transformedDocuments = rawDocuments.map((doc: any) => {
+          // Map template IDs to their correct categories (based on mockData.ts)
+          const templateCategoryMap: { [key: string]: string } = {
+            '1': 'Developer', // API Documentation - developer template (Category: 'developer')
+            '2': 'General',   // SRS Document - general template (Category: 'general')
+            '3': 'User',      // User Guide - user template (Category: 'user')
+            '4': 'Developer', // Technical Manual - developer template (Category: 'developer')
+          };
+
+          // Use the stored category, but if it's "General" and we have a template mapping, use the template's category
+          let documentCategory = doc.DocumentCategory || 'General';
+          if (documentCategory === 'General' && doc.TemplateId && templateCategoryMap[doc.TemplateId]) {
+            documentCategory = templateCategoryMap[doc.TemplateId];
           }
-          throw new Error('Failed to load project');
-        }
 
-        const projectData = await projectResponse.json();
-        setProject(projectData.project);
+          return {
+            id: doc.id,
+            Title: doc.Title || doc.DocumentName || 'Untitled Document',
+            DocumentType: doc.DocumentType || 'Document',
+            DocumentCategory: documentCategory,
+            Project_Id: doc.ProjectId || doc.Project_Id,
+            Template_Id: doc.TemplateId || doc.Template_Id,
+            User_Id: doc.UserId || doc.User_Id,
+            Content: doc.Content || '',
+            Created_Time: doc.CreatedAt || doc.Created_Time,
+            Updated_Time: doc.UpdatedAt || doc.Updated_Time,
+            IsDraft: doc.IsDraft !== undefined ? doc.IsDraft : true,
+            EditedBy: doc.EditedBy || doc.UserId || doc.User_Id
+          };
+        });
 
-        // Load documents for this project
-        const documentsResponse = await fetch(API_ENDPOINTS.projectDocuments(currentProjectId));
-
-        if (documentsResponse.ok) {
-          const documentsData = await documentsResponse.json();
-
-          // Handle both array response and object with documents property
-          const rawDocuments = Array.isArray(documentsData) ? documentsData : (documentsData.documents || []);
-
-          // Transform Cloud Function document format to expected frontend format
-          const transformedDocuments = rawDocuments.map((doc: any) => {
-            // Map template IDs to their correct categories (based on mockData.ts)
-            const templateCategoryMap: { [key: string]: string } = {
-              '1': 'Developer', // API Documentation - developer template (Category: 'developer')
-              '2': 'General',   // SRS Document - general template (Category: 'general')
-              '3': 'User',      // User Guide - user template (Category: 'user')
-              '4': 'Developer', // Technical Manual - developer template (Category: 'developer')
-            };
-
-            // Use the stored category, but if it's "General" and we have a template mapping, use the template's category
-            let documentCategory = doc.DocumentCategory || 'General';
-            if (documentCategory === 'General' && doc.TemplateId && templateCategoryMap[doc.TemplateId]) {
-              documentCategory = templateCategoryMap[doc.TemplateId];
-            }
-
-            return {
-              id: doc.id,
-              Title: doc.Title || doc.DocumentName || 'Untitled Document',
-              DocumentType: doc.DocumentType || 'Document',
-              DocumentCategory: documentCategory,
-              Project_Id: doc.ProjectId || doc.Project_Id,
-              Template_Id: doc.TemplateId || doc.Template_Id,
-              User_Id: doc.UserId || doc.User_Id,
-              Content: doc.Content || '',
-              Created_Time: doc.CreatedAt || doc.Created_Time,
-              Updated_Time: doc.UpdatedAt || doc.Updated_Time,
-              IsDraft: doc.IsDraft !== undefined ? doc.IsDraft : true,
-              EditedBy: doc.EditedBy || doc.UserId || doc.User_Id
-            };
-          });
-
-          setDocuments(transformedDocuments);
-        } else {
-          const errorText = await documentsResponse.text();
-          console.error('❌ Failed to load documents:', documentsResponse.status, errorText);
-          console.warn('Continuing without documents');
-          setDocuments([]);
-        }
-
-      } catch (err) {
-        console.error('Error loading project:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load project');
-      } finally {
-        setLoading(false);
+        setDocuments(transformedDocuments);
+      } else {
+        const errorText = await documentsResponse.text();
+        console.error('❌ Failed to load documents:', documentsResponse.status, errorText);
+        console.warn('Continuing without documents');
+        setDocuments([]);
       }
-    };
 
+    } catch (err) {
+      console.error('Error loading project:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load project');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadProjectAndDocuments();
   }, [currentProjectId]);
 
@@ -552,9 +552,40 @@ const ProjectOverview: React.FC = () => {
           description: project.Description
         } : undefined}
         onClose={() => setEditedProjectModalOpen(false)}
-        onSubmit={(updatedProject) => {
-          console.log('Updated project:', updatedProject);
-          showSuccess('Project Updated!', 'Your project has been updated successfully.');
+        onSubmit={async (updatedProject) => {
+          if (!projectId) return;
+
+          try {
+            console.log('Updating project:', projectId, updatedProject);
+
+            const response = await fetch(API_ENDPOINTS.project(projectId), {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                ProjectName: updatedProject.name,
+                Description: updatedProject.description,
+              }),
+            });
+
+            if (!response.ok) {
+              throw new Error('Failed to update project');
+            }
+
+            console.log('✅ Project updated successfully');
+            showSuccess('Project Updated!', 'Your project has been updated successfully.');
+
+            // Close modal and reload project data
+            setEditedProjectModalOpen(false);
+            await loadProjectAndDocuments();
+          } catch (err) {
+            console.error('❌ Error updating project:', err);
+            showError(
+              'Failed to Update Project',
+              err instanceof Error ? err.message : 'Unknown error'
+            );
+          }
         }}
       />
 
