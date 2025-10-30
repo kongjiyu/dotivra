@@ -22,8 +22,8 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle if the container or its children are focused/hovered
-      if (!containerRef.current?.contains(document.activeElement) && 
-          !containerRef.current?.matches(':hover')) {
+      if (!containerRef.current?.contains(document.activeElement) &&
+        !containerRef.current?.matches(':hover')) {
         return;
       }
 
@@ -161,9 +161,9 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default
   };
 
   return (
-    <div 
+    <div
       ref={containerRef}
-      className="mermaid-diagram" 
+      className="mermaid-diagram"
       style={{
         border: '1px solid #e0e0e0',
         borderRadius: '8px',
