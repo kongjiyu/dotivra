@@ -265,6 +265,7 @@ const Dashboard: React.FC = () => {
 
       // Prepare document data for API (matching Firebase Cloud Function format)
       const documentData = {
+        DocumentName: data.documentName.trim(),
         Title: data.documentName.trim(),
         DocumentType: data.template.TemplateName || 'user-manual',
         DocumentCategory: documentCategory,
@@ -346,7 +347,7 @@ const Dashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 flex flex-col dashboard-page">
+    <div className="min-h-screen bg-gray-50 text-gray-800 flex flex-col dashboard-page custom-scrollbar overflow-auto">
       <style>{`
         /* Hide Mermaid errors on dashboard */
         .dashboard-page .mermaid-error,

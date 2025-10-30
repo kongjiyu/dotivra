@@ -165,8 +165,39 @@ const Projects: React.FC = () => {
     }
   };
 
-  const handleProjectDelete = (project: Project) => {
-    console.log('Delete project:', project.ProjectName);
+  const handleProjectDelete = async (project: Project) => {
+    if (!project.id) {
+      showError('Error', 'Project ID is missing');
+      return;
+    }
+
+    try {
+      console.log('🗑️ Deleting project:', project.ProjectName);
+
+      const response = await fetch(API_ENDPOINTS.deleteProject(project.id), {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete project');
+      }
+
+      console.log('✅ Project deleted successfully');
+      showSuccess('Success', `Project "${project.ProjectName}" deleted successfully`);
+
+      // Reload projects to refresh the list
+      await loadProjects();
+    } catch (err) {
+      console.error('❌ Error deleting project:', err);
+      showError(
+        'Failed to Delete Project',
+        err instanceof Error ? err.message : 'Unknown error'
+      );
+    }
   };
 
   const projectSubtitle = `${filteredProjects.length} project${filteredProjects.length === 1 ? '' : 's'} • Manage and organize your documentation`;
@@ -274,12 +305,20 @@ const Projects: React.FC = () => {
           try {
             console.log('Creating project:', projectData);
 
+            // Add userId to project data (required by backend)
+            const projectDataWithUser = {
+              ...projectData,
+              userId: user?.uid || 'anonymous-user-' + Date.now()
+            };
+
+            console.log('Project data with user ID:', projectDataWithUser);
+
             const response = await fetch(API_ENDPOINTS.projects(), {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify(projectData),
+              body: JSON.stringify(projectDataWithUser),
             });
 
             if (!response.ok) {
@@ -293,8 +332,17 @@ const Projects: React.FC = () => {
             setIsModalOpen(false);
             await loadProjects();
 
-            // Navigate to the new project
-            navigate(`/project/${result.project.id}`);
+            // Navigate to the new project (handle both Project_Id and id field names)
+            const projectId = result.project.Project_Id || result.project.id;
+            if (projectId) {
+              navigate(`/project/${projectId}`);
+            } else {
+              console.error('❌ No project ID found in response:', result.project);
+              showError(
+                'Navigation Failed',
+                'Project created but navigation failed. Please refresh the page.'
+              );
+            }
           } catch (err) {
             console.error('❌ Error creating project:', err);
             showError(

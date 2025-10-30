@@ -25,7 +25,6 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
   const isOAuthUser = user.provider && user.provider !== 'email';
 
   const handleSaveChanges = () => {
-    console.log('Save profile changes');
     setIsEditing(false);
   };
 

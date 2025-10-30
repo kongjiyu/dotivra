@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { authService } from '../../services/authService';
+import ForgotPasswordModal from './ForgotPasswordModal';
 
 interface LoginFormProps {
   onToggleMode: () => void;
@@ -14,6 +15,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onToggleMode }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleEmailLogin = async (e: React.FormEvent) => {
@@ -123,6 +125,7 @@ const LoginForm: React.FC<LoginFormProps> = ({ onToggleMode }) => {
         <div className="flex justify-end">
           <button
             type="button"
+            onClick={() => setShowForgotPassword(true)}
             className="text-sm text-blue-600 hover:text-blue-700 transition-colors"
           >
             Forgot your password?
@@ -182,7 +185,11 @@ const LoginForm: React.FC<LoginFormProps> = ({ onToggleMode }) => {
         </p>
       </div>
 
-
+      {/* Forgot Password Modal */}
+      <ForgotPasswordModal
+        isOpen={showForgotPassword}
+        onClose={() => setShowForgotPassword(false)}
+      />
     </div>
   );
 };

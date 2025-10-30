@@ -1,8 +1,13 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Editor } from '@tiptap/react'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import {
+    Popover,
+    PopoverContent,
+    PopoverTrigger,
+} from '@/components/ui/popover'
 import {
     Copy,
     Bold,
@@ -26,6 +31,8 @@ import {
     Minus,
     Strikethrough,
     Sparkles,
+    Palette,
+    Highlighter,
 } from 'lucide-react'
 
 interface ContextMenuProps {
@@ -49,6 +56,22 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
     // Always declare hooks at the top level
     const [menuHeight, setMenuHeight] = React.useState(500)
+    const [textColorOpen, setTextColorOpen] = useState(false)
+    const [bgColorOpen, setBgColorOpen] = useState(false)
+
+    // Color palettes
+    const TEXT_COLORS = [
+        '#000000', '#374151', '#6B7280', '#EF4444', '#F97316', 
+        '#F59E0B', '#EAB308', '#84CC16', '#22C55E', '#10B981',
+        '#14B8A6', '#06B6D4', '#0EA5E9', '#3B82F6', '#6366F1',
+        '#8B5CF6', '#A855F7', '#D946EF', '#EC4899', '#F43F5E'
+    ]
+
+    const BG_COLORS = [
+        '#FFCCCC', '#FFE5CC', '#FFFFCC', '#E5FFCC', '#CCFFCC',
+        '#CCFFE5', '#CCFFFF', '#CCE5FF', '#CCCCFF', '#E5CCFF',
+        '#FFCCFF', '#FFCCE5', '#F3F4F6', '#E5E7EB', '#D1D5DB'
+    ]
 
     // Close menu when clicking outside
     useEffect(() => {
@@ -675,6 +698,95 @@ D --> E`;
                             <Minus className="w-3.5 h-3.5 mr-2" />
                             <span>Divider</span>
                         </Button>
+                        
+                        <div className="border-t border-gray-100 my-1"></div>
+
+                        {/* Font Color */}
+                        <Popover open={textColorOpen} onOpenChange={setTextColorOpen}>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full justify-start px-3 py-2 text-sm"
+                                >
+                                    <Palette className="w-4 h-4 mr-2" />
+                                    Font Color
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-56 p-3" side="right" align="start">
+                                <div className="space-y-2">
+                                    <h4 className="text-xs font-medium text-gray-700">Font Color</h4>
+                                    <div className="grid grid-cols-5 gap-1">
+                                        <button
+                                            className="w-8 h-8 rounded border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-xs font-bold"
+                                            onClick={() => {
+                                                editor?.chain().focus().unsetColor().run();
+                                                setTextColorOpen(false);
+                                            }}
+                                            title="Default"
+                                        >
+                                            A
+                                        </button>
+                                        {TEXT_COLORS.map((color) => (
+                                            <button
+                                                key={color}
+                                                className="w-8 h-8 rounded border border-gray-200 hover:border-gray-400 transition-all hover:scale-110"
+                                                style={{ backgroundColor: color }}
+                                                onClick={() => {
+                                                    editor?.chain().focus().setColor(color).run();
+                                                    setTextColorOpen(false);
+                                                }}
+                                                title={color}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+
+                        {/* Background Color */}
+                        <Popover open={bgColorOpen} onOpenChange={setBgColorOpen}>
+                            <PopoverTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full justify-start px-3 py-2 text-sm"
+                                >
+                                    <Highlighter className="w-4 h-4 mr-2" />
+                                    Background Color
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-56 p-3" side="right" align="start">
+                                <div className="space-y-2">
+                                    <h4 className="text-xs font-medium text-gray-700">Background Color</h4>
+                                    <div className="grid grid-cols-5 gap-1">
+                                        <button
+                                            className="w-8 h-8 rounded border-2 border-gray-300 hover:border-gray-400 transition-colors flex items-center justify-center bg-white text-xs"
+                                            onClick={() => {
+                                                editor?.chain().focus().unsetHighlight().run();
+                                                setBgColorOpen(false);
+                                            }}
+                                            title="No highlight"
+                                        >
+                                            ✕
+                                        </button>
+                                        {BG_COLORS.map((color) => (
+                                            <button
+                                                key={color}
+                                                className="w-8 h-8 rounded border border-gray-200 hover:border-gray-400 transition-all hover:scale-110"
+                                                style={{ backgroundColor: color }}
+                                                onClick={() => {
+                                                    editor?.chain().focus().setHighlight({ color }).run();
+                                                    setBgColorOpen(false);
+                                                }}
+                                                title={color}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            </PopoverContent>
+                        </Popover>
+
                         <div className="border-t border-gray-100 my-1"></div>
                         <Button
                             variant="ghost"
