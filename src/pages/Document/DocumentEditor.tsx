@@ -6,8 +6,9 @@ import { useRef, useEffect, useState, useCallback } from "react";
 import { useParams, useLocation } from "react-router-dom";
 import { API_ENDPOINTS } from "@/lib/apiConfig";
 import { fetchDocument } from "@/services/apiService";
-import { useAuth } from "@/context/AuthContext";
+import { useAuth } from '@/context/AuthContext';
 import { useDocumentSync } from "@/hooks/useDocumentSync";
+import DocumentSizeIndicator from '@/components/Document/DocumentSizeIndicator';
 
 import { EnhancedAIContentWriter } from '@/utils/enhancedAIContentWriter';
 import type { ContentPosition } from '@/utils/enhancedAIContentWriter';
@@ -643,6 +644,11 @@ export default function DocumentEditor() {
                         <span className="text-sm">Saving...</span>
                     </div>
                 )}
+
+                {/* Document Size Indicator */}
+                <div className="fixed bottom-6 right-6 z-40">
+                    <DocumentSizeIndicator content={effectiveContent} />
+                </div>
 
                 {/* AI Action Container */}
                 <div data-ai-action-container="true">

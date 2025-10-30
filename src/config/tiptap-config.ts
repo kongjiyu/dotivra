@@ -89,9 +89,10 @@ export const getTipTapExtensions = () => [
     // Markdown link paste extension - converts [text](url) to HTML links
     MarkdownLinkPaste,
     // Resizable Image extension with drag-to-resize and border toggle
+    // Uses aggressive compression to keep Base64 images small and safe for Firestore
     ResizableImage.configure({
         inline: false,
-        allowBase64: true,
+        allowBase64: true, // Enabled with automatic compression (200KB limit per image)
         HTMLAttributes: {
             class: 'tiptap-image',
         },
