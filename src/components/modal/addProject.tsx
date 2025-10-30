@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, FolderPlus, AlertCircle } from 'lucide-react';
+import { X, FolderPlus, AlertCircle, Github, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { githubRepoService, type GitHubRepository as ServiceGitHubRepository } from '../../services/githubRepoService';
+import { useNavigate } from 'react-router-dom';
 
 // ============================================================================
 // TYPES & INTERFACES
@@ -32,7 +33,9 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   onClose,
   onSubmit
 }) => {
-  const { user } = useAuth();
+  const { user, userProfile } = useAuth();
+  const navigate = useNavigate();
+  
   // ============================================================================
   // STATE MANAGEMENT - ALL HOOKS MUST BE CALLED CONSISTENTLY
   // ============================================================================
@@ -40,7 +43,8 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    selectedRepo: ''
+    selectedRepo: '',
+    useGithub: true // New: Toggle for GitHub integration
   });
 
   const [githubState, setGithubState] = useState({
@@ -81,9 +85,9 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
       newErrors.description = 'Project description is required';
     }
 
-    // Only require repository if repositories are available
-    if (githubState.filteredRepositories.length > 0 && !formData.selectedRepo.trim()) {
-      newErrors.selectedRepo = 'Please select a repository from the dropdown';
+    // Only require repository if user chose to use GitHub and repositories are available
+    if (formData.useGithub && githubState.filteredRepositories.length > 0 && !formData.selectedRepo.trim()) {
+      newErrors.selectedRepo = 'Please select a repository or disable GitHub integration';
     }
 
     setUiState(prev => ({ ...prev, errors: newErrors }));
@@ -98,7 +102,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
 
 
-  const handleInputChange = (field: string, value: string) => {
+  const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     
     // Clear error when user starts typing
@@ -143,18 +147,18 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
       const projectData = {
         name: formData.name,
         description: formData.description,
-        githubLink: formData.selectedRepo, // Use selected repository as GitHub link
-        selectedRepo: formData.selectedRepo
+        githubLink: formData.useGithub ? formData.selectedRepo : undefined,
+        selectedRepo: formData.useGithub ? formData.selectedRepo : undefined
       };
 
-      console.log('Creating project with GitHub integration:', projectData);
+      console.log('Creating project:', projectData);
       
       if (onSubmit) {
         onSubmit(projectData);
       }
 
       // Success - reset form and close
-      setFormData({ name: '', description: '', selectedRepo: '' });
+      setFormData({ name: '', description: '', selectedRepo: '', useGithub: true });
       setGithubState(prev => ({
         ...prev,
         showRepoDropdown: false,
@@ -185,15 +189,25 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   // EFFECTS
   // ============================================================================
 
-  // Load user's repositories when modal opens
+  // Load user's repositories when modal opens or when useGithub toggle changes
   React.useEffect(() => {
     if (isOpen) {
       loadUserRepositories();
     }
-  }, [isOpen]);
+  }, [isOpen, formData.useGithub]);
 
   // Load user's GitHub repositories using OAuth with proper authentication
   const loadUserRepositories = async () => {
+    // Only load repositories if user wants to use GitHub
+    if (!formData.useGithub) {
+      setGithubState(prev => ({ 
+        ...prev, 
+        filteredRepositories: [],
+        isLoadingRepositories: false 
+      }));
+      return;
+    }
+
     setGithubState(prev => ({ ...prev, isLoadingRepositories: true }));
     
     try {
@@ -201,6 +215,17 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
       
       if (!user) {
         console.warn('User not authenticated, cannot load repositories');
+        setGithubState(prev => ({ 
+          ...prev, 
+          filteredRepositories: [],
+          isLoadingRepositories: false 
+        }));
+        return;
+      }
+
+      // Check if user has GitHub connected
+      if (!userProfile?.githubUsername) {
+        console.warn('User has not connected GitHub account');
         setGithubState(prev => ({ 
           ...prev, 
           filteredRepositories: [],
@@ -268,7 +293,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Create New Project</h3>
-                <p className="text-sm text-gray-600">Set up a new documentation project with GitHub OAuth integration</p>
+                <p className="text-sm text-gray-600">Set up a new documentation project with optional GitHub integration</p>
               </div>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -323,79 +348,139 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
               )}
             </div>
 
-            {/* Repository Selection */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                GitHub Repository {githubState.filteredRepositories.length > 0 ? '*' : '(Optional)'}
-              </label>
-              
-              {githubState.isLoadingRepositories ? (
-                <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
-                  <div className="flex items-center space-x-2">
-                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
-                    <span className="text-sm text-gray-600">Loading repositories...</span>
-                  </div>
+            {/* GitHub Integration Toggle */}
+            <div className="border-t border-gray-200 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    GitHub Integration
+                  </label>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Link this project to a GitHub repository (optional)
+                  </p>
                 </div>
-              ) : githubState.filteredRepositories.length > 0 ? (
-                <select
-                  value={formData.selectedRepo}
-                  onChange={(e) => handleRepoSelect(e.target.value)}
-                  className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                    uiState.errors.selectedRepo ? 'border-red-300' : 'border-gray-300'
+                <button
+                  type="button"
+                  onClick={() => handleInputChange('useGithub', !formData.useGithub)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    formData.useGithub ? 'bg-blue-600' : 'bg-gray-200'
                   }`}
-                  required
                 >
-                  <option value="">Select a repository ({githubState.filteredRepositories.length} available)</option>
-                  {githubState.filteredRepositories.map((repo) => (
-                    <option key={repo.id} value={repo.full_name}>
-                      {repo.full_name} {repo.private ? '(Private)' : '(Public)'} {repo.language ? `- ${repo.language}` : ''}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <div className="space-y-3">
-                  <div className="w-full px-4 py-3 border border-yellow-300 bg-yellow-50 rounded-lg">
-                    <div className="flex items-start space-x-2">
-                      <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-yellow-800">GitHub Account Not Connected</p>
-                        <p className="text-xs text-yellow-700 mt-1">
-                          To browse and select your repositories, please connect your GitHub account in your{' '}
-                          <a href="/profile" className="font-semibold underline hover:text-yellow-900" onClick={(e) => {
-                            e.preventDefault();
-                            window.location.href = '/profile';
-                          }}>
-                            Profile Settings
-                          </a>.
-                        </p>
-                      </div>
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      formData.useGithub ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Repository Selection - Only show if GitHub is enabled */}
+            {formData.useGithub && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  GitHub Repository {githubState.filteredRepositories.length > 0 ? '*' : '(Optional)'}
+                </label>
+                
+                {githubState.isLoadingRepositories ? (
+                  <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+                    <div className="flex items-center space-x-2">
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-blue-600 border-t-transparent"></div>
+                      <span className="text-sm text-gray-600">Loading repositories...</span>
                     </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Or enter GitHub repository manually (optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.selectedRepo}
-                      onChange={(e) => handleInputChange('selectedRepo', e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-                      placeholder="e.g., username/repository-name or https://github.com/username/repo"
-                    />
-                    <p className="mt-1 text-xs text-gray-500">
-                      You can manually enter a repository URL or skip this step and add it later.
-                    </p>
+                ) : !userProfile?.githubUsername ? (
+                  <div className="space-y-3">
+                    <div className="w-full px-4 py-4 border border-blue-200 bg-blue-50 rounded-lg">
+                      <div className="flex items-start space-x-3">
+                        <Github className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-blue-900">Connect GitHub Account</p>
+                          <p className="text-xs text-blue-700 mt-1">
+                            To browse and select your repositories, connect your GitHub account first.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigate('/profile');
+                              onClose();
+                            }}
+                            className="mt-3 inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                          >
+                            <ExternalLink className="h-3 w-3 mr-1.5" />
+                            Go to Profile Settings
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Or enter repository manually
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.selectedRepo}
+                        onChange={(e) => handleInputChange('selectedRepo', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        placeholder="e.g., username/repository-name"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Enter repository in format: username/repo-name
+                      </p>
+                    </div>
                   </div>
-                </div>
-              )}
-              
-              {uiState.errors.selectedRepo && (
-                <div className="mt-1 flex items-center space-x-1 text-sm text-red-600">
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                  <span>{uiState.errors.selectedRepo}</span>
-                </div>
-              )}
-            </div>
+                ) : githubState.filteredRepositories.length > 0 ? (
+                  <select
+                    value={formData.selectedRepo}
+                    onChange={(e) => handleRepoSelect(e.target.value)}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                      uiState.errors.selectedRepo ? 'border-red-300' : 'border-gray-300'
+                    }`}
+                    required
+                  >
+                    <option value="">Select a repository ({githubState.filteredRepositories.length} available)</option>
+                    {githubState.filteredRepositories.map((repo) => (
+                      <option key={repo.id} value={repo.full_name}>
+                        {repo.full_name} {repo.private ? '(Private)' : '(Public)'} {repo.language ? `- ${repo.language}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="w-full px-4 py-3 border border-yellow-300 bg-yellow-50 rounded-lg">
+                      <div className="flex items-start space-x-2">
+                        <AlertCircle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-yellow-800">No Repositories Found</p>
+                          <p className="text-xs text-yellow-700 mt-1">
+                            You can enter a repository manually or create the project without GitHub integration.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-600 mb-1">
+                        Enter repository manually (optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.selectedRepo}
+                        onChange={(e) => handleInputChange('selectedRepo', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                        placeholder="e.g., username/repository-name"
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {uiState.errors.selectedRepo && (
+                  <div className="mt-1 flex items-center space-x-1 text-sm text-red-600">
+                    <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                    <span>{uiState.errors.selectedRepo}</span>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Submit Error */}
             {uiState.errors.submit && (

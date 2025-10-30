@@ -10,6 +10,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../services/authService';
 import GitHubService, { type GitHubUser } from '../../services/gitHubService';
+import { githubOAuthService } from '../../services/githubOAuthService';
 import { showSuccess } from '@/utils/sweetAlert';
 
 interface GitHubConnectionCardProps {
@@ -107,9 +108,18 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
       setLoading(true);
       setError(null);
 
+      // Actually disconnect from Firestore
+      await githubOAuthService.disconnectGitHub(firebaseUser);
+
+      // Update local state
       setConnected(false);
       setGitHubUser(null);
       onConnectionChange?.(false);
+
+      // Refresh user profile to reflect changes
+      await refreshUserProfile();
+      
+      showSuccess('Disconnected', 'GitHub account has been disconnected successfully.');
       
     } catch (err) {
       console.error('Failed to disconnect GitHub:', err);
