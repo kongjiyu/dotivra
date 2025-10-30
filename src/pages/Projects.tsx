@@ -165,8 +165,39 @@ const Projects: React.FC = () => {
     }
   };
 
-  const handleProjectDelete = (project: Project) => {
-    console.log('Delete project:', project.ProjectName);
+  const handleProjectDelete = async (project: Project) => {
+    if (!project.id) {
+      showError('Error', 'Project ID is missing');
+      return;
+    }
+
+    try {
+      console.log('🗑️ Deleting project:', project.ProjectName);
+
+      const response = await fetch(API_ENDPOINTS.deleteProject(project.id), {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete project');
+      }
+
+      console.log('✅ Project deleted successfully');
+      showSuccess('Success', `Project "${project.ProjectName}" deleted successfully`);
+
+      // Reload projects to refresh the list
+      await loadProjects();
+    } catch (err) {
+      console.error('❌ Error deleting project:', err);
+      showError(
+        'Failed to Delete Project',
+        err instanceof Error ? err.message : 'Unknown error'
+      );
+    }
   };
 
   const projectSubtitle = `${filteredProjects.length} project${filteredProjects.length === 1 ? '' : 's'} • Manage and organize your documentation`;

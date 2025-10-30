@@ -4,6 +4,7 @@ import { FolderOpen, Calendar, ExternalLink, Pencil, Trash2, MoreVertical } from
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "../ui/dropdown-menu";
 import type { Project } from '../../types';
 import { getProjectCreatedTime } from '../../utils/projectUtils';
+import { showDeleteConfirm } from '../../utils/sweetAlert';
 
 interface ProjectsGridViewProps {
   projects: Project[];
@@ -69,10 +70,12 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     variant="destructive"
-                    onClick={(e) => {
+                    onClick={async (e) => {
                       e.stopPropagation();
-                      const confirmDelete = window.confirm(`Delete project \"${project.ProjectName || 'Untitled Project'}\"? This cannot be undone.`);
-                      if (confirmDelete) onProjectDelete(project);
+                      const result = await showDeleteConfirm(project.ProjectName || 'Untitled Project');
+                      if (result.isConfirmed) {
+                        onProjectDelete(project);
+                      }
                     }}
                   >
                     <Trash2 className="h-4 w-4" />
