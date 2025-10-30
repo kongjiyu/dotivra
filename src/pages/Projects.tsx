@@ -274,12 +274,20 @@ const Projects: React.FC = () => {
           try {
             console.log('Creating project:', projectData);
 
+            // Add userId to project data (required by backend)
+            const projectDataWithUser = {
+              ...projectData,
+              userId: user?.uid || 'anonymous-user-' + Date.now()
+            };
+
+            console.log('Project data with user ID:', projectDataWithUser);
+
             const response = await fetch(API_ENDPOINTS.projects(), {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify(projectData),
+              body: JSON.stringify(projectDataWithUser),
             });
 
             if (!response.ok) {
@@ -293,8 +301,17 @@ const Projects: React.FC = () => {
             setIsModalOpen(false);
             await loadProjects();
 
-            // Navigate to the new project
-            navigate(`/project/${result.project.id}`);
+            // Navigate to the new project (handle both Project_Id and id field names)
+            const projectId = result.project.Project_Id || result.project.id;
+            if (projectId) {
+              navigate(`/project/${projectId}`);
+            } else {
+              console.error('❌ No project ID found in response:', result.project);
+              showError(
+                'Navigation Failed',
+                'Project created but navigation failed. Please refresh the page.'
+              );
+            }
           } catch (err) {
             console.error('❌ Error creating project:', err);
             showError(

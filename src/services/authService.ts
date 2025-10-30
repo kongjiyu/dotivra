@@ -9,6 +9,12 @@ import {
   signOut,
   onAuthStateChanged,
   linkWithCredential,
+  sendEmailVerification,
+  applyActionCode,
+  checkActionCode,
+  sendPasswordResetEmail,
+  confirmPasswordReset,
+  verifyPasswordResetCode,
   type User,
   type AuthError
 } from 'firebase/auth';
@@ -52,6 +58,17 @@ class AuthService {
   async signInWithEmail(email: string, password: string) {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      
+      // Check if email is verified
+      if (!userCredential.user.emailVerified) {
+        return {
+          success: false,
+          error: 'Please verify your email address before signing in. Check your inbox for the verification link.',
+          needsVerification: true,
+          user: userCredential.user
+        };
+      }
+      
       await this.updateUserProfile(userCredential.user, 'email');
       return { success: true, user: userCredential.user };
     } catch (error) {
@@ -68,10 +85,21 @@ class AuthService {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
+      // Send email verification
+      await sendEmailVerification(userCredential.user, {
+        url: `${window.location.origin}/login?verified=true`,
+        handleCodeInApp: false
+      });
+      
       // Create user profile in Firestore
       await this.createUserProfile(userCredential.user, 'email', displayName);
       
-      return { success: true, user: userCredential.user };
+      return { 
+        success: true, 
+        user: userCredential.user,
+        needsVerification: true,
+        message: 'Account created! Please check your email to verify your account before signing in.'
+      };
     } catch (error) {
       console.error('Email sign up error:', error);
       return { 
@@ -351,6 +379,140 @@ class AuthService {
   // Get current user
   getCurrentUser() {
     return auth.currentUser;
+  }
+
+  // ============================================================================
+  // EMAIL VERIFICATION METHODS
+  // ============================================================================
+
+  /**
+   * Send verification email to current user
+   */
+  async sendVerificationEmail(user?: User) {
+    try {
+      const currentUser = user || auth.currentUser;
+      if (!currentUser) {
+        throw new Error('No user is currently signed in');
+      }
+
+      await sendEmailVerification(currentUser, {
+        url: `${window.location.origin}/login?verified=true`,
+        handleCodeInApp: false
+      });
+
+      return {
+        success: true,
+        message: 'Verification email sent! Please check your inbox.'
+      };
+    } catch (error) {
+      console.error('Error sending verification email:', error);
+      return {
+        success: false,
+        error: this.getErrorMessage(error as AuthError)
+      };
+    }
+  }
+
+  /**
+   * Check if current user's email is verified
+   */
+  async isEmailVerified(): Promise<boolean> {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return false;
+    
+    // Reload user to get fresh verification status
+    await currentUser.reload();
+    return currentUser.emailVerified;
+  }
+
+  /**
+   * Verify email with action code (from verification link)
+   */
+  async verifyEmailWithCode(actionCode: string) {
+    try {
+      // Verify the action code is valid
+      await checkActionCode(auth, actionCode);
+      
+      // Apply the action code to verify the email
+      await applyActionCode(auth, actionCode);
+
+      return {
+        success: true,
+        message: 'Email verified successfully! You can now sign in.'
+      };
+    } catch (error) {
+      console.error('Error verifying email:', error);
+      return {
+        success: false,
+        error: 'Invalid or expired verification link. Please request a new one.'
+      };
+    }
+  }
+
+  // ============================================================================
+  // PASSWORD RESET METHODS
+  // ============================================================================
+
+  /**
+   * Send password reset email to user
+   */
+  async sendPasswordReset(email: string) {
+    try {
+      await sendPasswordResetEmail(auth, email, {
+        url: `${window.location.origin}/login?reset=true`,
+        handleCodeInApp: false
+      });
+
+      return {
+        success: true,
+        message: 'Password reset email sent! Please check your inbox.'
+      };
+    } catch (error) {
+      console.error('Error sending password reset email:', error);
+      return {
+        success: false,
+        error: this.getErrorMessage(error as AuthError)
+      };
+    }
+  }
+
+  /**
+   * Verify password reset code
+   */
+  async verifyPasswordResetCode(actionCode: string) {
+    try {
+      const email = await verifyPasswordResetCode(auth, actionCode);
+      return {
+        success: true,
+        email
+      };
+    } catch (error) {
+      console.error('Error verifying password reset code:', error);
+      return {
+        success: false,
+        error: 'Invalid or expired reset link. Please request a new one.'
+      };
+    }
+  }
+
+  /**
+   * Confirm password reset with new password
+   */
+  async confirmPasswordReset(actionCode: string, newPassword: string) {
+    try {
+      await confirmPasswordReset(auth, actionCode, newPassword);
+      
+      return {
+        success: true,
+        message: 'Password reset successfully! You can now sign in with your new password.'
+      };
+    } catch (error) {
+      console.error('Error resetting password:', error);
+      return {
+        success: false,
+        error: this.getErrorMessage(error as AuthError)
+      };
+    }
   }
 
   // Error message helper

@@ -78,18 +78,37 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
         const coords = view.coordsAtPos(position);
 
         if (coords) {
-            // Calculate absolute Y coordinate relative to the whole document
-            const absoluteY = window.scrollY + coords.top;
-
-            // Optional: offset for fixed header or padding (e.g., 20px)
-            const offset = 20;
-
-            // Scroll window so heading top is at the very top of viewport
-            window.scrollTo({
-                top: absoluteY - offset,
-                behavior: "smooth",
-            });
-
+            // Find the editor element in the DOM
+            const editorElement = view.dom;
+            const editorNode = editorElement.closest('.ProseMirror');
+            
+            if (editorNode) {
+                // Get the node at this position and scroll it into view
+                const node = view.domAtPos(position);
+                if (node && node.node) {
+                    const element = node.node.nodeType === Node.ELEMENT_NODE 
+                        ? node.node as HTMLElement
+                        : (node.node.parentElement as HTMLElement);
+                    
+                    if (element) {
+                        element.scrollIntoView({
+                            behavior: 'smooth',
+                            block: 'start',
+                            inline: 'nearest'
+                        });
+                    }
+                }
+            } else {
+                // Fallback to window scroll with better offset calculation
+                const viewportHeight = window.innerHeight;
+                const toolbarHeight = 120; // Approximate toolbar height
+                const offset = toolbarHeight + 40; // Additional padding
+                
+                window.scrollTo({
+                    top: window.scrollY + coords.top - offset,
+                    behavior: "smooth",
+                });
+            }
         }
     };
 

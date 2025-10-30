@@ -1,5 +1,5 @@
 // src/pages/Profile.tsx - Main profile page with real user data
-import React from 'react';
+import React, { useState } from 'react';
 import Header from '../components/header/Header';
 import { ProfileInfoCard, DangerZoneCard } from '../components/profile';
 import GitHubConnectionCard from '../components/profile/GitHubConnectionCard';
@@ -9,12 +9,13 @@ import { useFeedback } from '../components/AppLayout';
 import { showError } from '@/utils/sweetAlert';
 import { deleteUser } from 'firebase/auth';
 import { doc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import Swal from 'sweetalert2';
 
 const Profile: React.FC = () => {
   const { user: firebaseUser, userProfile, loading } = useAuth();
   const { openFeedbackModal } = useFeedback();
+  const [githubConnected, setGithubConnected] = useState(false);
 
   // Show loading state while fetching user data
   if (loading) {
@@ -39,12 +40,20 @@ const Profile: React.FC = () => {
     );
   }
 
-  // Get GitHub username from provider data
+  // Get GitHub username from userProfile or provider data
   const getGitHubUsername = () => {
+    // First check userProfile for githubUsername
+    if (userProfile?.githubUsername) {
+      return userProfile.githubUsername;
+    }
+    // Then check provider data
     const githubProvider = firebaseUser.providerData.find(p => p.providerId === 'github.com');
     if (githubProvider) {
-      // GitHub provider typically stores username in displayName or we can extract from uid
       return githubProvider.displayName || githubProvider.uid?.split('_')[1] || 'Connected';
+    }
+    // If GitHub is connected via OAuth, show connected status
+    if (githubConnected) {
+      return 'Connected';
     }
     return 'Not connected';
   };
@@ -74,31 +83,7 @@ const Profile: React.FC = () => {
     if (!firebaseUser) return;
 
     try {
-      // Show confirmation dialog
-      const result = await Swal.fire({
-        title: 'Delete Account?',
-        html: `
-          <p class="text-gray-700 mb-4">This will permanently delete:</p>
-          <ul class="text-left text-sm text-gray-600 mb-4 list-disc list-inside">
-            <li>Your profile and account data</li>
-            <li>All your projects</li>
-            <li>All your documents</li>
-            <li>Your GitHub connection</li>
-          </ul>
-          <p class="text-red-600 font-semibold">This action cannot be undone!</p>
-        `,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#dc2626',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'Yes, delete everything',
-        cancelButtonText: 'Cancel',
-        reverseButtons: true,
-      });
-
-      if (!result.isConfirmed) return;
-
-      // Show loading state
+      // Show loading state immediately
       Swal.fire({
         title: 'Deleting Account...',
         html: 'Please wait while we delete your account and all associated data.',
@@ -156,14 +141,24 @@ const Profile: React.FC = () => {
       }, 2000);
 
     } catch (error: any) {
-      console.error('Error deleting account:', error);
-      
       // Handle specific errors
       if (error.code === 'auth/requires-recent-login') {
-        showError(
-          'Re-authentication Required',
-          'For security reasons, please log out and log back in before deleting your account.'
-        );
+        Swal.fire({
+          title: 'Re-authentication Required',
+          html: 'For security reasons, you need to log in again before deleting your account.<br><br>Click "Log Out" to sign out, then log back in and try again.',
+          icon: 'warning',
+          showCancelButton: true,
+          confirmButtonText: 'Log Out Now',
+          cancelButtonText: 'Cancel',
+          confirmButtonColor: '#DC2626',
+        }).then((result) => {
+          if (result.isConfirmed) {
+            // Log out the user
+            auth.signOut().then(() => {
+              window.location.href = '/login';
+            });
+          }
+        });
       } else {
         showError(
           'Delete Failed',
@@ -185,7 +180,7 @@ const Profile: React.FC = () => {
 
         {/* GitHub Integration */}
         <GitHubConnectionCard onConnectionChange={(connected) => {
-          console.log('GitHub connection status changed:', connected);
+          setGithubConnected(connected);
         }} />
 
         {/* Danger Zone */}

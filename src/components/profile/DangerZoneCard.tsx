@@ -6,17 +6,6 @@ interface DangerZoneCardProps {
 }
 
 const DangerZoneCard: React.FC<DangerZoneCardProps> = ({ onDeleteAccount }) => {
-  const handleDeleteClick = () => {
-    // Show confirmation dialog in real implementation
-    const confirmed = window.confirm(
-      'Are you sure you want to delete your account? This action cannot be undone.'
-    );
-    
-    if (confirmed) {
-      onDeleteAccount();
-    }
-  };
-
   return (
     <div className="bg-white border border-red-200 rounded-lg p-6">
       <h2 className="text-lg font-semibold text-red-900 mb-4">Danger Zone</h2>
@@ -26,10 +15,10 @@ const DangerZoneCard: React.FC<DangerZoneCardProps> = ({ onDeleteAccount }) => {
           <p className="text-sm text-gray-600">Permanently delete your account and all data</p>
         </div>
         <button 
-          onClick={handleDeleteClick}
-          className="px-4 py-2 bg-red-600 text-sm rounded-lg hover:bg-red-700 transition-colors"
+          onClick={onDeleteAccount}
+          className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors font-medium"
         >
-          <span className="text-white">Delete Account</span>
+          Delete Account
         </button>
       </div>
     </div>

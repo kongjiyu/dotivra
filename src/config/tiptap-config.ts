@@ -37,6 +37,9 @@ export const getTipTapExtensions = () => [
         bulletList: false, // we'll add BulletList explicitly below
         orderedList: false, // we'll add OrderedList explicitly below
         listItem: false, // we'll add ListItem explicitly below
+        link: false, // we'll add Link explicitly below to avoid duplicates
+        underline: false, // we'll add Underline explicitly below to avoid duplicates
+        horizontalRule: false, // we'll add HorizontalRule explicitly below to avoid duplicates
     }),
     // Custom paragraph extension with basic indent limit to prevent overflow
     Paragraph.configure({

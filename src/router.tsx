@@ -5,6 +5,7 @@ import Dashboard from "./pages/Dashboard";
 import DocumentEditor from "./pages/Document/DocumentEditor";
 import GithubConnect from "./pages/GithubConnect";
 import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
 import ProjectView from "./pages/ProjectOverview";
 import DocumentProject from "@/pages/Document/DocumentProject";
 import DocumentProjectList from "@/pages/Document/DocumentProjectList";
@@ -64,6 +65,14 @@ const router = createBrowserRouter([
       {
         path: "/",
         element: <Login />,
+      },
+      {
+        path: "/login",
+        element: <Login />,
+      },
+      {
+        path: "/reset-password",
+        element: <ResetPassword />,
       },
       {
         path: "/dashboard",
