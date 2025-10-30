@@ -1173,7 +1173,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                     id: crypto.randomUUID(),
                     role: "assistant",
                     type: "error",
-                    content: `🔴 Error: ${error instanceof Error ? error.message : 'Unknown error occurred'}. Please try again.`,
+                    content: `${error instanceof Error ? error.message : 'Unknown error occurred'}. Please try again.`,
                     timestamp: Date.now(),
                 };
                 setInternalMessages(prev => [...prev, errorMsg]);
