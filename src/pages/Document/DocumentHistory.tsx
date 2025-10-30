@@ -1,6 +1,6 @@
 import DocumentLayout from "./DocumentLayout";
 import VersionHistory from "@/components/Document/VersionHistory";
-import { useNavigate, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { useDocument } from "@/context/DocumentContext";
 import { useState } from "react";
 import { API_ENDPOINTS } from "@/lib/apiConfig";
@@ -17,9 +17,8 @@ import { useAuth } from "@/context/AuthContext";
  * collection via the backend saveVersion function.
  */
 export default function DocumentHistory() {
-    const navigate = useNavigate();
     const { documentId: urlDocId } = useParams<{ documentId: string }>();
-    const { documentContent, setDocumentContent, documentId: contextDocId } = useDocument();
+    const { documentContent, documentId: contextDocId } = useDocument();
     const { user } = useAuth();
     const [isRestoring, setIsRestoring] = useState(false);
 
@@ -54,17 +53,9 @@ export default function DocumentHistory() {
 
             console.log('✅ Version restored successfully');
 
-            // Update context with restored content
-            setDocumentContent(content);
-
-            // Navigate back to editor WITHOUT skipFetch to reload everything fresh
-            // This ensures document title and project documents are reloaded properly
-            navigate(`/document/${documentId}`, {
-                replace: true // Use replace to avoid back button issues
-            });
-            
-            // Force a page reload to ensure all data is fresh
-            window.location.reload();
+            // Force a full page reload to ensure all data (title, content, project docs) is fresh
+            // Using window.location.href instead of navigate ensures complete remount
+            window.location.href = `/document/${documentId}`;
         } catch (error) {
             console.error('❌ Error restoring version:', error);
             alert('Failed to restore version. Please try again.');
