@@ -101,7 +101,15 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
                 href={formatGitHubUrl(project.GitHubRepo)}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors max-w-[250px]"
+                onClick={(e) => {
+                  // Ensure the link works properly
+                  const url = formatGitHubUrl(project.GitHubRepo);
+                  if (url) {
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                    e.preventDefault();
+                  }
+                }}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors max-w-[250px] cursor-pointer"
                 title={formatGitHubDisplayText(project.GitHubRepo)}
               >
                 <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />

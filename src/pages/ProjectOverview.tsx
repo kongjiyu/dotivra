@@ -450,6 +450,7 @@ const ProjectOverview: React.FC = () => {
 
       // Create document data matching API expectations
       const documentData = {
+        DocumentName: name,
         Title: name,
         DocumentType: 'user-manual', // or another appropriate type
         DocumentCategory: documentCategory,
@@ -502,7 +503,7 @@ const ProjectOverview: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 custom-scrollbar overflow-auto">
       <Header />
       <ProjectHeader
         project={project}

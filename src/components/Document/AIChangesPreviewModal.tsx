@@ -33,7 +33,7 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
     const stats = getChangeStatistics(changes);
 
     return (
-        <div className="fixed inset-0 z-100 mt-[120px] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div className="fixed inset-0 z-100 mt-[120px] flex items-center justify-center bg-gray-900/50 backdrop-blur-sm">
             <div className="relative w-[60vw] h-[75vh] max-w-7xl bg-white dark:bg-gray-900 rounded-lg shadow-2xl flex flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
@@ -86,11 +86,12 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
                     <div className="h-full px-6 py-4">
                         <div className="w-full h-full">
                             <div
-                                className="preview-content tiptap h-full overflow-auto p-4 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg prose prose-sm dark:prose-invert max-w-none"
+                                className="preview-content tiptap custom-scrollbar h-full overflow-auto p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg prose prose-lg dark:prose-invert max-w-none"
                                 dangerouslySetInnerHTML={{ __html: previewHtml }}
                                 style={{
                                     fontFamily: 'system-ui, -apple-system, sans-serif',
-                                    lineHeight: '1.6'
+                                    lineHeight: '1.75',
+                                    fontSize: '16px'
                                 }}
                             />
                         </div>

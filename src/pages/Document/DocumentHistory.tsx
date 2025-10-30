@@ -57,10 +57,14 @@ export default function DocumentHistory() {
             // Update context with restored content
             setDocumentContent(content);
 
-            // Navigate back to editor with skipFetch flag to prevent overwriting
+            // Navigate back to editor WITHOUT skipFetch to reload everything fresh
+            // This ensures document title and project documents are reloaded properly
             navigate(`/document/${documentId}`, {
-                state: { skipFetch: true }
+                replace: true // Use replace to avoid back button issues
             });
+            
+            // Force a page reload to ensure all data is fresh
+            window.location.reload();
         } catch (error) {
             console.error('❌ Error restoring version:', error);
             alert('Failed to restore version. Please try again.');

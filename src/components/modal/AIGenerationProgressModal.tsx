@@ -52,7 +52,7 @@ const AIGenerationProgressModal: React.FC<AIGenerationProgressModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-4 text-white">
@@ -69,7 +69,7 @@ const AIGenerationProgressModal: React.FC<AIGenerationProgressModalProps> = ({
         </div>
 
         {/* Progress Steps */}
-        <div className="px-6 py-6 max-h-96 overflow-y-auto">
+        <div className="px-6 py-6 max-h-96 overflow-y-auto custom-scrollbar">
           <div className="space-y-4">
             {steps.map((step) => (
               <div key={step.id} className="flex items-start space-x-3">
@@ -107,22 +107,6 @@ const AIGenerationProgressModal: React.FC<AIGenerationProgressModalProps> = ({
               </div>
             ))}
           </div>
-
-          {/* Thinking Animation */}
-          {currentStep && (
-            <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-100">
-              <div className="flex items-center space-x-2">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
-                </div>
-                <span className="text-sm text-blue-700 font-medium">
-                  AI is thinking...
-                </span>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Footer */}

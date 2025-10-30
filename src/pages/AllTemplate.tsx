@@ -11,6 +11,7 @@ import type { LegacyTemplate, Template } from '../types';
 import { useFeedback } from '../components/AppLayout';
 import { showError } from '@/utils/sweetAlert';
 import { aiService } from '../services/aiService';
+import { API_ENDPOINTS } from '@/lib/apiConfig';
 
 interface GenerationStep {
   id: string;
@@ -42,7 +43,7 @@ const AllTemplate: React.FC = () => {
     const fetchTemplates = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/templates');
+        const response = await fetch(API_ENDPOINTS.templates());
 
         if (!response.ok) {
           throw new Error(`Failed to fetch templates: ${response.status}`);
@@ -153,7 +154,7 @@ const AllTemplate: React.FC = () => {
 
       // Create new project if needed
       if (!projectId && newProjectName) {
-        const createProjectRes = await fetch('/api/projects', {
+        const createProjectRes = await fetch(API_ENDPOINTS.projects(), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -188,7 +189,7 @@ const AllTemplate: React.FC = () => {
       if (!repositoryUrl && finalProjectId && projectId) {
         try {
           console.log('🔍 Fetching GitHub repo for existing project:', finalProjectId);
-          const projectResponse = await fetch(`/api/projects/${finalProjectId}`, {
+          const projectResponse = await fetch(API_ENDPOINTS.project(finalProjectId, user.uid), {
             headers: {
               'Authorization': `Bearer ${idToken}`
             }
@@ -341,13 +342,14 @@ const AllTemplate: React.FC = () => {
       }
 
       // Create document with consistent field names matching backend expectations
-      const createDocRes = await fetch('/api/documents', {
+      const createDocRes = await fetch(API_ENDPOINTS.documents(), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${idToken}`
         },
         body: JSON.stringify({
+          DocumentName: documentName,
           Title: documentName,
           DocumentType: template.TemplateName || 'user-manual',
           DocumentCategory: documentCategory,
@@ -371,7 +373,12 @@ const AllTemplate: React.FC = () => {
 
       // Navigate to document editor, passing the full document data including content
       // This allows the editor to display content immediately without waiting for Firestore
-      navigate(`/document/${docData.documentId}`, {
+      const createdDocumentId = createdDocument.id || docData.documentId;
+      if (!createdDocumentId) {
+        throw new Error('Document created but response did not include an id');
+      }
+
+      navigate(`/document/${createdDocumentId}`, {
         state: { documentData: createdDocument }
       });
     } catch (error) {

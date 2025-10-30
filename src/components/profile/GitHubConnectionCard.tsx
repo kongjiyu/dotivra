@@ -12,6 +12,7 @@ import { authService } from '../../services/authService';
 import GitHubService, { type GitHubUser } from '../../services/gitHubService';
 import { githubOAuthService } from '../../services/githubOAuthService';
 import { showSuccess } from '@/utils/sweetAlert';
+import Swal from 'sweetalert2';
 
 interface GitHubConnectionCardProps {
   onConnectionChange?: (connected: boolean) => void;
@@ -69,9 +70,15 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
       const result = await authService.signInWithGitHub();
       
       if (result.success) {
+        // Wait a moment for Firestore write to complete before refreshing
+        await new Promise(resolve => setTimeout(resolve, 500));
         await checkConnectionStatus();
         // Refresh user profile to update GitHub username immediately
         await refreshUserProfile();
+        // Trigger the connection change callback
+        if (onConnectionChange) {
+          onConnectionChange(true);
+        }
       } else if (result.needsLinking && result.pendingCredential) {
         // Handle account linking case
         setError('Linking your GitHub account to your existing email account...');
@@ -80,9 +87,15 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
         
         if (linkResult.success) {
           setError('✅ GitHub account successfully linked to your profile!');
+          // Wait a moment for Firestore write to complete before refreshing
+          await new Promise(resolve => setTimeout(resolve, 500));
           await checkConnectionStatus();
           // Refresh user profile to update GitHub username immediately
           await refreshUserProfile();
+          // Trigger the connection change callback
+          if (onConnectionChange) {
+            onConnectionChange(true);
+          }
           // Clear success message after 3 seconds
           setTimeout(() => setError(null), 3000);
         } else {
@@ -100,7 +113,21 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
   };
 
   const handleDisconnect = async () => {
-    if (!firebaseUser || !confirm('Are you sure you want to disconnect GitHub?')) {
+    if (!firebaseUser) return;
+
+    // Show confirmation dialog with SweetAlert2
+    const result = await Swal.fire({
+      title: 'Disconnect GitHub?',
+      text: 'Are you sure you want to disconnect your GitHub account?',
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, Disconnect',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#DC2626',
+      cancelButtonColor: '#6B7280',
+    });
+
+    if (!result.isConfirmed) {
       return;
     }
 
@@ -122,7 +149,6 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
       showSuccess('Disconnected', 'GitHub account has been disconnected successfully.');
       
     } catch (err) {
-      console.error('Failed to disconnect GitHub:', err);
       setError(err instanceof Error ? err.message : 'Failed to disconnect GitHub');
     } finally {
       setLoading(false);

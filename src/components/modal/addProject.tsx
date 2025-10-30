@@ -189,12 +189,23 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   // EFFECTS
   // ============================================================================
 
-  // Load user's repositories when modal opens or when useGithub toggle changes
+  // Reset form state when modal opens
   React.useEffect(() => {
     if (isOpen) {
+      // Reset form data
+      setFormData({ name: '', description: '', selectedRepo: '', useGithub: true });
+      setUiState({ errors: {}, isSubmitting: false, showAdvanced: false });
+      setGithubState(prev => ({
+        ...prev,
+        showRepoDropdown: false,
+        repositories: [],
+        filteredRepositories: [],
+        isLoadingRepositories: false
+      }));
+      // Load repositories
       loadUserRepositories();
     }
-  }, [isOpen, formData.useGithub]);
+  }, [isOpen]);
 
   // Load user's GitHub repositories using OAuth with proper authentication
   const loadUserRepositories = async () => {
