@@ -25,14 +25,10 @@ const Projects: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Debug: Log the modal state and projects
-  console.log('🔍 Projects component rendered, isModalOpen:', isModalOpen);
-  console.log('📊 Current allProjects state:', allProjects);
 
   // Load projects from API
   const loadProjects = async () => {
     try {
-      console.log('🔄 Loading projects from API...');
       setLoading(true);
       setError(null);
 
@@ -46,14 +42,12 @@ const Projects: React.FC = () => {
 
       // Fetch only the current user's projects
       const response = await fetch(API_ENDPOINTS.userProjects(user.uid));
-      console.log('📡 API Response status:', response.status);
 
       if (!response.ok) {
         throw new Error('Failed to load projects');
       }
 
       const data = await response.json();
-      console.log('📋 Received projects data:', data);
       const normalizedProjects = (data.projects || []).map((project: any): Project => {
         const rawCreated =
           project.Created_Time ??
@@ -110,11 +104,8 @@ const Projects: React.FC = () => {
     });
   }, [searchQuery, allProjects]);
 
-  // Debug filtered projects
-  console.log('🔎 Filtered projects:', filteredProjects);
 
   const handleNewProject = () => {
-    console.log('🎯 Opening modal...');
     setIsModalOpen(true);
   };
 
@@ -123,7 +114,6 @@ const Projects: React.FC = () => {
   };
 
   const handleProjectEdit = (project: Project) => {
-    console.log('Edit project:', project.ProjectName);
     setProjectToEdit(project);
     setIsEditModalOpen(true);
   };
@@ -132,7 +122,6 @@ const Projects: React.FC = () => {
     if (!projectToEdit || !projectToEdit.id) return;
 
     try {
-      console.log('Updating project:', projectToEdit.id, data);
 
       const response = await fetch(API_ENDPOINTS.project(projectToEdit.id), {
         method: 'PUT',
@@ -149,7 +138,6 @@ const Projects: React.FC = () => {
         throw new Error('Failed to update project');
       }
 
-      console.log('✅ Project updated successfully');
       showSuccess('Success', 'Project updated successfully');
 
       // Close modal and reload projects
@@ -172,7 +160,6 @@ const Projects: React.FC = () => {
     }
 
     try {
-      console.log('🗑️ Deleting project:', project.ProjectName);
 
       const response = await fetch(API_ENDPOINTS.deleteProject(project.id), {
         method: 'DELETE',
@@ -186,7 +173,6 @@ const Projects: React.FC = () => {
         throw new Error(errorData.error || 'Failed to delete project');
       }
 
-      console.log('✅ Project deleted successfully');
       showSuccess('Success', `Project "${project.ProjectName}" deleted successfully`);
 
       // Reload projects to refresh the list
@@ -225,7 +211,7 @@ const Projects: React.FC = () => {
                 onClick={handleNewProject}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 text-white" />
                 <span>New Project</span>
               </button>
             </div>
@@ -264,7 +250,7 @@ const Projects: React.FC = () => {
                   onClick={handleNewProject}
                   className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-4 h-4 text-white" />
                   Create New Project
                 </button>
               </div>
@@ -284,13 +270,8 @@ const Projects: React.FC = () => {
               <p className="text-gray-600 mb-4">
                 {searchQuery ? 'Try adjusting your search terms' : 'Create your first project to get started'}
               </p>
-              <button
-                onClick={handleNewProject}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Create Project</span>
-              </button>
+              {/* When there are no projects, we purposely do not render the extra Create Project button here.
+                  Users can use the New Project button in the header. */}
             </div>
           )}
         </div>
@@ -303,15 +284,18 @@ const Projects: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         onSubmit={async (projectData) => {
           try {
-            console.log('Creating project:', projectData);
 
             // Add userId to project data (required by backend)
             const projectDataWithUser = {
-              ...projectData,
-              userId: user?.uid || 'anonymous-user-' + Date.now()
+              // Backend expects: name, description, userId; githubLink optional
+              name: (projectData.name || '').trim(),
+              description: (projectData.description || '').trim(),
+              userId: user?.uid || ('anonymous-user-' + Date.now()),
+              githubLink: projectData.githubLink ?? projectData.selectedRepo ?? '',
+              selectedRepo: projectData.selectedRepo ?? '',
+              installationId: null,
             };
 
-            console.log('Project data with user ID:', projectDataWithUser);
 
             const response = await fetch(API_ENDPOINTS.projects(), {
               method: 'POST',
@@ -322,11 +306,15 @@ const Projects: React.FC = () => {
             });
 
             if (!response.ok) {
-              throw new Error('Failed to create project');
+              let serverMsg = 'Failed to create project';
+              try {
+                const errJson = await response.json();
+                serverMsg = errJson?.error || serverMsg;
+              } catch {}
+              throw new Error(serverMsg);
             }
 
             const result = await response.json();
-            console.log('✅ Project created successfully:', result.project);
 
             // Close modal and reload projects
             setIsModalOpen(false);
