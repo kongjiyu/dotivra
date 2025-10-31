@@ -177,61 +177,6 @@ const Tiptap = ({
             // Set content without emitting update to avoid triggering onUpdate
             editor.commands.setContent(initialContent, { emitUpdate: false });
 
-            // Clear undo/redo history after loading initial content
-            // This ensures undo won't revert to empty state
-            setTimeout(() => {
-                if (editor && !editor.isDestroyed) {
-                    
-                    try {
-                        // Use TipTap's view directly to clear history
-                        const { view } = editor;
-                        const { state } = view;
-                        
-                        // Create a new transaction that resets history
-                        const tr = state.tr;
-                        
-                        if (historyState) {
-                            
-                            // Create a transaction that clears the history
-                            let tr = state.tr;
-                            
-                            // Try different meta keys that might work
-                            tr.setMeta('addToHistory', false);
-                            tr.setMeta('history', { type: 'clearHistory' });
-                            tr.setMeta('appendedTransaction', true);
-                            tr.setMeta('preventUpdate', true);
-                            
-                            // Dispatch the transaction
-                            view.dispatch(tr);
-                            
-                            // Force a new transaction to reset the history state
-                            setTimeout(() => {
-                            if (editor && !editor.isDestroyed) {
-                                // Clear all undo history by calling undo until there's nothing left
-                                let cleared = 0;
-                                while (editor.can().undo() && cleared < 50) {
-                                    editor.commands.undo();
-                                    cleared++;
-                                }
-                                
-                                if (cleared > 0) {
-                                    // Restore the content one final time without history
-                                    console.log(`🧹 Cleared ${cleared} history entries, restoring content...`);
-                                    editor.commands.setContent(initialContent, { emitUpdate: false });
-                                }
-                                
-                                console.log('✅ History cleared - undo is now disabled for initial load');
-                            }
-                        }, 50);
-                        } else {
-                        }
-                        
-                    } catch (error) {
-                        console.error('❌ Error clearing history:', error);
-                    }
-                }
-            }, 100);
-
             // Mark this content as applied
             lastAppliedContentRef.current = initialContent;
         } else {
