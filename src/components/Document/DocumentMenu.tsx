@@ -812,6 +812,18 @@ export default function DocumentMenu({
 	// Disable undo if there's only 1 version (initial state) or 0 versions
 	const canUndo = versionCount > 1 && !!editor?.can().undo();
 	const canRedo = !!editor?.can().redo();
+	
+	// Debug logging for undo state
+	useEffect(() => {
+		if (editor) {
+			console.log('🔄 Undo button state:', {
+				versionCount,
+				editorCanUndo: editor.can().undo(),
+				finalCanUndo: canUndo,
+				disabled: !canUndo
+			});
+		}
+	}, [versionCount, editor, canUndo]);
 
 	return (
 		<div className="bg-white border-b border-gray-200">
