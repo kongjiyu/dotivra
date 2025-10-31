@@ -226,41 +226,67 @@ const AllTemplate: React.FC = () => {
           setGenerationRepository(repoFullName);
           setIsGenerating(true);
 
-          // Try to estimate time based on repo size and file count (public repos only)
+          // Estimate time based on actual AI generation phases
           try {
             setEstimatedRange(null);
             const metaRes = await fetch(`https://api.github.com/repos/${repoFullName}`);
             if (metaRes.ok) {
               const meta = await metaRes.json();
               let range: [number, number] | null = null;
+              
               if (typeof meta?.size === 'number') {
-                // meta.size is in KB
                 const sizeInKB = meta.size;
-                range = sizeInKB < 1000
-                  ? [10, 20]
-                  : sizeInKB < 5000
-                  ? [20, 45]
-                  : sizeInKB < 20000
-                  ? [45, 90]
-                  : [90, 160];
-              }
-              // Refine using approximate file count (if available)
-              try {
-                const contentsRes = await fetch(`https://api.github.com/repos/${repoFullName}/contents`);
-                if (contentsRes.ok) {
-                  const contents = await contentsRes.json();
-                  const topLevelCount = Array.isArray(contents) ? contents.length : 0;
-                  if (range) {
-                    // Adjust +/- 15% based on breadth
-                    const factor = topLevelCount > 100 ? 1.15 : topLevelCount < 10 ? 0.9 : 1.0;
-                    range = [Math.max(8, Math.round(range[0] * factor)), Math.round(range[1] * factor)] as [number, number];
-                  }
+                
+                // Base time estimates:
+                // - File collection: 15-25 seconds (API calls + 1 AI call)
+                // - Planning: 5-10 seconds (1 AI call)
+                // - Section generation: 15-25 seconds per section (4-8 sections typically)
+                // - Finalization: 2-5 seconds
+                
+                // Estimate number of sections based on repo complexity
+                let estimatedSections = 5; // default
+                if (sizeInKB < 1000) {
+                  estimatedSections = 4; // Simple repos: 4 sections
+                } else if (sizeInKB < 5000) {
+                  estimatedSections = 5; // Medium repos: 5 sections
+                } else if (sizeInKB < 20000) {
+                  estimatedSections = 6; // Large repos: 6 sections
+                } else {
+                  estimatedSections = 7; // Very large repos: 7 sections
                 }
-              } catch {}
+                
+                // Calculate realistic time ranges
+                const baseSetupTime = 20; // File collection + planning
+                const sectionTimeMin = 15; // Minimum time per section
+                const sectionTimeMax = 25; // Maximum time per section
+                const finalizationTime = 5;
+                
+                const minTime = baseSetupTime + (estimatedSections * sectionTimeMin) + finalizationTime;
+                const maxTime = baseSetupTime + 10 + (estimatedSections * sectionTimeMax) + finalizationTime;
+                
+                range = [minTime, maxTime] as [number, number];
+                
+                // Adjust based on file count (more files = more context = slightly slower)
+                try {
+                  const contentsRes = await fetch(`https://api.github.com/repos/${repoFullName}/contents`);
+                  if (contentsRes.ok) {
+                    const contents = await contentsRes.json();
+                    const topLevelCount = Array.isArray(contents) ? contents.length : 0;
+                    
+                    // Add extra time for repos with many files
+                    if (topLevelCount > 100) {
+                      range = [range[0] + 10, range[1] + 20] as [number, number];
+                    } else if (topLevelCount > 50) {
+                      range = [range[0] + 5, range[1] + 10] as [number, number];
+                    }
+                  }
+                } catch {}
+              }
+              
               if (range) setEstimatedRange(range);
             }
           } catch {
-            // Ignore estimation errors
+            // Ignore estimation errors - will use default "10-30s" from modal
           }
 
           const steps: GenerationStep[] = [

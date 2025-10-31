@@ -190,76 +190,52 @@ const Tiptap = ({
             // Set content without emitting update to avoid triggering onUpdate
             editor.commands.setContent(initialContent, { emitUpdate: false });
 
-            // NUCLEAR OPTION: Clear undo/redo history after loading initial content
+            // Clear undo/redo history after loading initial content
             // This ensures undo won't revert to empty state
             setTimeout(() => {
                 if (editor && !editor.isDestroyed) {
-                    console.log('🔄 Attempting to clear undo history...');
+                    console.log('🔄 Clearing undo history after initial content load...');
                     
                     try {
-                        // APPROACH: Use the internal history state object directly
+                        // Use TipTap's view directly to clear history
                         const { view } = editor;
                         const { state } = view;
                         
-                        // Find the history plugin state
-                        const historyState = state.plugins.find((plugin: any) => 
-                            plugin.spec?.key?.includes?.('history') || plugin.key?.includes?.('history')
-                        );
+                        // Create a new transaction that resets history
+                        const tr = state.tr;
                         
-                        if (historyState) {
-                            console.log('✅ Found history plugin, attempting manual clear...');
-                            
-                            // Create a transaction that clears the history
-                            let tr = state.tr;
-                            
-                            // Try different meta keys that might work
-                            tr.setMeta('addToHistory', false);
-                            tr.setMeta('history', { type: 'clearHistory' });
-                            tr.setMeta('appendedTransaction', true);
-                            
-                            // Dispatch the transaction
-                            view.dispatch(tr);
-                            
-                            // Force a new transaction to reset the history state
-                            setTimeout(() => {
-                                if (editor && !editor.isDestroyed) {
-                                    // Try to manually undo everything and then clear
-                                    let undoCount = 0;
-                                    while (editor.can().undo() && undoCount < 100) {
-                                        editor.commands.undo();
-                                        undoCount++;
-                                    }
-                                    
-                                    console.log(`🧹 Manually undid ${undoCount} history entries`);
-                                    
-                                    // Now set the content again fresh
-                                    editor.commands.setContent(initialContent, { emitUpdate: false });
-                                    
-                                    // Check final state
-                                    setTimeout(() => {
-                                        if (editor && !editor.isDestroyed) {
-                                            const canStillUndo = editor.can().undo();
-                                            console.log('✅ Final check - Can undo:', canStillUndo);
-                                            
-                                            if (canStillUndo) {
-                                                console.warn('⚠️ History still exists after clearing attempts');
-                                                console.log('💡 Undo button will be disabled based on version count');
-                                            } else {
-                                                console.log('🎉 SUCCESS! History cleared - cannot undo to empty state');
-                                            }
-                                        }
-                                    }, 100);
+                        // Mark this transaction as not being part of history
+                        tr.setMeta('addToHistory', false);
+                        tr.setMeta('preventUpdate', true);
+                        
+                        // Dispatch to apply
+                        view.dispatch(tr);
+                        
+                        // Wait a bit then check and clear any remaining history
+                        setTimeout(() => {
+                            if (editor && !editor.isDestroyed) {
+                                // Clear all undo history by calling undo until there's nothing left
+                                let cleared = 0;
+                                while (editor.can().undo() && cleared < 50) {
+                                    editor.commands.undo();
+                                    cleared++;
                                 }
-                            }, 100);
-                        } else {
-                            console.warn('❌ Could not find history plugin in editor state');
-                        }
+                                
+                                if (cleared > 0) {
+                                    // Restore the content one final time without history
+                                    console.log(`🧹 Cleared ${cleared} history entries, restoring content...`);
+                                    editor.commands.setContent(initialContent, { emitUpdate: false });
+                                }
+                                
+                                console.log('✅ History cleared - undo is now disabled for initial load');
+                            }
+                        }, 50);
                         
                     } catch (error) {
                         console.error('❌ Error clearing history:', error);
                     }
                 }
-            }, 600); // Wait for content to be fully loaded
+            }, 100);
 
             // Mark this content as applied
             lastAppliedContentRef.current = initialContent;

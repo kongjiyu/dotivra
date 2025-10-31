@@ -1135,7 +1135,8 @@ app.post('/api/documents', async (req, res) => {
 			Updated_Time: Timestamp.now(),
 			IsDraft: IsDraft !== undefined ? IsDraft : true,
 			EditedBy: User_Id,
-			Hash: null // Will be calculated when content is saved
+			Hash: null, // Will be calculated when content is saved
+			version: 1 // Initialize version to 1
 		};
 
 		console.log('Creating document in Firestore:', document);
@@ -1144,6 +1145,22 @@ app.post('/api/documents', async (req, res) => {
 		const docRef = await addDoc(collection(firestore, 'Documents'), document);
 
 		console.log('✅ Document created with Firestore ID:', docRef.id);
+
+		// ✅ Save initial version (version 1) to DocumentHistory
+		try {
+			await addDoc(collection(firestore, 'DocumentHistory'), {
+				Document_Id: docRef.id,
+				Content: Content || '',
+				Version: 1,
+				Edited_Time: Timestamp.now(),
+				EditedBy: User_Id,
+				Channel: 'content',
+			});
+			console.log(`📚 Initial version (1) saved to DocumentHistory for document ${docRef.id}`);
+		} catch (historyError) {
+			console.error('❌ Failed to save initial version history:', historyError);
+			// Don't fail document creation if history save fails
+		}
 
 		const responseDocument = {
 			...document,

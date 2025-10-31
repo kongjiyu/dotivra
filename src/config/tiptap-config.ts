@@ -40,6 +40,10 @@ export const getTipTapExtensions = () => [
         link: false, // we'll add Link explicitly below to avoid duplicates
         underline: false, // we'll add Underline explicitly below to avoid duplicates
         horizontalRule: false, // we'll add HorizontalRule explicitly below to avoid duplicates
+        history: {
+            depth: 100, // Keep last 100 changes
+            newGroupDelay: 500, // Group changes within 500ms
+        },
     }),
     // Custom paragraph extension with basic indent limit to prevent overflow
     Paragraph.configure({

@@ -1,6 +1,6 @@
 // src/components/project/ProjectHeader.tsx
 import React from 'react';
-import { ExternalLink, FolderOpen, Plus, PencilLine, Trash2 } from 'lucide-react';
+import { FolderOpen, Plus, PencilLine, Trash2 } from 'lucide-react';
 import type { Project } from '../../types';
 
 interface ProjectHeaderProps {
@@ -102,18 +102,15 @@ const ProjectHeader: React.FC<ProjectHeaderProps> = ({
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => {
-                  // Ensure the link works properly
-                  const url = formatGitHubUrl(project.GitHubRepo);
-                  if (url) {
-                    window.open(url, '_blank', 'noopener,noreferrer');
-                    e.preventDefault();
-                  }
+                  e.stopPropagation();
                 }}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors max-w-[250px] cursor-pointer"
+                className="hidden sm:inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors max-w-[250px] cursor-pointer"
                 title={formatGitHubDisplayText(project.GitHubRepo)}
               >
-                <ExternalLink className="h-3.5 w-3.5 flex-shrink-0" />
                 <span className="truncate">{formatGitHubDisplayText(project.GitHubRepo)}</span>
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
               </a>
             )}
 
