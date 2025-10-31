@@ -581,25 +581,27 @@ From structure improvements to real-time content updates, I ensure your work rem
 
         setShowPreviewModal(false);
 
-        // Restore original content before AI changes
-        if (editor && aiBeforeContent) {
+        // Restore original content before AI changes (prioritize documentSnapshot)
+        const originalContent = documentSnapshot?.content || aiBeforeContent;
+
+        if (editor && originalContent) {
             // Clear all highlights first
             editor.chain()
                 .focus()
                 .unsetHighlight()
                 .run();
 
-            // Restore original content
-            editor.commands.setContent(aiBeforeContent);
+            // Restore original content (before any tool executions)
+            editor.commands.setContent(originalContent);
 
 
-            // Also update Firebase to revert changes
+            // Also update Firebase to revert ALL changes made by AI tools
             if (documentId) {
                 try {
                     await fetch(buildApiUrl(`api/documents/${documentId}`), {
                         method: 'PUT',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ Content: aiBeforeContent })
+                        body: JSON.stringify({ Content: originalContent })
                     });
 
                 } catch (err) {
@@ -607,6 +609,9 @@ From structure improvements to real-time content updates, I ensure your work rem
                 }
             }
         }
+
+        // Clear the document snapshot after rejecting
+        setDocumentSnapshot(null);
     };
 
     const handleRegenerateChanges = () => {
@@ -1439,11 +1444,11 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                 ) : (
                                                     /* User and regular assistant messages */
                                                     <div>
-                                                        {/* Reply indicator */}
+                                                        {/* Reply indicator - No X button in sent messages */}
                                                         {m.replyTo && (() => {
                                                             const originalMsg = messages.find(msg => msg.id === m.replyTo);
                                                             return originalMsg ? (
-                                                                <div className="mb-2 p-2 bg-blue-50 border-l-4 border-blue-400 rounded flex items-center justify-between group hover:bg-blue-100 transition-colors">
+                                                                <div className="mb-2 p-2 bg-blue-50 border-l-4 border-blue-400 rounded flex items-center">
                                                                     <button
                                                                         onClick={() => {
                                                                             const element = document.getElementById(`message-${m.replyTo}`);
@@ -1465,19 +1470,6 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                                             })()}
                                                                         </span>
                                                                     </button>
-                                                                    <Button
-                                                                        size="sm"
-                                                                        variant="ghost"
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setInternalMessages(prev =>
-                                                                                prev.map(msg => msg.id === m.id ? { ...msg, replyTo: undefined } : msg)
-                                                                            );
-                                                                        }}
-                                                                        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-blue-600 hover:text-blue-800"
-                                                                    >
-                                                                        <X className="w-3 h-3" />
-                                                                    </Button>
                                                                 </div>
                                                             ) : null;
                                                         })()}
@@ -1813,11 +1805,28 @@ From structure improvements to real-time content updates, I ensure your work rem
             <AIChangesPreviewModal
                 isOpen={showPreviewModal}
                 onClose={() => setShowPreviewModal(false)}
+                originalHtml={documentSnapshot?.content || aiBeforeContent || ''}
                 previewHtml={previewHtml}
                 changes={previewChanges}
                 onAccept={handleAcceptChanges}
                 onReject={handleRejectChanges}
                 onRegenerate={handleRegenerateChanges}
+                onApplyOriginal={() => {
+                    if (editor && (documentSnapshot?.content || aiBeforeContent)) {
+                        editor.commands.setContent(documentSnapshot?.content || aiBeforeContent || '');
+                        setShowPreviewModal(false);
+                    }
+                }}
+                onCopyModified={async () => {
+                    try {
+                        // Get the modified content without highlights by applying all tool executions
+                        const modifiedContent = editor?.getHTML() || '';
+                        await navigator.clipboard.writeText(modifiedContent);
+                        // Could add a toast notification here
+                    } catch (err) {
+                        console.error('Failed to copy:', err);
+                    }
+                }}
             />
         </>);
 }

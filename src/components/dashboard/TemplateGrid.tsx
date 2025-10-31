@@ -4,6 +4,7 @@ import { Plus, Expand } from 'lucide-react';
 import type { Template } from '../../../firestoreService';
 import { FileText, Code, BookOpen, Settings } from 'lucide-react';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { API_ENDPOINTS } from '@/lib/apiConfig';
 
 interface TemplateGridProps {
   onTemplateClick: (template: Template) => void;
@@ -33,14 +34,29 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
     const fetchTemplates = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/templates');
+        console.log('📋 Fetching templates from:', API_ENDPOINTS.templates());
+        const response = await fetch(API_ENDPOINTS.templates());
+
+        console.log('📋 Templates response status:', response.status);
 
         if (response.ok) {
           const data = await response.json();
-          setTemplates(data.templates || []);
+          console.log('📋 Templates data received:', data);
+          console.log('📋 Number of templates:', data.templates?.length || 0);
+
+          // Ensure templates is always an array
+          const templatesArray = Array.isArray(data.templates) ? data.templates : [];
+          setTemplates(templatesArray);
+
+          if (templatesArray.length === 0) {
+            console.warn('⚠️ No templates found in database. The Templates collection may be empty.');
+          }
+        } else {
+          const errorData = await response.text();
+          console.error('❌ Failed to fetch templates:', response.status, errorData);
         }
       } catch (error) {
-        console.error('Error fetching templates:', error);
+        console.error('❌ Error fetching templates:', error);
       } finally {
         setLoading(false);
       }
@@ -55,10 +71,8 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
     <section className="space-y-3   ">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="space-y-1">
-          <h2 className="text-sm font-semibold text-gray-800">Start a new project</h2>
-          <p className="text-sm text-gray-500 leading-relaxed">
-            Pick a template to quickly scaffold new documentation
-          </p>
+          <h2 className="text-md font-semibold text-gray-800">Start a new project</h2>
+
         </div>
         <button
           onClick={onExploreAll}
@@ -86,7 +100,6 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
                 </div>
                 <div className="space-y-2">
                   <span className="text-lg font-semibold text-gray-900 block">Add project</span>
-                  <span className="text-sm text-gray-600 block leading-relaxed max-w-48">Create a new documentation workspace with templates</span>
                 </div>
               </button>
             </div>
@@ -101,6 +114,19 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
                     <div className="h-4 bg-gray-200 rounded w-3/4"></div>
                     <div className="h-3 bg-gray-200 rounded w-full"></div>
                     <div className="h-3 bg-gray-200 rounded w-2/3"></div>
+                  </div>
+                </div>
+              </div>
+            ) : featuredTemplates.length === 0 ? (
+              // No templates message
+              <div className="flex-shrink-0 w-72 snap-start p-2">
+                <div className="bg-amber-50 border border-amber-200 rounded-xl h-64 flex items-center justify-center p-6">
+                  <div className="text-center space-y-2">
+                    <FileText className="h-10 w-10 text-amber-500 mx-auto mb-3" />
+                    <p className="text-sm font-medium text-amber-900">No Templates Available</p>
+                    <p className="text-xs text-amber-700 leading-relaxed">
+                      Templates collection is empty. Please add templates to your Firestore database.
+                    </p>
                   </div>
                 </div>
               </div>
@@ -147,10 +173,10 @@ const TemplateGrid: React.FC<TemplateGridProps> = ({
 
                         <div className="flex items-center justify-between flex-shrink-0">
                           <span className={`inline-flex items-center px-3 py-1.5 rounded-full text-xs font-medium ${template.Category === 'user'
-                              ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
-                              : template.Category === 'developer'
-                                ? 'bg-purple-100 text-purple-700 border border-purple-200'
-                                : 'bg-gray-100 text-gray-700 border border-gray-200'
+                            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                            : template.Category === 'developer'
+                              ? 'bg-purple-100 text-purple-700 border border-purple-200'
+                              : 'bg-gray-100 text-gray-700 border border-gray-200'
                             }`}>
                             {template.Category}
                           </span>

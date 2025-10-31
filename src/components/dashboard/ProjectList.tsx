@@ -355,9 +355,6 @@ const ProjectList: React.FC<ProjectListProps> = ({
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-800">Recent projects</h2>
-            <p className="text-gray-500 text-sm">
-              Access your recent projects and collaborate with your team
-            </p>
           </div>
           <div className="relative w-full lg:w-72">
             <Search className="h-4 w-4 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" />

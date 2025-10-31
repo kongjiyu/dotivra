@@ -35,11 +35,11 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 }) => {
   const { user, userProfile } = useAuth();
   const navigate = useNavigate();
-  
+
   // ============================================================================
   // STATE MANAGEMENT - ALL HOOKS MUST BE CALLED CONSISTENTLY
   // ============================================================================
-  
+
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -55,7 +55,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   });
 
   const [uiState, setUiState] = useState({
-    errors: {} as {[key: string]: string},
+    errors: {} as { [key: string]: string },
     isSubmitting: false,
     showAdvanced: false
   });
@@ -75,7 +75,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   // ============================================================================
 
   const validateForm = () => {
-    const newErrors: {[key: string]: string} = {};
+    const newErrors: { [key: string]: string } = {};
 
     if (!formData.name.trim()) {
       newErrors.name = 'Project name is required';
@@ -104,17 +104,17 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
   const handleInputChange = (field: string, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
-    
+
     // Clear error when user starts typing
     if (uiState.errors[field]) {
-      setUiState(prev => ({ 
-        ...prev, 
+      setUiState(prev => ({
+        ...prev,
         errors: { ...prev.errors, [field]: '' }
       }));
     }
   };
 
-  
+
 
 
 
@@ -122,11 +122,11 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
   const handleRepoSelect = (repoFullName: string) => {
     setFormData(prev => ({ ...prev, selectedRepo: repoFullName }));
-    
+
     // Clear any previous repo errors
     if (uiState.errors.selectedRepo) {
-      setUiState(prev => ({ 
-        ...prev, 
+      setUiState(prev => ({
+        ...prev,
         errors: { ...prev.errors, selectedRepo: '' }
       }));
     }
@@ -136,7 +136,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -144,14 +144,26 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
     setUiState(prev => ({ ...prev, isSubmitting: true }));
 
     try {
+      // Build full GitHub URL if repository is selected
+      let githubUrl = undefined;
+      if (formData.useGithub && formData.selectedRepo) {
+        // Check if it's already a full URL
+        if (formData.selectedRepo.startsWith('http://') || formData.selectedRepo.startsWith('https://')) {
+          githubUrl = formData.selectedRepo;
+        } else {
+          // Convert username/repo format to full GitHub URL
+          githubUrl = `https://github.com/${formData.selectedRepo}`;
+        }
+      }
+
       const projectData = {
         name: formData.name,
         description: formData.description,
-        githubLink: formData.useGithub ? formData.selectedRepo : undefined,
-        selectedRepo: formData.useGithub ? formData.selectedRepo : undefined
+        githubLink: githubUrl,
+        selectedRepo: formData.selectedRepo
       };
 
-      
+
       if (onSubmit) {
         onSubmit(projectData);
       }
@@ -165,19 +177,19 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
         filteredRepositories: [],
         isLoadingRepositories: false
       }));
-      setUiState(prev => ({ 
-        ...prev, 
+      setUiState(prev => ({
+        ...prev,
         errors: {},
         isSubmitting: false,
         showAdvanced: false
       }));
-      
+
       onClose();
-      
+
     } catch (error) {
       console.error('Error creating project:', error);
-      setUiState(prev => ({ 
-        ...prev, 
+      setUiState(prev => ({
+        ...prev,
         isSubmitting: false,
         errors: { submit: 'Failed to create project. Please try again.' }
       }));
@@ -210,53 +222,53 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   const loadUserRepositories = async () => {
     // Only load repositories if user wants to use GitHub
     if (!formData.useGithub) {
-      setGithubState(prev => ({ 
-        ...prev, 
+      setGithubState(prev => ({
+        ...prev,
         filteredRepositories: [],
-        isLoadingRepositories: false 
+        isLoadingRepositories: false
       }));
       return;
     }
 
     setGithubState(prev => ({ ...prev, isLoadingRepositories: true }));
-    
+
     try {
-      
+
       if (!user) {
-        setGithubState(prev => ({ 
-          ...prev, 
+        setGithubState(prev => ({
+          ...prev,
           filteredRepositories: [],
-          isLoadingRepositories: false 
+          isLoadingRepositories: false
         }));
         return;
       }
 
       // Check if user has GitHub connected
       if (!userProfile?.githubUsername) {
-        setGithubState(prev => ({ 
-          ...prev, 
+        setGithubState(prev => ({
+          ...prev,
           filteredRepositories: [],
-          isLoadingRepositories: false 
+          isLoadingRepositories: false
         }));
         return;
       }
-      
+
       // Use the existing githubRepoService which handles authentication properly
       const repositories = await githubRepoService.getUserRepositories(user);
-      
-      
+
+
       setGithubState(prev => ({
         ...prev,
         filteredRepositories: repositories,
         isLoadingRepositories: false
       }));
-      
+
     } catch (error) {
-     
-      setGithubState(prev => ({ 
-        ...prev, 
+
+      setGithubState(prev => ({
+        ...prev,
         filteredRepositories: [],
-        isLoadingRepositories: false 
+        isLoadingRepositories: false
       }));
     }
   };
@@ -272,7 +284,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   // ============================================================================
   // CONDITIONAL RENDERING - AFTER ALL HOOKS
   // ============================================================================
-  
+
   if (!isOpen) {
     return null;
   }
@@ -281,11 +293,11 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   // ============================================================================
   // RENDER
   // ============================================================================
-  
+
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto" style={{ zIndex: 9999 }}>
       <div className="fixed inset-0 bg-gray-900/30 backdrop-blur-sm" onClick={onClose} />
-      
+
       <div className="flex min-h-full items-center justify-center p-4">
         <div className="relative w-full max-w-lg transform overflow-hidden rounded-xl bg-white shadow-xl">
           {/* Header */}
@@ -296,7 +308,6 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
               </div>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Create New Project</h3>
-                <p className="text-sm text-gray-600">Set up a new documentation project with optional GitHub integration</p>
               </div>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -314,9 +325,8 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                 type="text"
                 value={formData.name}
                 onChange={(e) => handleInputChange('name', e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  uiState.errors.name ? 'border-red-300' : 'border-gray-300'
-                }`}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${uiState.errors.name ? 'border-red-300' : 'border-gray-300'
+                  }`}
                 placeholder="Enter your project name"
                 required
               />
@@ -336,9 +346,8 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
               <textarea
                 value={formData.description}
                 onChange={(e) => handleInputChange('description', e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                  uiState.errors.description ? 'border-red-300' : 'border-gray-300'
-                }`}
+                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${uiState.errors.description ? 'border-red-300' : 'border-gray-300'
+                  }`}
                 placeholder="Describe what this project is about"
                 rows={3}
                 required
@@ -365,14 +374,12 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                 <button
                   type="button"
                   onClick={() => handleInputChange('useGithub', !formData.useGithub)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                    formData.useGithub ? 'bg-blue-600' : 'bg-gray-200'
-                  }`}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${formData.useGithub ? 'bg-blue-600' : 'bg-gray-200'
+                    }`}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      formData.useGithub ? 'translate-x-6' : 'translate-x-1'
-                    }`}
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${formData.useGithub ? 'translate-x-6' : 'translate-x-1'
+                      }`}
                   />
                 </button>
               </div>
@@ -384,7 +391,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   GitHub Repository {githubState.filteredRepositories.length > 0 ? '*' : '(Optional)'}
                 </label>
-                
+
                 {githubState.isLoadingRepositories ? (
                   <div className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
                     <div className="flex items-center space-x-2">
@@ -436,9 +443,8 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                   <select
                     value={formData.selectedRepo}
                     onChange={(e) => handleRepoSelect(e.target.value)}
-                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-                      uiState.errors.selectedRepo ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${uiState.errors.selectedRepo ? 'border-red-300' : 'border-gray-300'
+                      }`}
                     required
                   >
                     <option value="">Select a repository ({githubState.filteredRepositories.length} available)</option>
@@ -475,7 +481,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
                     </div>
                   </div>
                 )}
-                
+
                 {uiState.errors.selectedRepo && (
                   <div className="mt-1 flex items-center space-x-1 text-sm text-red-600">
                     <AlertCircle className="h-4 w-4 flex-shrink-0" />
@@ -495,15 +501,15 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
             {/* Actions */}
             <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={onClose}
                 disabled={uiState.isSubmitting}
                 className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors disabled:opacity-50"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 type="submit"
                 disabled={uiState.isSubmitting}
                 className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"

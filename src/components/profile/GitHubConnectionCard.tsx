@@ -313,13 +313,7 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
           )}
         </div>
 
-        <div className="mt-4 text-xs text-gray-500">
-          {connected ? (
-            <p>✅ GitHub connected. You can now access your repositories for document creation.</p>
-          ) : (
-            <p>Connect your GitHub account to create documents from your repositories.</p>
-          )}
-        </div>
+        
       </div>
     </div>
   );

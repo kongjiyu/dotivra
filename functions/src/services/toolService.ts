@@ -94,6 +94,7 @@ export const executeTool = async (toolName: string, parameters: Record<string, a
     'search_document_content': search_document_content,
     'append_document_content': append_document_content,
     'insert_document_content': insert_document_content,
+    'insert_document_content_at_location': insert_document_content_at_location,
     'replace_document_content': replace_document_content,
     'remove_document_content': remove_document_content,
     'append_document_summary': append_document_summary,
@@ -327,9 +328,93 @@ export const insert_document_content = async ({ position, content, reason }: any
   currentDocumentContent = currentDocumentContent.slice(0, position) + content + currentDocumentContent.slice(position);
   const result = {
     success: true,
-    html: `<div class="tool-success">Inserted <b>${content.length}</b> characters at position <b>${position}</b>.</div>`
+    html: `<div class="tool-success">Inserted <b>${content.length}</b> characters at position <b>${position}</b>.</div>`,
+    position: { from: position, to: position + content.length },
+    insertedAt: position
   };
   logToolUsage('insert_document_content', { position, content, reason }, result, currentDocumentId);
+  await syncToFirebase();
+  return result;
+};
+
+export const insert_document_content_at_location = async ({ target, position, content, reason }: any): Promise<any> => {
+  if (typeof target !== 'string' || !target.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, no target location was provided. Please specify where to insert the content.</div>`
+    };
+  }
+  if (typeof content !== 'string' || !content.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, no content was provided to insert. Please try again.</div>`
+    };
+  }
+  if (position !== 'before' && position !== 'after') {
+    return {
+      success: false,
+      html: `<div class="error-message">Position must be either 'before' or 'after'.</div>`
+    };
+  }
+
+  // Find the target in the document
+  const targetIndex = currentDocumentContent.indexOf(target);
+  if (targetIndex === -1) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, couldn't find "${target.substring(0, 50)}" in the document. Please try a different target.</div>`
+    };
+  }
+
+  // Calculate insertion position
+  let insertPosition;
+  if (position === 'before') {
+    insertPosition = targetIndex;
+  } else {
+    // For 'after' position, intelligently find the end of the section
+    insertPosition = targetIndex + target.length;
+    
+    // If the target is a heading tag, find the end of its section
+    if (target.match(/<h[1-6][^>]*>.*?<\/h[1-6]>/i)) {
+      // Extract heading level (h1, h2, etc.)
+      const headingMatch = target.match(/<h([1-6])/i);
+      if (headingMatch) {
+        const currentLevel = parseInt(headingMatch[1]);
+        
+        // Find the next heading of equal or higher level (lower number)
+        const remainingContent = currentDocumentContent.slice(insertPosition);
+        const headingRegex = /<h([1-6])[^>]*>/gi;
+        let match;
+        let sectionEnd = insertPosition;
+        
+        while ((match = headingRegex.exec(remainingContent)) !== null) {
+          const nextLevel = parseInt(match[1]);
+          // If we find a heading of same or higher level, that's the end of this section
+          if (nextLevel <= currentLevel) {
+            sectionEnd = insertPosition + match.index;
+            break;
+          }
+        }
+        
+        // If we found a section boundary, use it
+        if (sectionEnd > insertPosition) {
+          insertPosition = sectionEnd;
+        }
+      }
+    }
+  }
+
+  // Insert the content
+  currentDocumentContent = currentDocumentContent.slice(0, insertPosition) + content + currentDocumentContent.slice(insertPosition);
+
+  const result = {
+    success: true,
+    html: `<div class="tool-success">Inserted <b>${content.length}</b> characters ${position} "${target.substring(0, 30)}${target.length > 30 ? '...' : ''}".</div>`,
+    position: { from: insertPosition, to: insertPosition + content.length },
+    targetFound: target.substring(0, 100),
+    insertedAt: insertPosition
+  };
+  logToolUsage('insert_document_content_at_location', { target, position, content, reason }, result, currentDocumentId);
   await syncToFirebase();
   return result;
 };

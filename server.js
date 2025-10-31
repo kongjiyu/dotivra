@@ -130,7 +130,7 @@ try {
 }
 
 // Import toolService and AIAgent
-import { initFirestore, getToolService } from './server/services/toolService.js';
+import { initFirestore, getToolService } from './server/services/toolService.ts';
 import { AIAgent } from './server/aiAgent.js';
 
 // Initialize firestore in toolService
@@ -465,7 +465,7 @@ app.post('/api/tools/execute', async (req, res) => {
 				return res.status(400).json({ success: false, html: errorHtml, tool });
 			}
 		}		// Import setCurrentDocument from toolService
-		const { setCurrentDocument } = await import('./server/services/toolService.js');
+		const { setCurrentDocument } = await import('./server/services/toolService.ts');
 
 		// Set document context if documentId provided
 		if (documentId && documentId !== 'NOT_SET') {
