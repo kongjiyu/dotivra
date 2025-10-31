@@ -77,8 +77,6 @@ export default function DocumentLayout({
     // Helper function to check if title editing is allowed (only on editor tab)
     const shouldAllowTitleEdit = () => {
         const path = location.pathname;
-        console.log('[DocumentLayout] Checking title edit permission for path:', path);
-
         // Allow title editing on:
         // 1. /document/editor
         // 2. /document/:documentId (main document editor route)
@@ -89,16 +87,6 @@ export default function DocumentLayout({
         const isProject = path.includes('/project');
 
         const allowed = isEditor || (isDocumentWithId && !isHistory && !isProject);
-
-        console.log('[DocumentLayout] Title edit check:', {
-            path,
-            isEditor,
-            isDocumentWithId,
-            isHistory,
-            isProject,
-            allowed
-        });
-
         return allowed;
     };
 
@@ -131,12 +119,9 @@ export default function DocumentLayout({
 
     useEffect(() => {
         const chatFunction = (message?: string, isReply: boolean = false) => {
-            console.log('📝 Chat function called:', { message: message?.substring(0, 50), isReply });
-
             if (isReply) {
                 // If it's a reply, store the selected text and open chat sidebar
                 if (message && message.trim()) {
-                    console.log('✅ Setting selected text for chat:', message.substring(0, 50));
                     setSelectedTextForChat(message);
                     setInitialChatMessage(''); // Don't set initial message for replies
                 }
@@ -145,7 +130,6 @@ export default function DocumentLayout({
             }
 
             if (message && message.trim()) {
-                console.log('✅ Setting initial message:', message.substring(0, 50));
                 setInitialChatMessage(message);
                 setSelectedTextForChat(''); // Clear selected text for regular messages
 
@@ -190,8 +174,6 @@ export default function DocumentLayout({
 
     const handleTitleChange = async (newTitle: string) => {
         setDocumentTitle(newTitle);
-        console.log(newTitle);
-
         // Save title to Firebase if we have a documentId
         if (documentId) {
             try {

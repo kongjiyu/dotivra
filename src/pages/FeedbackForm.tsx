@@ -78,7 +78,6 @@ const FeedbackForm: React.FC = () => {
     
     try {
       // TODO: Implement API call to submit feedback
-      console.log('Submitting feedback:', feedbackData);
       
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 2000));

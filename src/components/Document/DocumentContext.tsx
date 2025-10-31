@@ -14,7 +14,8 @@ const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
     const [contextMenu, setContextMenu] = useState({
         isVisible: false,
         position: { x: 0, y: 0 },
-        isTableContext: false
+        isTableContext: false,
+        isImageContext: false
     });
     const editorContentRef = useRef<HTMLDivElement>(null);
     const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
@@ -66,14 +67,16 @@ const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
                 }
             }
 
-            // Check if right-click is on a table
+            // Check if right-click is on a table or image
             const target = event.target as HTMLElement;
             const isInTable = target.closest('table, td, th, tr');
+            const isOnImage = target.tagName === 'IMG' && target.classList.contains('tiptap-image');
 
             setContextMenu({
                 isVisible: true,
                 position: { x, y },
-                isTableContext: !!isInTable
+                isTableContext: !!isInTable,
+                isImageContext: isOnImage
             });
         };
 
@@ -195,6 +198,7 @@ const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
                 position={contextMenu.position}
                 onClose={closeContextMenu}
                 isTableContext={contextMenu.isTableContext}
+                isImageContext={contextMenu.isImageContext}
                 onOpenChat={onOpenChat} // Pass onOpenChat to ContextMenu
             />
         </div>

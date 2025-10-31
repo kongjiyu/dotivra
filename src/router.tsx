@@ -22,6 +22,9 @@ import FeedbackForm from "./pages/FeedbackForm";
 import GeminiDashboard from "./pages/gemini/geminiDashboard";
 import GeminiTestBalancer from "./pages/gemini/geminiTestBalancer";
 
+// Check if feedback is enabled via environment variable
+const isFeedbackEnabled = import.meta.env.VITE_ENABLE_FEEDBACK === 'true';
+
 // Error page component
 const ErrorPage = () => (
   <ErrorBoundary>
@@ -127,10 +130,10 @@ const router = createBrowserRouter([
         path: "/templates",
         element: <ProtectedRoute><AllTemplate /></ProtectedRoute>,
       },
-      {
+      ...(isFeedbackEnabled ? [{
         path: "/feedback",
         element: <ProtectedRoute><FeedbackForm /></ProtectedRoute>,
-      },
+      }] : []),
       {
         path: "/gemini",
         element: <ProtectedRoute><GeminiDashboard /></ProtectedRoute>,

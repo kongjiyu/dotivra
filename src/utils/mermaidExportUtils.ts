@@ -19,9 +19,6 @@ export async function processMermaidForExport(htmlContent: string): Promise<stri
     
     // Find all code blocks that might contain Mermaid
     const codeBlocks = doc.querySelectorAll('pre code.language-mermaid, pre[data-language="mermaid"]');
-    
-    console.log(`[Mermaid Export] Found ${codeBlocks.length} Mermaid code blocks`);
-    
     // Process each Mermaid code block
     for (let i = 0; i < codeBlocks.length; i++) {
         const codeBlock = codeBlocks[i];
@@ -36,20 +33,13 @@ export async function processMermaidForExport(htmlContent: string): Promise<stri
             }
             
             if (!mermaidCode.trim()) {
-                console.log(`[Mermaid Export] Empty code block ${i}, skipping`);
                 continue;
             }
-            
-            console.log(`[Mermaid Export] Rendering diagram ${i}:`, mermaidCode.substring(0, 50) + '...');
-            
             // Generate unique ID for this diagram
             const diagramId = `mermaid-export-${Date.now()}-${i}`;
             
             // Render the Mermaid diagram
             const { svg } = await mermaid.render(diagramId, mermaidCode);
-            
-            console.log(`[Mermaid Export] Successfully rendered diagram ${i}`);
-            
             // Create a container div for the SVG
             const svgContainer = doc.createElement('div');
             svgContainer.className = 'mermaid-diagram-export';

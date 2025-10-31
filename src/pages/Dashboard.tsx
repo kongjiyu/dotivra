@@ -92,7 +92,6 @@ const Dashboard: React.FC = () => {
         // For testing, use a mock user ID if not authenticated
         const userId = user?.uid || 'mock-user-' + Date.now();
         if (!user?.uid) {
-          console.warn('User not authenticated, using mock user ID:', userId);
         }
 
         const projectResponse = await fetch(API_ENDPOINTS.projects(), {
@@ -121,7 +120,6 @@ const Dashboard: React.FC = () => {
       // Get user ID for document creation
       const userId = user?.uid || 'mock-user-' + Date.now();
       if (!user?.uid) {
-        console.warn('User not authenticated, using mock user ID:', userId);
       }
 
       // Determine document category based on template or role
@@ -152,7 +150,6 @@ const Dashboard: React.FC = () => {
             repositoryUrl = project.GitHubRepo || project.githubLink || null;
           }
         } catch (error) {
-          console.warn('⚠️ Could not fetch project GitHub repo:', error);
         }
       }
 
@@ -253,7 +250,6 @@ const Dashboard: React.FC = () => {
               await new Promise(resolve => setTimeout(resolve, 1500));
             }
           } else {
-            console.warn('⚠️ Could not parse repository URL:', repositoryUrl);
           }
         } catch (error) {
           console.error('❌ Repository processing failed:', error);

@@ -2,38 +2,17 @@ import Image from '@tiptap/extension-image'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { NodeSelection } from '@tiptap/pm/state'
-import { compressImageToBase64, canAddImage, MAX_IMAGE_SIZE_KB, MAX_IMAGES_PER_DOCUMENT } from '@/services/imageCompressionService'
+import { processImageFile, MAX_IMAGE_SIZE_MB } from '@/services/imageCompressionService'
 
-// Helper function to compress and insert image
+// Helper function to check size and insert image
 async function handleImageUpload(file: File, view: any, pos?: number) {
-    const { schema, doc } = view.state
-    const currentContent = doc.textContent || ''
+    const { schema } = view.state
 
     try {
-        // Step 1: Compress the image
-        console.log('📤 Compressing image:', file.name)
-        const result = await compressImageToBase64(file)
+        // Process the image (size check + convert to Base64)
+        const result = await processImageFile(file)
         
-        console.log('✅ Image compressed successfully:', {
-            size: `${(result.compressedSize / 1024).toFixed(2)} KB`,
-            reduction: `${result.compressionRatio.toFixed(1)}%`
-        })
-
-        // Step 2: Check if we can add this image
-        const sizeCheck = canAddImage(currentContent, result.compressedSize)
-        
-        if (!sizeCheck.canAdd) {
-            alert(`❌ Cannot add image:\n\n${sizeCheck.reason}\n\nTip: Remove existing images or use a smaller image.`)
-            return
-        }
-
-        // Step 3: Show warning if approaching limit
-        if (sizeCheck.newSizeKB > 600) {
-            const remaining = sizeCheck.limitKB - sizeCheck.newSizeKB
-            console.warn(`⚠️ Document approaching size limit: ${sizeCheck.newSizeKB.toFixed(0)}KB / ${sizeCheck.limitKB}KB (${remaining.toFixed(0)}KB remaining)`)
-        }
-
-        // Step 4: Insert the compressed Base64 image
+        // Insert the Base64 image
         const node = schema.nodes.resizableImage.create({
             src: result.dataUrl,
             alt: file.name.replace(/\.[^/.]+$/, ''),
@@ -46,17 +25,18 @@ async function handleImageUpload(file: File, view: any, pos?: number) {
         transaction.insert(insertPos, node)
         view.dispatch(transaction)
 
-        console.log('✅ Image inserted successfully')
-
     } catch (error) {
-        console.error('❌ Image compression/upload failed:', error)
-        alert(
-            `Failed to add image: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
-            `Requirements:\n` +
-            `- Maximum ${MAX_IMAGE_SIZE_KB}KB after compression\n` +
-            `- Maximum ${MAX_IMAGES_PER_DOCUMENT} images per document\n` +
-            `- Image should be reasonable size (recommend <2MB original)`
-        )
+        // Show error tooltip using dynamic import of SweetAlert2
+        import('sweetalert2').then(({ default: Swal }) => {
+            Swal.fire({
+                icon: 'error',
+                title: 'Image Too Large',
+                text: error instanceof Error ? error.message : 'Unknown error',
+                footer: `Maximum image size: ${MAX_IMAGE_SIZE_MB}MB`,
+                confirmButtonColor: '#3B82F6',
+                confirmButtonText: 'OK'
+            });
+        });
     }
 }
 
@@ -137,6 +117,7 @@ export const ResizableImage = Image.extend<ResizableImageOptions>({
                 renderHTML: attributes => {
                     return {
                         'data-border': attributes.showBorder,
+                        class: 'tiptap-image', // Always add tiptap-image class
                         style: attributes.showBorder
                             ? `border: 1px solid #e5e7eb; border-radius: 4px;${attributes.width ? ` width: ${attributes.width}px; height: auto;` : ''}`
                             : `border: none;${attributes.width ? ` width: ${attributes.width}px; height: auto;` : ''}`,
@@ -325,7 +306,6 @@ export const ResizableImage = Image.extend<ResizableImageOptions>({
                                         const MIN_WIDTH = 100
                                         const MIN_HEIGHT = 100
 
-                                        console.log(`🖼️ Start resize - Width: ${startWidth}px, Height: ${startHeight}px, Aspect ratio: ${aspectRatio.toFixed(2)}`);
 
                                         const handleMouseMove = (e: MouseEvent) => {
                                             const deltaX = e.clientX - startX
@@ -373,9 +353,7 @@ export const ResizableImage = Image.extend<ResizableImageOptions>({
                                             document.removeEventListener('mouseup', handleMouseUp)
                                             
                                             const finalNode = view.state.doc.nodeAt(pos)
-                                            if (finalNode) {
-                                                console.log(`✅ Resize complete - Final width: ${finalNode.attrs.width}px`)
-                                            }
+                                            
                                         }
 
                                         document.addEventListener('mousemove', handleMouseMove)

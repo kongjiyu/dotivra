@@ -63,7 +63,6 @@ export class GeminiBalancer {
 
 	async _load() {
 		try {
-			console.log('📦 Loading Gemini usage data from Firebase...');
 
 			const { doc, getDoc } = await import('firebase/firestore');
 
@@ -84,14 +83,11 @@ export class GeminiBalancer {
 						totalRequests: data.totalRequest || 0,
 						totalTokens: data.totalTokens || 0,
 					});
-					console.log(`  ✅ Loaded key ${keyState.id.substring(0, 12)}: ${keyState.totalRequests} requests`);
 				} else {
 					await this._initializeKeyInFirebase(keyState);
-					console.log(`  🆕 Initialized new key ${keyState.id.substring(0, 12)} in Firebase`);
 				}
 			}
 
-			console.log('✅ Gemini usage data loaded from Firebase');
 		} catch (error) {
 			console.error('❌ Error loading Gemini data from Firebase:', error);
 		}
@@ -119,7 +115,6 @@ export class GeminiBalancer {
 
 	async _save() {
 		try {
-			console.log('💾 Starting save to Firebase...');
 			const now = new Date();
 			this.state.lastPersistAt = this._now();
 
@@ -139,18 +134,15 @@ export class GeminiBalancer {
 						updatedAt: now,
 					};
 
-					console.log(`  💾 Saving key ${k.id.substring(0, 12)}:`, JSON.stringify(dataToSave, null, 2));
 
 					await setDoc(keyDoc, dataToSave, { merge: true });
 
-					console.log(`  ✅ Successfully saved key ${k.id.substring(0, 12)}`);
 				} catch (error) {
 					console.error(`❌ Error saving key ${k.id.substring(0, 12)} to Firebase:`, error);
 				}
 			});
 
 			await Promise.all(savePromises);
-			console.log('✅ All keys saved to Firebase successfully');
 		} catch (error) {
 			console.error('❌ GeminiBalancer persist error:', error);
 		}
@@ -201,7 +193,6 @@ export class GeminiBalancer {
 	}
 
 	_markUsage(k, usedTokens) {
-		console.log(`📊 Marking usage for key ${k.id.substring(0, 12)}: ${usedTokens} tokens`);
 		this._resetWindowsIfNeeded(k);
 		k.rpmUsed += 1;
 		k.rpdUsed += 1;
@@ -209,7 +200,6 @@ export class GeminiBalancer {
 		k.totalRequests += 1;
 		k.totalTokens += usedTokens;
 		k.lastUsedAt = this._now();
-		console.log(`  📊 New totals: RPM=${k.rpmUsed}, RPD=${k.rpdUsed}, TPM=${k.tpmUsed}, Total=${k.totalRequests} req, ${k.totalTokens} tokens`);
 		this._debouncedSave();
 	}
 
@@ -238,17 +228,14 @@ export class GeminiBalancer {
 	// Read usage directly from Firebase (for dashboard)
 	async getUsageFromFirebase() {
 		try {
-			console.log('📖 Reading from Firebase collection: gemini-metrics');
 			const { collection, getDocs } = await import('firebase/firestore');
 			const collectionRef = collection(this.firestore, 'gemini-metrics');
 			const snapshot = await getDocs(collectionRef);
 
-			console.log(`📖 Found ${snapshot.size} documents in Firebase`);
 
 			const keys = [];
 			snapshot.forEach((doc) => {
 				const data = doc.data();
-				console.log(`  📄 Document ${doc.id.slice(0, 12)}:`, JSON.stringify(data, null, 2));
 
 				// Calculate status based on current usage vs limits
 				const rpmUsed = data.RPM || 0;
@@ -277,7 +264,6 @@ export class GeminiBalancer {
 				});
 			});
 
-			console.log(`✅ Retrieved ${keys.length} keys from Firebase`);
 
 			return {
 				keys,
@@ -326,11 +312,7 @@ export class GeminiBalancer {
 				}
 				const client = new GoogleGenAI({ apiKey: keyState.key });
 
-				// Debug logging for tools
-				if (tools) {
-					console.log(`🔧 Tools being passed to Gemini:`, tools.length > 0 ? tools[0]?.functionDeclarations?.length : 0, 'function declarations');
-					console.log(`🔧 Tool config:`, JSON.stringify(toolConfig, null, 2));
-				}
+				
 
 
 				// Resolve tool config if not provided
@@ -394,13 +376,11 @@ export class GeminiBalancer {
 				const isOverloaded = e?.status === 503 || /overloaded|model is overloaded/i.test(msg);
 
 				if (isRateLimit) {
-					console.log(`⚠️  Rate limit hit for key ${keyState.id.substring(0, 12)}, cooling down for 1 minute`);
 					const now = this._now();
 					const minuteEnd = Math.floor(now / 60000) * 60000 + 60000;
 					keyState.cooldownUntil = minuteEnd;
 					this._debouncedSave();
 				} else if (isOverloaded) {
-					console.log(`⚠️  Model overloaded (503) for key ${keyState.id.substring(0, 12)}, switching to next key`);
 					// Put this key in cooldown for 30 seconds
 					keyState.cooldownUntil = this._now() + 30000;
 					this._debouncedSave();
@@ -454,13 +434,7 @@ export class GeminiBalancer {
 
 				const client = new GoogleGenAI({ apiKey: keyState.key });
 
-				// Log tools and config for debugging
-				if (tools) {
-					console.log(`🔧 Tools passed to Gemini:`,
-						tools?.[0]?.functionDeclarations?.length || 0,
-						'function declarations');
-					if (toolConfig) console.log(`🔧 Tool config:`, JSON.stringify(toolConfig, null, 2));
-				}
+				
 
 				// --- Core streaming logic ---
 				const stream = await client.models.generateContentStream({
@@ -488,10 +462,8 @@ export class GeminiBalancer {
 				let functionCalls = [];
 
 				// Stream iteration
-				console.log('🚀 Starting to receive stream from Gemini...');
 				for await (const chunk of stream) {
 					const delta = chunk?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-					console.log('🧩 Received chunk:', JSON.stringify(chunk));
 					if (delta) {
 						finalText += delta;
 						allChunks.push(delta);
@@ -540,13 +512,11 @@ export class GeminiBalancer {
 				const isOverloaded = e?.status === 503 || /overloaded|model is overloaded/i.test(msg);
 
 				if (isRateLimit) {
-					console.log(`⚠️  Rate limit hit for key ${keyState.id.substring(0, 12)}, cooling down for 1 minute`);
 					const now = this._now();
 					const minuteEnd = Math.floor(now / 60000) * 60000 + 60000;
 					keyState.cooldownUntil = minuteEnd;
 					this._debouncedSave();
 				} else if (isOverloaded) {
-					console.log(`⚠️  Model overloaded (503) for key ${keyState.id.substring(0, 12)}, switching to next key`);
 					// Put this key in cooldown for 30 seconds
 					keyState.cooldownUntil = this._now() + 30000;
 					this._debouncedSave();

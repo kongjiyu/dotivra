@@ -1552,46 +1552,54 @@ D --> E`;
                                         // If cursor is in a link, remove the link
                                         editor.chain().focus().unsetLink().run();
                                     } else {
-                                        // Check if text is selected
+                                        // Always show modal for link insertion
                                         const { state } = editor;
                                         const { from, to } = state.selection;
                                         const hasSelection = from !== to;
+                                        const selectedText = hasSelection ? state.doc.textBetween(from, to, ' ', ' ').trim() : '';
 
-                                        if (hasSelection) {
-                                            // Get selected text
-                                            const selectedText = state.doc.textBetween(from, to, ' ', ' ').trim();
-
-                                            // Check if the selected text is a valid URL
-                                            const urlPattern = /^https?:\/\/.+/i;
-                                            if (urlPattern.test(selectedText)) {
-                                                // If selected text is a valid URL, make it a link
-                                                editor.chain().focus().setLink({ href: selectedText }).run();
-                                            }
-                                            // If selected text is not a valid URL, do nothing
-                                        } else {
-                                            // No selection: collect URL/text via SweetAlert2 modal
-                                            import('sweetalert2').then(async ({ default: Swal }) => {
-                                                const { value: formValues } = await Swal.fire({
-                                                    title: 'Insert link',
-                                                    html:
-                                                        '<input id="swal-link-url" class="swal2-input" placeholder="https://example.com" />' +
-                                                        '<input id="swal-link-text" class="swal2-input" placeholder="Link text (optional)" />',
-                                                    focusConfirm: false,
-                                                    showCancelButton: true,
-                                                    preConfirm: () => {
-                                                        const url = (document.getElementById('swal-link-url') as HTMLInputElement)?.value?.trim();
-                                                        const text = (document.getElementById('swal-link-text') as HTMLInputElement)?.value?.trim();
-                                                        if (!url) return null;
-                                                        return { url, text };
+                                        // Show modal for link insertion
+                                        import('sweetalert2').then(async ({ default: Swal }) => {
+                                            const { value: formValues } = await Swal.fire({
+                                                title: 'Insert Link',
+                                                html:
+                                                    '<input id="swal-link-url" class="swal2-input" placeholder="https://example.com" style="margin-bottom: 10px;" />' +
+                                                    (hasSelection 
+                                                        ? `<div style="margin: 10px 0; padding: 10px; background: #f3f4f6; border-radius: 6px; text-align: left;"><strong>Selected text:</strong> ${selectedText}</div>`
+                                                        : '<input id="swal-link-text" class="swal2-input" placeholder="Link text (optional)" />'),
+                                                focusConfirm: false,
+                                                showCancelButton: true,
+                                                confirmButtonColor: '#3B82F6',
+                                                cancelButtonColor: '#6B7280',
+                                                confirmButtonText: 'Insert Link',
+                                                preConfirm: () => {
+                                                    const url = (document.getElementById('swal-link-url') as HTMLInputElement)?.value?.trim();
+                                                    const text = !hasSelection ? (document.getElementById('swal-link-text') as HTMLInputElement)?.value?.trim() : '';
+                                                    if (!url) {
+                                                        Swal.showValidationMessage('Please enter a URL');
+                                                        return null;
                                                     }
-                                                });
-                                                if (formValues && formValues.url) {
-                                                    const href = formValues.url;
+                                                    // Validate URL format
+                                                    const urlPattern = /^https?:\/\/.+/i;
+                                                    if (!urlPattern.test(url)) {
+                                                        Swal.showValidationMessage('Please enter a valid URL starting with http:// or https://');
+                                                        return null;
+                                                    }
+                                                    return { url, text };
+                                                }
+                                            });
+                                            if (formValues && formValues.url) {
+                                                const href = formValues.url;
+                                                if (hasSelection) {
+                                                    // Apply link to selected text
+                                                    editor.chain().focus().setLink({ href }).run();
+                                                } else {
+                                                    // Insert new link with text
                                                     const text = formValues.text || formValues.url;
                                                     editor.chain().focus().insertContent(`<a href="${href}">${text}</a>`).run();
                                                 }
-                                            });
-                                        }
+                                            }
+                                        });
                                     }
                                 }}
                                 className="flex items-center gap-1.5 px-2 py-1 h-7 rounded-md hover:bg-gray-100 transition-colors text-sm"

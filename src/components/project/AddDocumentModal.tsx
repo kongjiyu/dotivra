@@ -1,8 +1,8 @@
 // src/components/project/AddDocumentModal.tsx
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { X, FileText, Github } from 'lucide-react';
-import { templates } from '../../utils/mockData';
+import { X, FileText, Github, Loader2 } from 'lucide-react';
 import type { Template } from '../../types';
+import { API_ENDPOINTS } from '@/lib/apiConfig';
 
 interface CreateDocumentArgs {
   template: Template;
@@ -41,15 +41,41 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
   const [activeTab, setActiveTab] = useState<'user' | 'developer' | 'general'>(initialCategory || 'user');
   const [useTemplate, setUseTemplate] = useState(true); // Toggle for template vs no template
   const [validationError, setValidationError] = useState('');
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(true);
+
+  // Fetch templates from Firebase on mount
+  useEffect(() => {
+    const fetchTemplates = async () => {
+      try {
+        setLoadingTemplates(true);
+        const response = await fetch(API_ENDPOINTS.templates());
+        if (!response.ok) {
+          throw new Error('Failed to fetch templates');
+        }
+        const data = await response.json();
+        setTemplates(data || []);
+      } catch (error) {
+        console.error('Error fetching templates:', error);
+        setTemplates([]);
+      } finally {
+        setLoadingTemplates(false);
+      }
+    };
+    
+    if (isOpen) {
+      fetchTemplates();
+    }
+  }, [isOpen]);
 
   // Filter templates by active tab
   const relevantTemplates = useMemo(
-    () => templates.filter(template => template.Category === activeTab),
-    [activeTab]
+    () => templates.filter((template: Template) => template.Category === activeTab),
+    [activeTab, templates]
   );
 
   const selectedTemplate = useMemo(
-    () => relevantTemplates.find(template => template.id === selectedTemplateId) ?? null,
+    () => relevantTemplates.find((template: Template) => template.id === selectedTemplateId) ?? null,
     [relevantTemplates, selectedTemplateId]
   );
 
@@ -291,7 +317,19 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
 
                 {/* Fixed height scrollable container */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-[400px] overflow-y-auto pr-2 border border-gray-200 rounded-lg p-4 bg-gray-50/50">
-                  {relevantTemplates.map((template) => {
+                  {loadingTemplates ? (
+                    <div className="col-span-2 flex items-center justify-center h-full">
+                      <div className="text-center">
+                        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600">Loading templates...</p>
+                      </div>
+                    </div>
+                  ) : relevantTemplates.length === 0 ? (
+                    <div className="col-span-2 flex items-center justify-center h-full">
+                      <p className="text-sm text-gray-500">No templates available for this category</p>
+                    </div>
+                  ) : (
+                    relevantTemplates.map((template) => {
                     const Icon = FileText; // Default icon for all templates
                     const isSelected = selectedTemplateId === template.id;
                     return (
@@ -353,7 +391,8 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                         }`} />
                       </div>
                     );
-                  })}
+                  })
+                  )}
                 </div>
               </div>
             )}

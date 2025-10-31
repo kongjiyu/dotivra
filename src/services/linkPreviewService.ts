@@ -73,8 +73,6 @@ class LinkPreviewService {
                 favicon: metadata.favicon || this.generateFaviconUrl(url)
             };
         } catch (error) {
-            console.warn('Server fetch failed, using client-side fallback:', error);
-            
             // Generate rich client-side fallback
             const domain = this.extractDomainFromUrl(url);
             

@@ -209,7 +209,6 @@ const AllTemplate: React.FC = () => {
             repositoryUrl = project.GitHubRepo || project.githubLink || null;
           }
         } catch (error) {
-          console.warn('⚠️ Could not fetch project GitHub repo:', error);
         }
       }
 
@@ -365,7 +364,6 @@ const AllTemplate: React.FC = () => {
             await new Promise(resolve => setTimeout(resolve, 1500));
           }
         } else {
-          console.warn('⚠️ Could not parse repository URL:', repositoryUrl);
         }
       } else {
         
@@ -408,10 +406,8 @@ const AllTemplate: React.FC = () => {
       }
 
       const docData = await createDocRes.json();
-      console.log('📄 Full API response:', docData);
       
       const createdDocument = docData.document || docData;
-      console.log('📄 Created document object:', createdDocument);
 
       setIsGenerating(false);
 
@@ -426,7 +422,6 @@ const AllTemplate: React.FC = () => {
         docData.Document_Id ||
         docData.DocumentId;
       
-      console.log('📄 Extracted document ID:', createdDocumentId);
       
       if (!createdDocumentId) {
         console.error('❌ Could not find document ID in response. Response structure:', {

@@ -91,7 +91,6 @@ export class DocumentAgentService {
           break;
 
         default:
-          console.warn('Unknown action type:', action.type);
       }
     });
   }

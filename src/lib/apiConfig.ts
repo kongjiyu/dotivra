@@ -77,8 +77,3 @@ export const getEnvironmentInfo = () => ({
   isDevelopment: import.meta.env.DEV,
   mode: import.meta.env.MODE,
 });
-
-// Log configuration on first import (dev only)
-if (import.meta.env.DEV) {
-  console.log('🔧 API Config:', getEnvironmentInfo());
-}

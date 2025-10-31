@@ -66,7 +66,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     if (!user) return;
     
     try {
-      console.log('🔄 Refreshing user profile...');
       
       // Reload Firebase Auth user to get latest provider data
       await user.reload();
@@ -79,10 +78,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Refresh the Firestore user profile with fresh data
       const profile = await authService.getUserProfile(user.uid);
-      console.log('✅ Profile refreshed:', {
-        hasGithubUsername: !!profile?.githubUsername,
-        githubUsername: profile?.githubUsername
-      });
+
       
       // Create a new object to force React to detect the change
       if (profile) {
