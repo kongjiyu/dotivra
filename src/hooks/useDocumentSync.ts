@@ -20,9 +20,10 @@ interface UseDocumentSyncOptions {
   channel: SyncChannel;
   onUpdate?: (content: string) => void;
   debounceMs?: number;
+  onVersionSaved?: () => void; // Callback when version is saved
 }
 
-export function useDocumentSync({ documentId, channel, onUpdate, debounceMs = 2000 }: UseDocumentSyncOptions) {
+export function useDocumentSync({ documentId, channel, onUpdate, debounceMs = 2000, onVersionSaved }: UseDocumentSyncOptions) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('synced');
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const isInitialLoadRef = useRef(true);
@@ -150,6 +151,11 @@ export function useDocumentSync({ documentId, channel, onUpdate, debounceMs = 20
           } else {
             const result = await response.json();
             console.log('✅ Version history saved:', result);
+            
+            // Notify parent component that version was saved
+            if (onVersionSaved) {
+              onVersionSaved();
+            }
           }
         } catch (versionError) {
           // Don't fail the whole operation if version save fails

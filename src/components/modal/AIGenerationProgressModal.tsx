@@ -14,6 +14,7 @@ interface AIGenerationProgressModalProps {
   steps: GenerationStep[];
   currentStep?: string;
   onCancel?: () => void;
+  estimatedSecondsRange?: [number, number];
 }
 
 const AIGenerationProgressModal: React.FC<AIGenerationProgressModalProps> = ({
@@ -21,7 +22,8 @@ const AIGenerationProgressModal: React.FC<AIGenerationProgressModalProps> = ({
   repositoryName,
   steps,
   currentStep,
-  onCancel
+  onCancel,
+  estimatedSecondsRange
 }) => {
   if (!isOpen) return null;
 
@@ -56,6 +58,7 @@ const AIGenerationProgressModal: React.FC<AIGenerationProgressModalProps> = ({
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-purple-600 px-6 py-4 text-white">
+          <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="relative">
               <Loader2 className="w-6 h-6 animate-spin" />
@@ -64,6 +67,13 @@ const AIGenerationProgressModal: React.FC<AIGenerationProgressModalProps> = ({
             <div>
               <h3 className="text-lg font-semibold">AI Document Generation</h3>
               <p className="text-sm text-blue-100">Analyzing {repositoryName}</p>
+            </div>
+            </div>
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="text-xs text-blue-100">Estimated</span>
+              <span className="text-xs font-semibold px-2 py-1 rounded-md bg-white/20">
+                {estimatedSecondsRange ? `${estimatedSecondsRange[0]}–${estimatedSecondsRange[1]}s` : '10–30s'}
+              </span>
             </div>
           </div>
         </div>
@@ -113,7 +123,7 @@ const AIGenerationProgressModal: React.FC<AIGenerationProgressModalProps> = ({
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-500">
-              This may take 10-30 seconds depending on repository size
+              This may take {estimatedSecondsRange ? `${estimatedSecondsRange[0]}–${estimatedSecondsRange[1]} seconds` : '10–30 seconds'} depending on repository size
             </p>
             {onCancel && (
               <button

@@ -23,12 +23,14 @@ interface DocumentLayoutProps {
     children: ReactNode;
     showDocumentMenu?: boolean;
     syncStatus?: 'synced' | 'syncing' | 'pending' | 'error';
+    versionCount?: number; // Number of versions in history
 }
 
 export default function DocumentLayout({
     children,
     showDocumentMenu = true,
-    syncStatus = 'synced'
+    syncStatus = 'synced',
+    versionCount = 0
 }: DocumentLayoutProps) {
     const {
         documentTitle,
@@ -317,6 +319,20 @@ export default function DocumentLayout({
                             documentTitle={documentTitle}
                             editor={currentEditor}
                             documentContent={documentContent}
+                            versionCount={versionCount}
+                            context="main"
+                            currentDocument={{
+                                id: documentId,
+                                Title: documentTitle,
+                                Content: documentContent,
+                                DocumentType: 'Document',
+                                DocumentCategory: 'general',
+                                Project_Id: 'current-project',
+                                User_Id: 'current-user',
+                                Created_Time: new Date(),
+                                Updated_Time: new Date(),
+                                IsDraft: true
+                            }}
                             onToolbarToggle={setShowToolbar}
                             onNavigationPaneToggle={setShowNavigationPane}
                             documentId={documentId}

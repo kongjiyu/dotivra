@@ -2,6 +2,63 @@ import Image from '@tiptap/extension-image'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import { NodeSelection } from '@tiptap/pm/state'
+import { compressImageToBase64, canAddImage, MAX_IMAGE_SIZE_KB, MAX_IMAGES_PER_DOCUMENT } from '@/services/imageCompressionService'
+
+// Helper function to compress and insert image
+async function handleImageUpload(file: File, view: any, pos?: number) {
+    const { schema, doc } = view.state
+    const currentContent = doc.textContent || ''
+
+    try {
+        // Step 1: Compress the image
+        console.log('📤 Compressing image:', file.name)
+        const result = await compressImageToBase64(file)
+        
+        console.log('✅ Image compressed successfully:', {
+            size: `${(result.compressedSize / 1024).toFixed(2)} KB`,
+            reduction: `${result.compressionRatio.toFixed(1)}%`
+        })
+
+        // Step 2: Check if we can add this image
+        const sizeCheck = canAddImage(currentContent, result.compressedSize)
+        
+        if (!sizeCheck.canAdd) {
+            alert(`❌ Cannot add image:\n\n${sizeCheck.reason}\n\nTip: Remove existing images or use a smaller image.`)
+            return
+        }
+
+        // Step 3: Show warning if approaching limit
+        if (sizeCheck.newSizeKB > 600) {
+            const remaining = sizeCheck.limitKB - sizeCheck.newSizeKB
+            console.warn(`⚠️ Document approaching size limit: ${sizeCheck.newSizeKB.toFixed(0)}KB / ${sizeCheck.limitKB}KB (${remaining.toFixed(0)}KB remaining)`)
+        }
+
+        // Step 4: Insert the compressed Base64 image
+        const node = schema.nodes.resizableImage.create({
+            src: result.dataUrl,
+            alt: file.name.replace(/\.[^/.]+$/, ''),
+            width: result.width > 800 ? 800 : null, // Cap initial width at 800px
+            showBorder: true,
+        })
+
+        const transaction = view.state.tr
+        const insertPos = pos ?? view.state.selection.from
+        transaction.insert(insertPos, node)
+        view.dispatch(transaction)
+
+        console.log('✅ Image inserted successfully')
+
+    } catch (error) {
+        console.error('❌ Image compression/upload failed:', error)
+        alert(
+            `Failed to add image: ${error instanceof Error ? error.message : 'Unknown error'}\n\n` +
+            `Requirements:\n` +
+            `- Maximum ${MAX_IMAGE_SIZE_KB}KB after compression\n` +
+            `- Maximum ${MAX_IMAGES_PER_DOCUMENT} images per document\n` +
+            `- Image should be reasonable size (recommend <2MB original)`
+        )
+    }
+}
 
 export interface ResizableImageOptions {
     inline: boolean
@@ -119,6 +176,59 @@ export const ResizableImage = Image.extend<ResizableImageOptions>({
 
     addProseMirrorPlugins() {
         return [
+            // Handle image uploads from paste/drop
+            new Plugin({
+                key: new PluginKey('imageUpload'),
+                props: {
+                    handlePaste: (view, event) => {
+                        const items = Array.from(event.clipboardData?.items || [])
+                        const imageItems = items.filter(item => item.type.startsWith('image/'))
+
+                        if (imageItems.length === 0) {
+                            return false
+                        }
+
+                        event.preventDefault()
+
+                        imageItems.forEach(item => {
+                            const file = item.getAsFile()
+                            if (file) {
+                                handleImageUpload(file, view)
+                            }
+                        })
+
+                        return true
+                    },
+                    handleDrop: (view, event) => {
+                        const hasFiles = event.dataTransfer?.files?.length
+
+                        if (!hasFiles) {
+                            return false
+                        }
+
+                        const images = Array.from(event.dataTransfer.files).filter(file =>
+                            file.type.startsWith('image/')
+                        )
+
+                        if (images.length === 0) {
+                            return false
+                        }
+
+                        event.preventDefault()
+
+                        const coordinates = view.posAtCoords({
+                            left: event.clientX,
+                            top: event.clientY,
+                        })
+
+                        images.forEach(file => {
+                            handleImageUpload(file, view, coordinates?.pos)
+                        })
+
+                        return true
+                    },
+                },
+            }),
             new Plugin({
                 key: new PluginKey('resizableImage'),
                 props: {

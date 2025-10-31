@@ -17,17 +17,22 @@ export default function ZoomControl({ onChange }: ZoomControlProps) {
     const zoomLevels = [50, 75, 90, 100, 125, 150, 175, 200];
 
     useEffect(() => {
-        // Apply zoom to the document editor container (content + surrounding area)
-        // This will zoom the entire editing area while keeping toolbars/UI at normal size
         const contentWrapper = document.querySelector('.mx-auto.w-\\[1000px\\]') as HTMLElement;
         if (contentWrapper) {
-            // Set zoom using CSS zoom property
+            // Preserve visual anchor to reduce content jumping on zoom changes
+            const beforeTop = contentWrapper.getBoundingClientRect().top + window.scrollY;
             contentWrapper.style.zoom = `${zoom}%`;
+            // Defer adjustment until layout applies
+            requestAnimationFrame(() => {
+                const afterTop = contentWrapper.getBoundingClientRect().top + window.scrollY;
+                const delta = afterTop - beforeTop;
+                if (Math.abs(delta) > 1) {
+                    window.scrollTo({ top: window.scrollY + delta, behavior: 'instant' as ScrollBehavior });
+                }
+            });
         }
 
-        if (onChange) {
-            onChange(zoom);
-        }
+        onChange?.(zoom);
     }, [zoom, onChange]);
 
     const handleZoomIn = () => {

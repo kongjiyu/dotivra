@@ -210,9 +210,10 @@ export default function ChatSidebar({
                 return;
             }
 
-            // Call recommendations API
+            // Call recommendations API (fallback to Firebase Functions if primary 404)
             // Note: API_BASE_URL already includes /api, so we don't add it again
-            const response = await fetch(buildApiUrl('api/gemini/recommendations'), {
+            const primaryUrl = buildApiUrl('api/gemini/recommendations');
+            let response = await fetch(primaryUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -220,11 +221,20 @@ export default function ChatSidebar({
                     content: documentData.Content
                 })
             });
+            if (response.status === 404) {
+                const endpoint = 'api/gemini/recommendations';
+                const fallbackUrl = `https://us-central1-dotivra.cloudfunctions.net/${endpoint}`;
+                response = await fetch(fallbackUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ documentId, content: documentData.Content })
+                });
+            }
 
             if (response.ok) {
                 const data = await response.json();
                 setRecommendations(data.recommendations || []);
-                console.log('✅ Loaded recommendations:', data.recommendations);
+                
             } else {
                 const errorData = await response.json();
                 console.error('Failed to load recommendations:', errorData);
@@ -505,7 +515,7 @@ From structure improvements to real-time content updates, I ensure your work rem
     const handleSaveEdit = async () => {
         if (!editingMessageId || !editedContent.trim()) return;
 
-        console.log('Saving edited message and resending...');
+        
 
         // Update the message content
         const updatedMessages = messages.map(m =>
@@ -530,7 +540,7 @@ From structure improvements to real-time content updates, I ensure your work rem
 
     // Preview modal handlers
     const handleAcceptChanges = async () => {
-        console.log('✅ User accepted changes');
+        
         setShowPreviewModal(false);
 
         // Save the current editor content to Firebase
@@ -551,13 +561,13 @@ From structure improvements to real-time content updates, I ensure your work rem
                     body: JSON.stringify({ Content: currentContent })
                 });
 
-                console.log('✅ Document updated in Firebase with accepted changes');
+                
 
                 // Reload to ensure sync
                 const doc = await fetchDocument(documentId);
                 if (doc.Content) {
                     editor.commands.setContent(doc.Content);
-                    console.log('Document reloaded to confirm changes');
+                    
                 }
             } catch (err) {
                 console.error('Failed to update document:', err);
@@ -566,7 +576,7 @@ From structure improvements to real-time content updates, I ensure your work rem
     };
 
     const handleRejectChanges = async () => {
-        console.log('❌ User rejected changes');
+        
         setShowPreviewModal(false);
 
         // Restore original content before AI changes
@@ -579,7 +589,7 @@ From structure improvements to real-time content updates, I ensure your work rem
 
             // Restore original content
             editor.commands.setContent(aiBeforeContent);
-            console.log('Document restored to original state');
+            
 
             // Also update Firebase to revert changes
             if (documentId) {
@@ -589,7 +599,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ Content: aiBeforeContent })
                     });
-                    console.log('Document reverted in Firebase');
+                    
                 } catch (err) {
                     console.error('Failed to revert document in Firebase:', err);
                 }
@@ -598,7 +608,7 @@ From structure improvements to real-time content updates, I ensure your work rem
     };
 
     const handleRegenerateChanges = () => {
-        console.log('🔄 User requested regeneration');
+        
         setShowPreviewModal(false);
 
         // Restore original content first
@@ -613,7 +623,7 @@ From structure improvements to real-time content updates, I ensure your work rem
     };
 
     const handleStopGeneration = () => {
-        console.log('🛑 User requested to stop generation');
+        
 
         // Set abort flag to prevent preview modal
         wasAbortedRef.current = true;
@@ -648,12 +658,12 @@ From structure improvements to real-time content updates, I ensure your work rem
         // Reset abort flag for new generation
         wasAbortedRef.current = false;
 
-        console.log('Sending message:', text);
+        
         if (replyToMessage) {
-            console.log('Replying to message:', replyToMessage.id);
+            
         }
         if (selectedText) {
-            console.log('With selected text:', selectedText.substring(0, 100));
+            
         }
 
         // Build full prompt with selected text if present
@@ -716,7 +726,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                         role: replyToMessage.role,
                         content: `[Context from previous message]: ${getContentAsString(replyToMessage.content)}`
                     });
-                    console.log('Added reply context to history');
+                    
                 }
 
                 const timestamp = Date.now();
@@ -724,7 +734,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                 let currentProgressMessageId: string | null = null;
                 let messageStages: ChatMessageStage[] = []; // Store structured stages
 
-                console.log('Starting AI Agent execution...');
+                
 
                 // Capture current document content before modifications
                 try {
@@ -735,7 +745,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                         setAiBeforeContent(editor.getHTML());
                     }
                 } catch (e) {
-                    console.warn('Could not capture pre-change content:', e);
+                    
                     if (editor) setAiBeforeContent(editor.getHTML());
                 }
 
@@ -750,7 +760,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                     throw new Error('Document ID is required for AI agent execution. Please make sure you have a document open.');
                 }
 
-                console.log(`✅ Document ID validated: ${documentId}`);
+                
 
                 // Create abort controller for this generation
                 abortControllerRef.current = new AbortController();
@@ -762,7 +772,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                     selectedText,
                     abortControllerRef.current.signal
                 )) {
-                    console.log('Received stage:', stage.stage, stage);
+                    
 
                     // Collect all stages for HTML generation
                     allStages.push({
@@ -780,7 +790,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                     }
 
                     if (stage.stage === 'done') {
-                        console.log('AI Agent completed');
+                        
                         break;
                     }
 
@@ -890,11 +900,13 @@ From structure improvements to real-time content updates, I ensure your work rem
                                         toolExecutions: []
                                     };
                                     setDocumentSnapshot(snapshot);
-                                    console.log('📸 Created document snapshot before tool execution');
+                                    
 
                                     // Save snapshot to DocumentHistory
                                     try {
-                                        const response = await fetch(buildApiUrl('api/document/history'), {
+                                        const endpoint = 'api/document/history';
+                                        const primary = buildApiUrl(endpoint);
+                                        let response = await fetch(primary, {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({
@@ -905,11 +917,25 @@ From structure improvements to real-time content updates, I ensure your work rem
                                             })
                                         });
 
+                                        if (response.status === 404) {
+                                            const fallback = `https://us-central1-dotivra.cloudfunctions.net/${endpoint}`;
+                                            response = await fetch(fallback, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    Document_Id: documentId,
+                                                    Content: snapshot.content,
+                                                    Version: `snapshot-${snapshot.version}`,
+                                                    Edited_Time: new Date().toISOString()
+                                                })
+                                            });
+                                        }
+
                                         if (response.ok) {
-                                            console.log('✅ Snapshot saved to DocumentHistory');
+                                            
                                         }
                                     } catch (saveError) {
-                                        console.warn('Failed to save snapshot to history:', saveError);
+                                        
                                     }
                                 } catch (err) {
                                     console.error('Failed to create snapshot:', err);
@@ -979,7 +1005,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                     }
                 }
 
-                console.log(`Tools used: ${toolsUsed}`);
+                
 
                 // Prepare interaction session data
                 const sessionEndTime = Date.now();
@@ -1022,7 +1048,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                             }
                         } as any);
 
-                        console.log('✅ Saved structured AI interaction as JSON to Firebase');
+                        
                     } catch (error) {
                         console.error('Failed to save assistant message:', error);
                     }
@@ -1031,7 +1057,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                 // If tools were used, apply highlights to editor and show preview modal
                 if (toolsUsed > 0 && allToolExecutions.length > 0 && documentId && editor) {
                     try {
-                        console.log('🎨 Applying highlights for', allToolExecutions.length, 'tool executions');
+                        
 
                         // Get current document content (after all tool operations)
                         const currentDoc = await fetchDocument(documentId);
@@ -1070,7 +1096,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                 .run();
                                         }
                                     } catch (e) {
-                                        console.warn('Failed to highlight deletion:', e);
+                                        
                                     }
                                 } else if (execution.tool === 'insert_document_content' ||
                                     execution.tool === 'append_document_content' ||
@@ -1082,7 +1108,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                             .setHighlight({ color: '#ccffcc' })
                                             .run();
                                     } catch (e) {
-                                        console.warn('Failed to highlight addition:', e);
+                                        
                                     }
                                 } else if (execution.tool === 'replace_document_content') {
                                     // For replacements, highlight in yellow
@@ -1092,7 +1118,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                             .setHighlight({ color: '#ffffcc' })
                                             .run();
                                     } catch (e) {
-                                        console.warn('Failed to highlight replacement:', e);
+                                        
                                     }
                                 }
                             }
@@ -1109,7 +1135,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                         // For preview modal, replay operations on snapshot for accurate diff
                         let hasChanges = false;
                         if (documentSnapshot && documentSnapshot.content) {
-                            console.log('🔄 Replaying', allToolExecutions.length, 'operations on snapshot for preview');
+                            
 
                             // Use snapshot as base for preview with diff highlighting
                             const { previewHtml: diffHtml, changes: changeStats } = generatePreviewWithHighlights(
@@ -1139,7 +1165,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                             console.log('ℹ️ No changes detected, skipping preview modal');
                         }
 
-                        console.log('✅ Highlights applied to editor content');
+                        
                     } catch (err) {
                         console.error('Failed to apply highlights:', err);
                         // Fallback: just reload the document
@@ -1153,11 +1179,11 @@ From structure improvements to real-time content updates, I ensure your work rem
                 } else if (toolsUsed > 0 && editor && documentId) {
                     // No tool executions tracked, fallback to direct reload
                     try {
-                        console.log('Reloading document after tool execution...');
+                        
                         const doc = await fetchDocument(documentId);
                         if (doc.Content) {
                             editor.commands.setContent(doc.Content);
-                            console.log('Document reloaded');
+                            
                         }
                     } catch (err) {
                         console.error('Failed to reload document:', err);
@@ -1166,7 +1192,7 @@ From structure improvements to real-time content updates, I ensure your work rem
             } catch (error) {
                 // Check if it's an abort error (user stopped generation)
                 if (error instanceof Error && error.name === 'AbortError') {
-                    console.log('Generation stopped by user');
+                    
                     // Remove temporary progress messages
                     setInternalMessages(prev => prev.filter(msg => !msg.isTemporary));
                     // Don't show error message for user-initiated stops
@@ -1201,13 +1227,13 @@ From structure improvements to real-time content updates, I ensure your work rem
 
                 // Clear reply state after sending (success or failure)
                 if (replyToMessage) {
-                    console.log('Clearing reply context');
+                    
                     setReplyToMessage(null);
                 }
 
                 // Clear selected text if present
                 if (selectedText && onClearSelection) {
-                    console.log(' Clearing selected text');
+                    
                     onClearSelection();
                 }
             }
@@ -1737,7 +1763,10 @@ From structure improvements to real-time content updates, I ensure your work rem
                                     try {
                                         const currentContent = editor?.getHTML() || '';
                                         const toLen = currentContent.length;
-                                        await fetch(buildApiUrl('api/tools/execute'), {
+                                        {
+                                            const endpoint = 'api/tools/execute';
+                                            const primary = buildApiUrl(endpoint);
+                                            let tr = await fetch(primary, {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json' },
                                             body: JSON.stringify({
@@ -1746,6 +1775,19 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                 documentId
                                             })
                                         });
+                                            if (tr.status === 404) {
+                                                const fallback = `https://us-central1-dotivra.cloudfunctions.net/${endpoint}`;
+                                                tr = await fetch(fallback, {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json' },
+                                                    body: JSON.stringify({
+                                                        tool: 'replace_document_content',
+                                                        args: { position: { from: 0, to: toLen }, content: aiBeforeContent || '', reason: 'Revert AI change' },
+                                                        documentId
+                                                    })
+                                                });
+                                            }
+                                        }
                                         // Update editor to before content
                                         if (editor) editor.commands.setContent(aiBeforeContent || '');
                                     } catch (e) {

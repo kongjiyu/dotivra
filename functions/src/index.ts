@@ -17,29 +17,7 @@ const db = admin.firestore();
 import * as toolService from "./services/toolService";
 toolService.initFirestore(db);
 
-import {createGeminiWithMcp} from "./gemini/geminiMcpIntegration";
-
-type GeminiWithMcp = {
-  setDocument: (documentId: string) => Promise<any>;
-  generateWithTools: (params: {
-    prompt: string;
-    history?: any[];
-    systemInstruction?: string;
-    generationConfig?: any;
-    documentId?: string;
-  }) => Promise<string>;
-  streamWithTools: (params: {
-    prompt: string;
-    history?: any[];
-    systemInstruction?: string;
-    generationConfig?: any;
-    documentId?: string;
-    onChunk: (chunk: string) => void;
-  }) => Promise<string>;
-  getAvailableTools: () => any[];
-};
-
-let geminiWithMcp: GeminiWithMcp | null = null;
+// MCP integration removed
 
 setGlobalOptions({maxInstances: 10});
 
@@ -517,14 +495,6 @@ function initializeGeminiBalancer() {
 function ensureBalancerInitialized() {
   if (!geminiBalancer) {
     geminiBalancer = initializeGeminiBalancer();
-    if (geminiBalancer) {
-      try {
-        geminiWithMcp = createGeminiWithMcp(geminiBalancer, db);
-        logger.info("✅ MCP integration initialized with 7 document tools");
-      } catch (error) {
-        logger.error("❌ Failed to initialize MCP integration:", error);
-      }
-    }
   }
   return geminiBalancer;
 }
@@ -2310,210 +2280,22 @@ app.get('/api/link-preview', async (req, res) => {
 // ============================================================================
 
 // POST /api/mcp/document - Load a document by ID
-app.post('/api/mcp/document', async (req, res) => {
-  try {
-    const { documentId } = req.body;
-
-    if (!documentId) {
-      return res.status(400).json({
-        success: false,
-        error: 'Document ID is required'
-      });
-    }
-
-    logger.info(`📄 Loading document: ${documentId}`);
-
-    if (!geminiWithMcp) {
-      return res.status(503).json({
-        success: false,
-        error: 'MCP not initialized'
-      });
-    }
-
-    // Set document and get content
-    const result = await geminiWithMcp.setDocument(documentId);
-
-    res.json({
-      success: true,
-      documentId,
-      content: result.content || '',
-      documentName: result.documentName || ''
-    });
-  } catch (error) {
-    logger.error('❌ Error loading document:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to load document',
-      details: (error as Error).message
-    });
-  }
+app.post('/api/mcp/document', async (_req, res) => {
+  res.status(410).json({ success: false, error: 'MCP disabled' });
 });
 
 // GET /api/mcp/tools - Get all available MCP tools
-app.get('/api/mcp/tools', async (req, res) => {
-  try {
-    if (!geminiWithMcp) {
-      return res.status(503).json({
-        success: false,
-        error: 'MCP not initialized'
-      });
-    }
-
-    const tools = geminiWithMcp.getAvailableTools();
-
-    res.json({
-      success: true,
-      count: tools.length,
-      tools: tools.map(tool => ({
-        name: tool.name,
-        description: tool.description,
-        parameters: tool.parameters
-      }))
-    });
-  } catch (error) {
-    logger.error('❌ Error fetching MCP tools:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch MCP tools',
-      details: (error as Error).message
-    });
-  }
+app.get('/api/mcp/tools', async (_req, res) => {
+  res.status(410).json({ success: false, error: 'MCP disabled' });
 });
 
 // POST /api/mcp/generate - Test generation with MCP tools
-app.post('/api/mcp/generate', async (req, res) => {
-  try {
-    const { prompt, documentId, model = 'gemini-2.5-pro' } = req.body;
-    if (!prompt) {
-      return res.status(400).json({
-        success: false,
-        error: 'Prompt is required'
-      });
-    }
-
-    logger.info(`📝 MCP Generate request - Prompt: "${prompt.substring(0, 50)}..." Document: ${documentId || 'none'}`);
-
-    if (!geminiWithMcp) {
-      return res.status(503).json({
-        success: false,
-        error: 'MCP not initialized'
-      });
-    }
-
-    // Get available tools for debugging
-    const availableTools = geminiWithMcp.getAvailableTools();
-    logger.info(`📋 Available tools (${availableTools.length}):`, availableTools.map(t => t.name).join(', '));
-
-    const systemPrompt = `You are a professional document editor assistant with access to MCP (Model Context Protocol) tools. Your role is to help users create, edit, and improve their documents efficiently.
-
-YOUR PRIMARY RESPONSIBILITIES:
-1. Document Editing: Assist with content creation, modification, and formatting
-2. Content Enhancement: Suggest improvements, fix errors, and optimize structure
-3. Tool Execution: Use MCP tools immediately when users request document operations
-4. Collaborative Support: Provide helpful suggestions and answer questions about the document
-
-CRITICAL RULES:
-1. When users ask to perform ANY document operation, you MUST call the appropriate function tool
-2. DO NOT explain what you would do - IMMEDIATELY CALL THE FUNCTION
-3. DO NOT ask for confirmation - JUST DO IT
-4. DO NOT suggest alternatives - USE THE TOOLS
-5. Always maintain document quality and professional formatting standards
-
-DOCUMENT EDITOR HTML FORMATTING RULES:
-When creating or replacing content, you MUST follow these strict HTML formatting rules:
-
-**Text Elements:**
-- Paragraphs: Use <p> tag with font-size: 18px, font-family: "Times New Roman"
-  Example: <p style="font-size: 18px; font-family: 'Times New Roman', Times, serif;">Your text here</p>
-- Headings: Use <h1> through <h6> with appropriate sizes:
-  * <h1>: 2rem (32px), font-weight: 700
-  * <h2>: 1.5rem (24px), font-weight: 600
-  * <h3>: 1.17rem, font-weight: 600
-  * <h4>: 1rem (16px), font-weight: 600
-  * <h5>: 0.83rem, font-weight: 600
-  * <h6>: 0.67rem, font-weight: 600
-
-**Inline Formatting:**
-- Bold: <strong>text</strong>
-- Italic: <em>text</em>
-- Underline: <u>text</u>
-- Strikethrough: <s>text</s>
-- Inline code: <code>text</code> (styled as kbd with gray background)
-- Highlight: <mark data-color="[color]">text</mark> (colors: gray, yellow, green, blue, red, purple, pink, orange)
-
-**Block Elements:**
-- Blockquote: <blockquote><p>Quote text</p></blockquote> (with blue left border)
-- Horizontal rule: <hr> (2px solid line)
-- Code block: <pre><code class="language-[type]">code here</code></pre>
-  Supported languages: javascript, typescript, python, java, html, css, json, markdown, plaintext
-
-**Lists:**
-- Ordered list: <ol><li>Item 1</li><li>Item 2</li></ol>
-- Unordered list: <ul><li>Item 1</li><li>Item 2</li></ul>
-- Task list: <ul data-type="taskList"><li data-type="taskItem" data-checked="false"><label><input type="checkbox"/></label><div><p>Task text</p></div></li></ul>
-
-**Links:**
-- Link: <a href="url" class="tiptap-link">link text</a> (black text with underline)
-
-**Images:**
-- Image: <img src="url" alt="description" class="tiptap-image" style="width: [width]px; height: auto;" />
-
-**Tables:**
-- Table: <table><thead><tr><th>Header</th></tr></thead><tbody><tr><td>Data</td></tr></tbody></table>
-- Apply custom background colors: style="background-color: #color;"
-
-**Indentation:**
-- Use data-indent attribute: <p data-indent="1">Indented text</p>
-- Maximum 21 levels, each level = 2rem margin-left
-- Works on paragraphs and headings
-
-**CRITICAL:** Always generate complete, valid HTML with proper closing tags and attributes. Never use plain text without HTML tags.
-
-Available tools and when to use them:
-- scan_document_content(reason) → User says: "scan", "analyze", "check", "review", "examine" the document
-- search_document_content(query, reason) → User says: "find", "search", "locate", "look for" + text
-  Returns: element_index, element_tag, element_html (complete HTML), element_position, text_content
-- append_document_content(content, reason) → User says: "add", "append", "put at end", "add to bottom"
-  Content MUST be valid HTML following formatting rules above
-- insert_document_content(position, content, reason) → User says: "insert at", "add at position", "put at line"
-  Content MUST be valid HTML. Use element_position from search results for accurate insertion
-- replace_document_content(position, content, reason) → User says: "replace", "change", "update", "modify" + text
-  Content MUST be valid HTML. Use element_position and element_length from search results
-- remove_document_content(position, reason) → User says: "delete", "remove", "erase", "clear" + text
-  Use element_position and element_length from search results for accurate removal
-
-${documentId ? `\nCurrent document ID: ${documentId}\nDocument is loaded and ready. EXECUTE OPERATIONS IMMEDIATELY.` : '\nNo document loaded. If user asks for operations, tell them to open a document first.'}`;
-
-    logger.info(`🤖 Generating with model: ${model}`);
-
-    const result = await geminiWithMcp.generateWithTools({
-      prompt,
-      systemInstruction: systemPrompt,
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 4096
-      },
-      documentId
-    });
-
-    logger.info(`✅ Generation complete`);
-
-    res.json({
-      success: true,
-      text: result,
-      model
-    });
-  } catch (error) {
-    logger.error('❌ MCP generate error:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to generate',
-      details: (error as Error).message
-    });
-  }
+app.post('/api/mcp/generate', async (_req, res) => {
+  res.status(410).json({ success: false, error: 'MCP disabled' });
 });
 
 // POST /api/mcp/set-document - Set current document context
+/* MCP removed
 app.post('/api/mcp/set-document', async (req, res) => {
   try {
     const { documentId } = req.body;
@@ -2553,19 +2335,9 @@ app.post('/api/mcp/set-document', async (req, res) => {
 
 // GET /api/mcp/health - System health check
 app.get('/api/mcp/health', (req, res) => {
-  res.json({
-    success: true,
-    status: 'ok',
-    mcp: {
-      initialized: geminiWithMcp !== null,
-      toolCount: geminiWithMcp ? geminiWithMcp.getAvailableTools().length : 0
-    },
-    balancer: {
-      initialized: geminiBalancer !== null
-    },
-    timestamp: new Date().toISOString()
-  });
+  res.json({ success: false, error: 'MCP disabled' });
 });
+*/
 
 // ============================================================================
 // DOCUMENT TOOLS EXECUTION API

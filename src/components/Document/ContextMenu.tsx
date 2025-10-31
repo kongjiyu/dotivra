@@ -669,19 +669,29 @@ D --> E`;
                                         }
                                         // If selected text is not a valid URL, do nothing
                                     } else {
-                                        // No text selected, prompt for URL and insert new link
-                                        const url = window.prompt('Enter URL:', 'https://');
-                                        if (url && url.trim()) {
-                                            const linkText = window.prompt('Enter link text (optional):', '');
-                                            if (linkText && linkText.trim()) {
-                                                // Insert link with custom text
-                                                editor.chain().focus().insertContent(`<a href="${url.trim()}">${linkText.trim()}</a>`).run();
-                                            } else {
-                                                // Insert link with URL as text
-                                                editor.chain().focus().insertContent(`<a href="${url.trim()}">${url.trim()}</a>`).run();
+                                        // No selection: collect URL/text via SweetAlert2 modal
+                                        import('sweetalert2').then(async ({ default: Swal }) => {
+                                            const { value: formValues } = await Swal.fire({
+                                                title: 'Insert link',
+                                                html:
+                                                    '<input id="swal-link-url" class="swal2-input" placeholder="https://example.com" />' +
+                                                    '<input id="swal-link-text" class="swal2-input" placeholder="Link text (optional)" />',
+                                                focusConfirm: false,
+                                                showCancelButton: true,
+                                                preConfirm: () => {
+                                                    const url = (document.getElementById('swal-link-url') as HTMLInputElement)?.value?.trim();
+                                                    const text = (document.getElementById('swal-link-text') as HTMLInputElement)?.value?.trim();
+                                                    if (!url) return null;
+                                                    return { url, text };
+                                                }
+                                            });
+                                            if (formValues && formValues.url) {
+                                                const href = formValues.url;
+                                                const text = formValues.text || formValues.url;
+                                                editor.chain().focus().insertContent(`<a href="${href}">${text}</a>`).run();
                                             }
                                             onClose();
-                                        }
+                                        });
                                     }
                                 }
                                 onClose();

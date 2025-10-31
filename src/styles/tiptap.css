@@ -1213,6 +1213,20 @@
   cursor: col-resize;
 }
 
+/* Ensure TipTap table column handle shows resize cursor */
+.tiptap table .column-resize-handle {
+  cursor: col-resize;
+}
+
+/* Image edge hover should indicate resizable */
+.tiptap img {
+  cursor: default;
+}
+
+.tiptap img:hover {
+  cursor: nwse-resize;
+}
+
 /* ProseMirror table selection classes */
 .tiptap .ProseMirror-selectednode {
   outline: 2px solid #3b82f6;
@@ -1405,6 +1419,14 @@
 /* Zoom transform wrapper */
 .document-content-wrapper {
   transition: transform 0.2s ease;
+}
+
+/* Make Mermaid error overlays non-interactive and non-editable */
+.mermaid-error,
+[id*="error"][id^="d"],
+[class*="mermaid"] [class*="error"] {
+  pointer-events: none !important;
+  user-select: none !important;
 }
 
 /* Navigation pane hover effects */
@@ -1779,6 +1801,87 @@ kbd {
   background-color: #111827;
   border-color: #374151;
   color: #e5e7eb;
+}
+
+/* VS Code Dark-like code block styling */
+.tiptap pre {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  border-radius: 8px;
+  padding: 12px 14px;
+  overflow: auto;
+  border: 1px solid #2d2d2d;
+}
+
+.tiptap pre code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+/* Generic token colors (works with lowlight/prism-like classes if present) */
+.tiptap code .token.comment,
+.tiptap code .token.prolog,
+.tiptap code .token.doctype,
+.tiptap code .token.cdata {
+  color: #6a9955;
+}
+
+.tiptap code .token.punctuation { color: #d4d4d4; }
+.tiptap code .token.property,
+.tiptap code .token.tag,
+.tiptap code .token.constant,
+.tiptap code .token.symbol,
+.tiptap code .token.deleted { color: #d19a66; }
+
+.tiptap code .token.boolean,
+.tiptap code .token.number { color: #b5cea8; }
+
+.tiptap code .token.selector,
+.tiptap code .token.attr-name,
+.tiptap code .token.string,
+.tiptap code .token.char,
+.tiptap code .token.builtin,
+.tiptap code .token.inserted { color: #ce9178; }
+
+.tiptap code .token.operator,
+.tiptap code .token.entity,
+.tiptap code .token.url,
+.tiptap code .language-css .token.string,
+.tiptap code .style .token.string { color: #d4d4d4; }
+
+.tiptap code .token.atrule,
+.tiptap code .token.attr-value,
+.tiptap code .token.keyword { color: #c586c0; }
+
+.tiptap code .token.function,
+.tiptap code .token.class-name { color: #dcdcaa; }
+
+.tiptap code .token.regex,
+.tiptap code .token.important,
+.tiptap code .token.variable { color: #4fc1ff; }
+
+/* Language labels if provided by renderer via data-language */
+.tiptap pre[data-language]::before {
+  content: attr(data-language);
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font-size: 11px;
+  color: #9aa0a6;
+  background: #111827;
+  border: 1px solid #2d2d2d;
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* Inline code */
+.tiptap :not(pre) > code {
+  background: #111827;
+  color: #d4d4d4;
+  padding: 0.15rem 0.35rem;
+  border-radius: 4px;
+  border: 1px solid #2d2d2d;
 }
 
 /* ============================================================================

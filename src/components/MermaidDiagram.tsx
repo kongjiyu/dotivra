@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import mermaid from 'mermaid';
 
 interface MermaidDiagramProps {
@@ -8,6 +8,11 @@ interface MermaidDiagramProps {
 
 const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default' }) => {
   const elementRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+
+  const zoomIn = () => setScale((s) => Math.min(3, parseFloat((s + 0.1).toFixed(2))));
+  const zoomOut = () => setScale((s) => Math.max(0.3, parseFloat((s - 0.1).toFixed(2))));
+  const resetZoom = () => setScale(1);
 
   useEffect(() => {
     mermaid.initialize({
@@ -80,28 +85,34 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default
   }, [chart, theme]);
 
   return (
-    <div
-      className="mermaid-diagram"
-      style={{
-        border: '1px solid #e0e0e0',
-        borderRadius: '8px',
-        padding: '20px',
-        backgroundColor: '#fafafa',
-        margin: '10px 0',
-        maxWidth: '100%',
-        overflow: 'auto'
-      }}
-    >
-      <div
-        ref={elementRef}
-        style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: '100px'
-        }}
-        className="mermaid-content"
-      />
+    <div className="mermaid-diagram" style={{
+      border: '1px solid #e0e0e0',
+      borderRadius: '8px',
+      padding: '20px',
+      backgroundColor: '#fafafa',
+      margin: '10px 0'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <div style={{ fontSize: '12px', color: '#6b7280' }}>Zoom: {(scale * 100).toFixed(0)}%</div>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button onClick={zoomOut} style={{ padding: '4px 8px', border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff' }}>−</button>
+          <button onClick={resetZoom} style={{ padding: '4px 8px', border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff' }}>Reset</button>
+          <button onClick={zoomIn} style={{ padding: '4px 8px', border: '1px solid #e5e7eb', borderRadius: 6, background: '#fff' }}>+</button>
+        </div>
+      </div>
+      <div style={{ overflow: 'auto' }}>
+        <div
+          ref={elementRef}
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            minHeight: '100px',
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left'
+          }}
+        />
+      </div>
     </div>
   );
 };
