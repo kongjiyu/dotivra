@@ -144,7 +144,7 @@ const Dashboard: React.FC = () => {
       // If using existing project and no repo selected in modal, fetch project's GitHub repo
       if (!repositoryUrl && finalProjectId && data.projectId) {
         try {
-          console.log('🔍 Fetching GitHub repo for existing project:', finalProjectId);
+          
           const projectResponse = await fetch(API_ENDPOINTS.project(finalProjectId));
           if (projectResponse.ok) {
             const projectData = await projectResponse.json();
@@ -224,7 +224,6 @@ const Dashboard: React.FC = () => {
 
             try {
               // Generate content using NEW iterative AI method
-              console.log('🚀 Starting iterative AI generation...');
               documentContent = await aiService.generateDocumentFromTemplateAndRepoIterative(
                 user,
                 data.template.TemplatePrompt || '',
@@ -233,14 +232,13 @@ const Dashboard: React.FC = () => {
                 data.documentName,
                 handleProgress // Pass progress callback
               );
-              console.log('✅ AI generation completed, content length:', documentContent.length);
-              console.log('📄 Generated content preview:', documentContent.substring(0, 300));
+              
 
               // Finalize
               handleProgress('done', 'Document ready!');
               await new Promise(resolve => setTimeout(resolve, 500));
 
-              console.log('✅ All steps completed, proceeding to create document');
+              
             } catch (aiError) {
               console.error('❌ AI generation failed:', aiError);
 
@@ -330,18 +328,15 @@ const Dashboard: React.FC = () => {
   };
 
   const handleExploreAll = () => {
-    console.log('Explore all templates clicked');
     navigate('/templates');
   };
 
   const handleProjectClick = (projectId: string) => {
-    console.log('Navigating to project:', projectId);
     // 🎯 NAVIGATION: Go to project view based on project ID 
     navigate(`/project/${projectId}`);
   };
 
   const handleViewAllProjects = () => {
-    console.log('View all projects clicked');
     // Navigate to a dedicated projects page
     navigate('/projects');
   };
@@ -386,15 +381,18 @@ const Dashboard: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         onSubmit={async (projectData) => {
           try {
-            console.log('Creating dashboard project:', projectData);
 
             // Add userId to project data
             const projectDataWithUser = {
-              ...projectData,
-              userId: user?.uid || 'anonymous-user-' + Date.now()
+              name: (projectData.name || '').trim(),
+              description: (projectData.description || '').trim(),
+              userId: user?.uid || ('anonymous-user-' + Date.now()),
+              githubLink: projectData.githubLink ?? projectData.selectedRepo ?? '',
+              selectedRepo: projectData.selectedRepo ?? '',
+              installationId: null,
             };
 
-            console.log('Project data with user ID:', projectDataWithUser);
+            
 
             const response = await fetch(API_ENDPOINTS.projects(), {
               method: 'POST',
@@ -405,16 +403,18 @@ const Dashboard: React.FC = () => {
             });
 
             if (!response.ok) {
-              throw new Error('Failed to create project');
+              let serverMsg = 'Failed to create project';
+              try {
+                const errJson = await response.json();
+                serverMsg = errJson?.error || serverMsg;
+              } catch {}
+              throw new Error(serverMsg);
             }
 
             const result = await response.json();
-            console.log('✅ Dashboard: Project created successfully:', result.project);
-            console.log('📋 Project fields:', Object.keys(result.project));
 
             // Get the project ID (handle both Project_Id and id field names)
             const projectId = result.project.Project_Id || result.project.id;
-            console.log('📍 Navigating to project ID:', projectId);
 
             // Close modal and navigate to the new project
             setIsModalOpen(false);

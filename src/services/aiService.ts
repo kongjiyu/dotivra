@@ -5,6 +5,7 @@ import { buildApiUrl } from '@/lib/apiConfig';
 
 const GENERATE_API = buildApiUrl('api/gemini/generate');
 const TOOLS_EXECUTE_API = buildApiUrl('api/tools/execute');
+const FUNCTIONS_BASE = 'https://us-central1-dotivra.cloudfunctions.net';
 
 class AIService {
     private defaultModel = 'gemini-2.5-pro';
@@ -380,7 +381,7 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                     
                     // Execute actual tool via API
                     try {
-                        const toolResponse = await fetch(TOOLS_EXECUTE_API, {
+                        let toolResponse = await fetch(TOOLS_EXECUTE_API, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -389,6 +390,19 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                                 documentId: documentId
                             })
                         });
+                        if (toolResponse.status === 404) {
+                            const endpoint = 'api/tools/execute';
+                            const fallbackUrl = `${FUNCTIONS_BASE}/${endpoint}`;
+                            toolResponse = await fetch(fallbackUrl, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    tool: toolData.tool,
+                                    args: toolData.args,
+                                    documentId: documentId
+                                })
+                            });
+                        }
 
                         let toolResult: any;
                         if (!toolResponse.ok) {

@@ -104,10 +104,10 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
                 const toolbarHeight = 120; // Approximate toolbar height
                 const offset = toolbarHeight + 40; // Additional padding
                 
-                window.scrollTo({
+            window.scrollTo({
                     top: window.scrollY + coords.top - offset,
-                    behavior: "smooth",
-                });
+                behavior: "smooth",
+            });
             }
         }
     };

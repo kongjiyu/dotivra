@@ -112,24 +112,7 @@ const ProfileInfoCard: React.FC<ProfileInfoCardProps> = ({ user }) => {
           </div>
         </div>
 
-        {/* GitHub Username Field - Always Disabled */}
-        <div>
-          <label htmlFor="githubUsername" className="block text-sm font-medium text-gray-700 mb-2">
-            GitHub Username
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Github className="h-5 w-5 text-gray-400" />
-            </div>
-            <input
-              id="githubUsername"
-              type="text"
-              defaultValue={user.githubUsername}
-              disabled={true}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 cursor-not-allowed"
-            />
-          </div>
-        </div>
+        {/* GitHub Username hidden per requirement */}
 
         {/* Password Field */}
         <div className="md:col-span-2">

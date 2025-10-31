@@ -37,6 +37,7 @@ const AllTemplate: React.FC = () => {
   const [generationRepository, setGenerationRepository] = useState('');
   const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>([]);
   const [currentGenerationStep, setCurrentGenerationStep] = useState<string>('parse');
+  const [estimatedRange, setEstimatedRange] = useState<[number, number] | null>(null);
 
   // Fetch templates from API
   useEffect(() => {
@@ -96,8 +97,16 @@ const AllTemplate: React.FC = () => {
       result = result.filter(t => (t.name + ' ' + t.description).toLowerCase().includes(q));
     }
 
+    // Preserve selected template if it still exists after filtering
+    if (selectedTemplate) {
+      const stillExists = result.some(t => (templates[t.id]?.Template_Id || String(t.id)) === (selectedTemplate.Template_Id || String(selectedTemplate.id)));
+      if (!stillExists) {
+        // Do not clear the selection here; allow modal to remain open with previously selected template
+        // Selection will only change when user picks a new template
+      }
+    }
     return result;
-  }, [query, uiTemplates, selectedCategory]);
+  }, [query, uiTemplates, selectedCategory, selectedTemplate, templates]);
 
   // Count templates by category
   const categoryCounts = useMemo(() => {
@@ -188,7 +197,7 @@ const AllTemplate: React.FC = () => {
       // If using existing project and no repo selected in modal, fetch project's GitHub repo
       if (!repositoryUrl && finalProjectId && projectId) {
         try {
-          console.log('🔍 Fetching GitHub repo for existing project:', finalProjectId);
+          
           const projectResponse = await fetch(API_ENDPOINTS.project(finalProjectId, user.uid), {
             headers: {
               'Authorization': `Bearer ${idToken}`
@@ -198,7 +207,6 @@ const AllTemplate: React.FC = () => {
             const projectData = await projectResponse.json();
             const project = projectData.success ? projectData.project : projectData;
             repositoryUrl = project.GitHubRepo || project.githubLink || null;
-            console.log('📦 Found repository for existing project:', repositoryUrl);
           }
         } catch (error) {
           console.warn('⚠️ Could not fetch project GitHub repo:', error);
@@ -217,6 +225,43 @@ const AllTemplate: React.FC = () => {
 
           setGenerationRepository(repoFullName);
           setIsGenerating(true);
+
+          // Try to estimate time based on repo size and file count (public repos only)
+          try {
+            setEstimatedRange(null);
+            const metaRes = await fetch(`https://api.github.com/repos/${repoFullName}`);
+            if (metaRes.ok) {
+              const meta = await metaRes.json();
+              let range: [number, number] | null = null;
+              if (typeof meta?.size === 'number') {
+                // meta.size is in KB
+                const sizeInKB = meta.size;
+                range = sizeInKB < 1000
+                  ? [10, 20]
+                  : sizeInKB < 5000
+                  ? [20, 45]
+                  : sizeInKB < 20000
+                  ? [45, 90]
+                  : [90, 160];
+              }
+              // Refine using approximate file count (if available)
+              try {
+                const contentsRes = await fetch(`https://api.github.com/repos/${repoFullName}/contents`);
+                if (contentsRes.ok) {
+                  const contents = await contentsRes.json();
+                  const topLevelCount = Array.isArray(contents) ? contents.length : 0;
+                  if (range) {
+                    // Adjust +/- 15% based on breadth
+                    const factor = topLevelCount > 100 ? 1.15 : topLevelCount < 10 ? 0.9 : 1.0;
+                    range = [Math.max(8, Math.round(range[0] * factor)), Math.round(range[1] * factor)] as [number, number];
+                  }
+                }
+              } catch {}
+              if (range) setEstimatedRange(range);
+            }
+          } catch {
+            // Ignore estimation errors
+          }
 
           const steps: GenerationStep[] = [
             { id: 'parse', label: 'Parsing repository information', status: 'completed', details: repoFullName },
@@ -291,7 +336,6 @@ const AllTemplate: React.FC = () => {
 
           try {
             // Generate content using section-by-section generation for better handling of long documents
-            console.log('🚀 Starting section-by-section AI generation...');
             content = await aiService.generateDocumentInSections(
               user,
               template.TemplatePrompt || '',
@@ -300,14 +344,13 @@ const AllTemplate: React.FC = () => {
               documentName,
               handleProgress
             );
-            console.log('✅ AI generation completed, content length:', content.length);
-            console.log('📄 Generated content preview:', content.substring(0, 300));
+            
 
             // Finalize
             handleProgress('done', 'Document ready!');
             await new Promise(resolve => setTimeout(resolve, 500));
 
-            console.log('✅ All steps completed, proceeding to create document');
+            
           } catch (aiError) {
             console.error('❌ AI generation failed:', aiError);
 
@@ -325,9 +368,7 @@ const AllTemplate: React.FC = () => {
           console.warn('⚠️ Could not parse repository URL:', repositoryUrl);
         }
       } else {
-        if (!repositoryUrl) {
-          console.log('ℹ️ No repository URL available, using template prompt as content');
-        }
+        
       }
 
       // Get user ID
@@ -410,7 +451,7 @@ const AllTemplate: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 custom-scrollbar overflow-auto">
       <Header userName={displayName} initials={initials} onFeedbackClick={openFeedbackModal} />
 
       <main className="max-w-6xl mx-auto px-6 pb-16">
@@ -514,6 +555,7 @@ const AllTemplate: React.FC = () => {
         repositoryName={generationRepository}
         steps={generationSteps}
         currentStep={currentGenerationStep}
+        estimatedSecondsRange={estimatedRange ?? undefined}
       />
     </div>
   );
