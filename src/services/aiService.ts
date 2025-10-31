@@ -1,5 +1,6 @@
 // src/services/aiService.ts
 import { repositoryContextService } from './repositoryContextService';
+import { FirestoreService } from '../../firestoreService';
 import type { User } from 'firebase/auth';
 import { buildApiUrl } from '@/lib/apiConfig';
 
@@ -25,7 +26,7 @@ class AIService {
         
         try {
             // Build system prompt with tool descriptions and stage format
-            const systemPrompt = `You are a helpful AI assistant that helps users work with their documents. You can read, search, modify, and organize document content.
+            const systemPrompt = `You are a helpful AI assistant that helps users work with their documents. You can read, search, modify, organize, analyse, and optimize document content.
 
 **IMPORTANT: You are assisting non-technical users. Always communicate in clear, natural language without technical jargon.**
 
@@ -146,6 +147,11 @@ The current document ID is: {{DOCUMENT_ID}}
 When a tool accepts a documentId, ALWAYS use this exact value.
 Example: {"tool":"get_document_content","args":{"documentId":"{{DOCUMENT_ID}}"},"description":"Reading your document..."}
 
+**IMPORTANT - REPO LINK:**
+The current repository link is: {{REPOLINK}}
+When a tool accepts a repoLink, ALWAYS use this exact value.
+Example: {"tool":"get_repo_structure","args":{"repoLink":"{{REPOLINK}}","reason":"Getting repository structure..."},"description":"Retrieving the file structure of your repository..."}
+
 **TOOL RESULT VALIDATION:**
 After a toolUsed stage, you will receive a toolResult with this structure:
 - {"success": true/false, "tool": "tool_name", "result": "detailed result or error"}
@@ -170,6 +176,7 @@ After a toolUsed stage, you will receive a toolResult with this structure:
 - For toolUsed, content must be an object with "tool", "args", and "description" fields
 - Review conversation history to see what stages you've already completed
 - DO NOT repeat the same stage - always move forward unless reasoning about next action
+- If get_document_summary returns empty, analyze the document, create summary, call append_document_summary, and continue
 
 **EXAMPLE FLOW (ONE RESPONSE AT A TIME):**
 Call 1 - Planning: {"stage":"planning","thought":"User wants to add content after intro","content":"I understand you'd like to add some content after the introduction section.","nextStage":"reasoning"}
@@ -187,6 +194,43 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
 
             // Inject documentId into system prompt
             const systemPromptWithDocId = systemPrompt.replace(/\{\{DOCUMENT_ID\}\}/g, documentId || 'NOT_SET');
+
+            // Inject repoLink into system prompt
+            const getRepoLinkForDocument = async (docId?: string): Promise<string | null> => {
+                if (!docId) return null;
+                try {
+                    const document = await FirestoreService.getDocument(docId);
+                    if (!document || !document.Project_Id) return null;
+                    const project = await FirestoreService.getProject(document.Project_Id);
+                    let repoLink: string | undefined | null = project?.GitHubRepo || (project as any)?.githubLink || null;
+                    if (!repoLink) return null;
+                    repoLink = String(repoLink).trim();
+                    
+                    // Extract owner/repo format from various formats
+                    // Format: owner/repo (e.g., kongjiyu/battlecatsinfo.github.io)
+                    if (repoLink.includes('github.com/')) {
+                        // Extract from URL: https://github.com/owner/repo
+                        const match = repoLink.match(/github\.com\/([^\/]+\/[^\/\s]+)/);
+                        if (match) {
+                            repoLink = match[1].replace('.git', '');
+                        }
+                    } else if (/^[^\/\s]+\/[^\/\s]+$/.test(repoLink)) {
+                        // Already in owner/repo format
+                        repoLink = repoLink.replace('.git', '');
+                    } else {
+                        // Unknown format - return null
+                        return null;
+                    }
+                    
+                    return repoLink;
+                } catch (err) {
+                    console.error('Error fetching repo link for document:', err);
+                    return null;
+                }
+            };
+
+            const repoLink = await getRepoLinkForDocument(documentId);
+            const systemPromptWithRepo = systemPromptWithDocId.replace(/\{\{REPOLINK\}\}/g, repoLink || 'NOT_SET');
 
             // Add conversation history (limit and prioritize current message)
             const limitedHistory = (conversationHistory || []).slice(-6);
@@ -218,7 +262,7 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                 // Prepare prompt for current iteration
                 const iterationPrompt = messages.map(m => 
                     `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
-                ).join('\n\n') + stageContext + '\n\nSystem: ' + systemPromptWithDocId;
+                ).join('\n\n') + stageContext + '\n\nSystem: ' + systemPromptWithRepo;
 
                 // Dynamic token allocation based on stage
                 let maxTokens = 2048; // Default
