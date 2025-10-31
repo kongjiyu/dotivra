@@ -64,6 +64,9 @@ export default function DocumentEditor() {
     // Loading state for document
     const [isLoadingDocument, setIsLoadingDocument] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    
+    // Version history state
+    const [versionCount, setVersionCount] = useState<number>(0);
 
     // Ref to track current content and prevent unnecessary re-renders
     const documentContentRef = useRef(documentContent);
@@ -99,6 +102,28 @@ export default function DocumentEditor() {
         documentContentRef.current = documentContent;
     }, [documentContent]);
 
+    // Fetch version count to determine if undo should be enabled
+    const fetchVersionCount = async (docId: string) => {
+        try {
+            console.log('📊 Fetching version count for document:', docId);
+            const response = await fetch(API_ENDPOINTS.documentHistory(docId));
+            
+            if (!response.ok) {
+                console.warn('Failed to fetch version history:', response.status);
+                setVersionCount(0);
+                return;
+            }
+
+            const data = await response.json();
+            const count = data.versions?.length || 0;
+            setVersionCount(count);
+            console.log(`✅ Version count loaded: ${count} version(s)`);
+        } catch (error) {
+            console.error('❌ Error fetching version count:', error);
+            setVersionCount(0);
+        }
+    };
+
     // WebSocket sync hook for editor content (separate channel from summary)
     const { syncStatus, sendUpdate } = useDocumentSync({
         documentId: documentId || '',
@@ -119,6 +144,11 @@ export default function DocumentEditor() {
                     currentEditor.commands.setTextSelection(Math.min(from, currentEditor.state.doc.content.size));
                 }
             }
+        },
+        onVersionSaved: () => {
+            // Increment version count when a new version is saved
+            setVersionCount(prev => prev + 1);
+            console.log('✅ Version count incremented');
         },
     });
 
@@ -173,6 +203,15 @@ export default function DocumentEditor() {
                 }
                 latestContentRef.current = content;
 
+                // IMPORTANT: Allow saves after loading from navigation state
+                setTimeout(() => {
+                    isInitialLoadingRef.current = false;
+                    console.log('✅ Navigation state loaded - saves now enabled');
+                }, 500);
+
+                // Fetch version count
+                fetchVersionCount(documentId);
+
                 // Load project info if available
                 const projectIdFromDoc = documentData.Project_Id || documentData.ProjectId;
                 if (projectIdFromDoc) {
@@ -225,6 +264,9 @@ export default function DocumentEditor() {
                     latestContentRef.current = content;
 
                     setDocumentContent(content); // Use exact content from DB, empty if empty
+
+                    // Fetch version count
+                    fetchVersionCount(documentId);
 
                     // Load project information if document has a project ID
                     const projectIdFromDoc = documentData.Project_Id;
@@ -295,16 +337,24 @@ export default function DocumentEditor() {
 
         // Skip sendUpdate during initial load
         if (isInitialLoadingRef.current) {
+            console.log('⏸️ Skipping save - still in initial loading phase');
             return;
         }
 
         // Use useDocumentSync hook to save with Firestore real-time sync
         if (documentId) {
+            console.log('💾 Saving changes to Firestore...', {
+                documentId,
+                contentLength: content.length,
+                syncStatus
+            });
             sendUpdate(content);
             setIsSaving(true);
             setTimeout(() => setIsSaving(false), 1000);
+        } else {
+            console.warn('⚠️ No documentId - cannot save changes');
         }
-    }, [documentId, sendUpdate]);
+    }, [documentId, sendUpdate, syncStatus]);
 
     // Cleanup pending autosave on unmount
     useEffect(() => {
@@ -625,7 +675,7 @@ export default function DocumentEditor() {
     const effectiveContent = documentContent || "";
 
     return (
-        <DocumentLayout showDocumentMenu={true} syncStatus={syncStatus}>
+        <DocumentLayout showDocumentMenu={true} syncStatus={syncStatus} versionCount={versionCount}>
             {/* Main Editor Area - Full Width */}
             <div ref={documentContainerRef} className="w-full h-full relative">
                 <TipTap

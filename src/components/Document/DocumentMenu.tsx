@@ -62,6 +62,7 @@ interface DocumentMenuProps {
 	documentTitle?: string;
 	editor?: Editor; // TipTap editor instance
 	documentContent?: string; // Current document content for PDF export
+	versionCount?: number; // Number of versions in history (for undo button)
 	context?: 'main' | 'project'; // To distinguish between main menu and project tab imports
 	currentDocument?: any; // Current document data for template/copy operations
 	onToolbarToggle?: (show: boolean) => void; // Callback when toolbar visibility changes
@@ -75,6 +76,7 @@ export default function DocumentMenu({
 	documentTitle = "Untitled Document",
 	editor,
 	documentContent,
+	versionCount = 0,
 	context = 'main',
 	currentDocument,
 	onToolbarToggle,
@@ -865,7 +867,8 @@ export default function DocumentMenu({
 	};
 
 	// Undo/Redo state
-	const canUndo = !!editor?.can().undo();
+	// Disable undo if there's only 1 version (initial state) or 0 versions
+	const canUndo = versionCount > 1 && !!editor?.can().undo();
 	const canRedo = !!editor?.can().redo();
 
 	return (
