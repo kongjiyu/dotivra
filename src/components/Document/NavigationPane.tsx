@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { X, ChevronRight, ChevronDown } from "lucide-react";
 import type { Editor } from "@tiptap/react";
-
+import scrollIntoView from "scroll-into-view-if-needed";
 interface HeadingNode {
     level: number;
     text: string;
@@ -70,47 +70,43 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
     const handleNavigateToHeading = (position: number) => {
         if (!editor) return;
 
-        // Focus the heading
+        // Focus the heading position in the editor
         editor.commands.setTextSelection(position);
-        editor.commands.focus();
+        editor.view.focus();
 
         const { view } = editor;
-        const coords = view.coordsAtPos(position);
 
-        if (coords) {
-            // Find the editor element in the DOM
-            const editorElement = view.dom;
-            const editorNode = editorElement.closest('.ProseMirror');
-            
-            if (editorNode) {
-                // Get the node at this position and scroll it into view
-                const node = view.domAtPos(position);
-                if (node && node.node) {
-                    const element = node.node.nodeType === Node.ELEMENT_NODE 
-                        ? node.node as HTMLElement
-                        : (node.node.parentElement as HTMLElement);
-                    
-                    if (element) {
-                        element.scrollIntoView({
-                            behavior: 'smooth',
-                            block: 'start',
-                            inline: 'nearest'
-                        });
-                    }
-                }
-            } else {
-                // Fallback to window scroll with better offset calculation
-                const viewportHeight = window.innerHeight;
-                const toolbarHeight = 120; // Approximate toolbar height
-                const offset = toolbarHeight + 40; // Additional padding
-                
-                window.scrollTo({
-                    top: window.scrollY + coords.top - offset,
-                    behavior: "smooth",
-                });
-            }
+        // Try to get the DOM node directly
+        let domNode = view.nodeDOM(position);
+
+        // Fallback: use domAtPos if nodeDOM fails
+        if (!domNode) {
+            const domAt = view.domAtPos(position);
+            domNode = domAt?.node ?? null;
         }
+
+        if (!domNode) return;
+
+        // Get the element version for .closest()
+        let domElement: Element | null = null;
+        if (domNode instanceof Element) {
+            domElement = domNode;
+        } else {
+            domElement = (domNode as Node & { parentElement?: Element }).parentElement ?? null;
+        }
+
+        // Find the closest heading tag
+        const headingElement = domElement?.closest('h1, h2, h3, h4, h5, h6') as HTMLElement | null;
+        if (!headingElement) return;
+
+        // Scroll 
+        scrollIntoView(headingElement, {
+            scrollMode: 'if-needed',
+            block: 'start',
+            inline: 'nearest',
+        });
     };
+
 
 
 
@@ -222,6 +218,6 @@ export default function NavigationPane({ editor, isOpen, onClose }: NavigationPa
                 {renderHeadingTree()}
             </ScrollArea>
 
-            </div>
+        </div>
     );
 }

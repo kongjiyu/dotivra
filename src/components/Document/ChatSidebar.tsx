@@ -1107,31 +1107,36 @@ From structure improvements to real-time content updates, I ensure your work rem
                         }
 
                         // For preview modal, replay operations on snapshot for accurate diff
+                        let hasChanges = false;
                         if (documentSnapshot && documentSnapshot.content) {
                             console.log('🔄 Replaying', allToolExecutions.length, 'operations on snapshot for preview');
 
                             // Use snapshot as base for preview with diff highlighting
-                            const { previewHtml: diffHtml, changes } = generatePreviewWithHighlights(
+                            const { previewHtml: diffHtml, changes: changeStats } = generatePreviewWithHighlights(
                                 documentSnapshot.content, // Use snapshot as baseline
                                 allToolExecutions
                             );
 
                             setPreviewHtml(diffHtml); // Use the diff-highlighted HTML
-                            setPreviewChanges(changes);
+                            setPreviewChanges(changeStats as any);
+                            hasChanges = (changeStats.additions || 0) > 0 || (changeStats.deletions || 0) > 0 || (changeStats.modifications || 0) > 0;
                         } else {
                             // Fallback to current approach if no snapshot
-                            const { previewHtml: diffHtml, changes } = generatePreviewWithHighlights(
+                            const { previewHtml: diffHtml, changes: changeStats } = generatePreviewWithHighlights(
                                 aiBeforeContent || '',
                                 allToolExecutions
                             );
 
                             setPreviewHtml(diffHtml); // Use the diff-highlighted HTML
-                            setPreviewChanges(changes);
+                            setPreviewChanges(changeStats as any);
+                            hasChanges = (changeStats.additions || 0) > 0 || (changeStats.deletions || 0) > 0 || (changeStats.modifications || 0) > 0;
                         }
 
-                        // Only show preview if generation wasn't aborted
-                        if (!wasAbortedRef.current) {
+                        // Only show preview if generation wasn't aborted and there are actual changes
+                        if (!wasAbortedRef.current && hasChanges) {
                             setShowPreviewModal(true);
+                        } else if (!hasChanges) {
+                            console.log('ℹ️ No changes detected, skipping preview modal');
                         }
 
                         console.log('✅ Highlights applied to editor content');

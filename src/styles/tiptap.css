@@ -706,6 +706,7 @@
   border-radius: 8px;
   overflow: hidden;
   font-family: 'Monaco', 'Menlo', 'Courier New', 'Consolas', monospace;
+  position: relative;
 }
 
 .code-block-wrapper pre {
@@ -726,42 +727,7 @@
   caret-color: white;
 }
 
-/* Language-specific background colors for better visual distinction */
-.code-block-wrapper.language-javascript {
-  border-left: 4px solid #f7df1e;
-}
-
-.code-block-wrapper.language-typescript {
-  border-left: 4px solid #3178c6;
-}
-
-.code-block-wrapper.language-python {
-  border-left: 4px solid #3776ab;
-}
-
-.code-block-wrapper.language-java {
-  border-left: 4px solid #ed8b00;
-}
-
-.code-block-wrapper.language-html {
-  border-left: 4px solid #e34f26;
-}
-
-.code-block-wrapper.language-css {
-  border-left: 4px solid #1572b6;
-}
-
-.code-block-wrapper.language-json {
-  border-left: 4px solid #000000;
-}
-
-.code-block-wrapper.language-markdown {
-  border-left: 4px solid #083fa1;
-}
-
-.code-block-wrapper.language-plaintext {
-  border-left: 4px solid #6b7280;
-}
+/* Language-specific styling removed */
 
 /* Highlight.js Theme Integration */
 
@@ -1895,6 +1861,7 @@ kbd {
     break-before: avoid !important;
   }
 
+
   /* Reset Mermaid diagram container for print */
   .mermaid-diagram {
     border: 1px solid #e0e0e0 !important;
@@ -1951,3 +1918,25 @@ kbd {
   }
 }
 
+/*
+    ============================================================================
+    NAVIGATION HEADINGRESPONSIVE STYLES
+    ============================================================================ 
+*/
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6 {
+  scroll-margin-top: 50px; /* Adjusted for toolbar + padding with scroll-into-view-if-needed */
+}
+
+@media (max-width: 768px) {
+  .ProseMirror h1,
+  .ProseMirror h2,
+  .ProseMirror h3 {
+    scroll-margin-top: 40px; /* Reduced margin for mobile */
+  }
+}
