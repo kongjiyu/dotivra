@@ -88,7 +88,6 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
       setErrorMessage(''); // Clear any previous errors
       
       if (!user) {
-        console.warn('User not authenticated, cannot load repositories');
         setRepositories([]);
         return;
       }
@@ -96,7 +95,6 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
       const repositories = await githubRepoService.getUserRepositories(user);
       setRepositories(repositories);
     } catch (error) {
-      console.warn('Failed to load GitHub repositories:', error);
       const message = getErrorMessage(error);
       setErrorMessage(`Failed to load GitHub repositories: ${message}. Please make sure your GitHub account is connected in your profile.`);
       setRepositories([]);
@@ -111,7 +109,6 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
       setErrorMessage(''); // Clear any previous errors
       
       if (!user) {
-        console.warn('User not authenticated, cannot load projects');
         setProjects([]);
         return;
       }
@@ -123,7 +120,6 @@ const AddDocumentFromTemplate: React.FC<AddDocumentFromTemplateProps> = ({
         const data = await response.json();
         
         if (!data || (!data.projects && !Array.isArray(data))) {
-          console.warn('Unexpected API response format');
           setProjects([]);
           return;
         }

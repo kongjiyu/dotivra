@@ -112,7 +112,6 @@ class RepositoryContextService {
 
       return structure;
     } catch (error) {
-      console.warn(`Could not get repository structure for ${path}:`, error);
       return [];
     }
   }
@@ -134,7 +133,6 @@ class RepositoryContextService {
         }
       }
     } catch (error) {
-      console.warn('Could not get README content:', error);
     }
     return undefined;
   }
@@ -189,7 +187,6 @@ class RepositoryContextService {
             content: content.content
           });
         } catch (error) {
-          console.warn(`Could not get content for ${file.path}:`, error);
           // Add file without content
           importantFiles.push(file);
         }

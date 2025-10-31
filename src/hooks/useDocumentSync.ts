@@ -131,7 +131,6 @@ export function useDocumentSync({ documentId, channel, onUpdate, debounceMs = 20
         await updateDoc(docRef, updateData);
         
         // Save version history to backend
-        console.log('💾 Saving version history...', { documentId, channel, contentLength: content.length });
         try {
           const response = await fetch(API_ENDPOINTS.saveVersion(documentId), {
             method: 'POST',
@@ -150,7 +149,6 @@ export function useDocumentSync({ documentId, channel, onUpdate, debounceMs = 20
             console.error('❌ Failed to save version history:', response.status, errorText);
           } else {
             const result = await response.json();
-            console.log('✅ Version history saved:', result);
             
             // Notify parent component that version was saved
             if (onVersionSaved) {

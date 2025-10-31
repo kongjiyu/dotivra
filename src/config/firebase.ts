@@ -19,11 +19,6 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 
-// Debug log to verify configuration
-console.log('Firebase Config:', {
-  projectId: firebaseConfig.projectId,
-  authDomain: firebaseConfig.authDomain,
-  hasApiKey: !!firebaseConfig.apiKey
-});
+
 
 export default app;

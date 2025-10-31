@@ -11,7 +11,15 @@ const FeedbackBanner: React.FC<FeedbackBannerProps> = ({ onOpenFeedback }) => {
   const [isVisible, setIsVisible] = useState(false);
   const location = useLocation();
 
+  // Check if feedback is enabled via environment variable
+  const isFeedbackEnabled = import.meta.env.VITE_ENABLE_FEEDBACK === 'true';
+
   useEffect(() => {
+    // Don't show if feedback is disabled
+    if (!isFeedbackEnabled) {
+      return;
+    }
+
     // Don't show on login page
     if (location.pathname === '/') {
       setIsVisible(false);
@@ -22,7 +30,7 @@ const FeedbackBanner: React.FC<FeedbackBannerProps> = ({ onOpenFeedback }) => {
     setIsVisible(false);
     setIsClosed(false);
 
-    // Show after 10 seconds
+    // Show after 5 seconds
     const timer = setTimeout(() => {
       if (!isClosed) {
         setIsVisible(true);
@@ -30,7 +38,12 @@ const FeedbackBanner: React.FC<FeedbackBannerProps> = ({ onOpenFeedback }) => {
     }, 5000);
 
     return () => clearTimeout(timer);
-  }, [location.pathname]);
+  }, [location.pathname, isFeedbackEnabled, isClosed]);
+
+  // Don't show if feedback is disabled
+  if (!isFeedbackEnabled) {
+    return null;
+  }
 
   // Don't show on login page
   if (location.pathname === '/') {
@@ -53,9 +66,8 @@ const FeedbackBanner: React.FC<FeedbackBannerProps> = ({ onOpenFeedback }) => {
 
   return (
     <div
-      className={`fixed bottom-6 right-6 z-50 max-w-sm transition-all duration-500 ease-out ${
-        isVisible ? 'translate-x-0 opacity-100' : 'translate-x-[120%] opacity-0'
-      }`}
+      className={`fixed bottom-6 right-6 z-50 max-w-sm transition-all duration-500 ease-out ${isVisible ? 'translate-x-0 opacity-100' : 'translate-x-[120%] opacity-0'
+        }`}
     >
       <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-4">
         <div className="flex items-start justify-between gap-3 mb-3">

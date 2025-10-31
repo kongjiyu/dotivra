@@ -94,7 +94,6 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 const firestore = getFirestore(firebaseApp);
 
-console.log('✅ Firebase initialized successfully');
 
 
 // Security middleware
@@ -126,9 +125,8 @@ const githubAuth = createAppAuth({
 let geminiBalancer;
 try {
 	geminiBalancer = createBalancerFromEnv(firestore);
-	console.log(`✅ Gemini balancer initialized with ${geminiBalancer.getConfig().keyCount} keys (Firebase storage)`);
 } catch (e) {
-	console.warn('⚠️ Gemini balancer not initialized:', e?.message || e);
+	// Gemini balancer initialization failed
 }
 
 // Import toolService and AIAgent
@@ -147,7 +145,6 @@ if (geminiBalancer) {
 	try {
 		// Initialize AI Agent
 		aiAgent = new AIAgent(geminiBalancer, toolService);
-		console.log('✅ AI Agent initialized');
 	} catch (error) {
 		console.error('❌ Failed to initialize AI Agent:', error);
 	}
@@ -179,7 +176,6 @@ app.get('/api/health', (req, res) => {
 // ===================== Gemini Endpoints =====================
 app.post('/api/gemini/generate-with-tools', async (req, res) => {
 	try {
-		console.log('🔧 Gemini API with Tools Request received');
 
 		const {
 			prompt,
@@ -206,7 +202,6 @@ app.post('/api/gemini/generate-with-tools', async (req, res) => {
 			model
 		});
 	} catch (error) {
-		console.error('❌ Gemini generate with tools error:', error);
 		res.status(500).json({
 			success: false,
 			error: error?.message || 'Failed to generate with tools'
@@ -218,13 +213,9 @@ app.post('/api/gemini/generate-with-tools', async (req, res) => {
 // Generate via balancer: central entry for all AI calls
 app.post('/api/gemini/generate', async (req, res) => {
 	try {
-		console.log('🔵 Gemini API Request received');
-		console.log('  Request body keys:', Object.keys(req.body || {}));
-		console.log('  Prompt:', req.body?.prompt?.substring(0, 100) + '...');
-		console.log('  Model:', req.body?.model || 'default');
+
 
 		if (!geminiBalancer) {
-			console.error('❌ Balancer not configured!');
 			return res.status(503).json({ error: 'Balancer not configured' });
 		}
 
@@ -242,14 +233,11 @@ app.post('/api/gemini/generate', async (req, res) => {
 		let effectiveContents = contents;
 		if (!effectiveContents && typeof prompt === 'string') {
 			effectiveContents = [{ role: 'user', parts: [{ text: String(prompt) }] }];
-			console.log('  Converting prompt to contents format');
 		}
 		if (!effectiveContents) {
-			console.error('❌ Missing prompt or contents');
 			return res.status(400).json({ error: 'Missing prompt or contents' });
 		}
 
-		console.log('  Calling geminiBalancer.generate with model:', model);
 		const result = await geminiBalancer.generate({
 			model,
 			contents: effectiveContents,
@@ -260,7 +248,6 @@ app.post('/api/gemini/generate', async (req, res) => {
 			toolConfig,
 		});
 
-		console.log('✅ Gemini generation successful, response length:', result.text?.length || 0);
 		res.json({
 			ok: true,
 			text: result.text,
@@ -269,12 +256,7 @@ app.post('/api/gemini/generate', async (req, res) => {
 			model,
 		});
 	} catch (error) {
-		console.error('❌ Gemini generate error:', error);
-		console.error('   Error details:', {
-			message: error?.message,
-			status: error?.status,
-			stack: error?.stack?.substring(0, 500)
-		});
+
 		const status = error?.status || 500;
 		res.status(status).json({ ok: false, error: error?.message || 'Failed to generate' });
 	}
@@ -288,9 +270,6 @@ app.post('/api/gemini/recommendations', async (req, res) => {
 		if (!documentId || !content) {
 			return res.status(400).json({ error: 'Missing documentId or content' });
 		}
-
-		console.log('🎯 Generating recommendations for document:', documentId);
-
 		// Generate recommendations using Gemini
 		const prompt = `Analyze this document and provide exactly 4 actionable recommendations.
 
@@ -327,7 +306,6 @@ Format your response as JSON:
 			const parsed = JSON.parse(result.text);
 			recommendations = parsed.recommendations || [];
 		} catch (parseError) {
-			console.error('Failed to parse recommendations JSON:', parseError);
 			// Fallback: extract text recommendations
 			recommendations = [
 				{ title: 'Review Content', description: 'Review and verify the generated recommendations' },
@@ -337,11 +315,9 @@ Format your response as JSON:
 			];
 		}
 
-		console.log(`✅ Generated ${recommendations.length} recommendations`);
 		res.json({ recommendations });
 
 	} catch (error) {
-		console.error('❌ Recommendations generation error:', error);
 		res.status(500).json({ error: 'Failed to generate recommendations' });
 	}
 });
@@ -352,7 +328,6 @@ const aiAgentSessions = new Map();
 
 app.post('/api/ai-agent/execute', async (req, res) => {
 	try {
-		console.log('🤖 AI Agent Execute - Request received');
 
 		if (!aiAgent) {
 			return res.status(503).json({ error: 'AI Agent not initialized' });
@@ -389,14 +364,25 @@ app.post('/api/ai-agent/execute', async (req, res) => {
 			fullPrompt = `Selected text from document: "${selectedText}"\n\nUser request: ${prompt}`;
 		}
 
-		console.log('📝 Prompt:', fullPrompt?.substring(0, 200));
-		console.log('📄 Document ID:', documentId);
+		// Fetch document to get repository link if document ID is provided
+		let repoLink = null;
+		if (documentId) {
+			try {
+				const docRef = doc(firestore, 'Documents', documentId);
+				const docSnap = await getDoc(docRef);
+				if (docSnap.exists()) {
+					const docData = docSnap.data();
+					repoLink = docData.GitHubRepo || docData.githubLink || null;
+				}
+			} catch (err) {
+			}
+		}
 
 		// Create new session
 		const newSessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
 		try {
-			const iterator = aiAgent.executeWithStream(fullPrompt, documentId, conversationHistory || []);
+			const iterator = aiAgent.executeWithStream(fullPrompt, documentId, conversationHistory || [], repoLink);
 			aiAgentSessions.set(newSessionId, iterator);
 
 			// Get first stage
@@ -410,13 +396,12 @@ app.post('/api/ai-agent/execute', async (req, res) => {
 			return res.json({ ...stage, sessionId: newSessionId });
 
 		} catch (agentError) {
-			console.error('❌ AI Agent execution error:', agentError);
 			aiAgentSessions.delete(newSessionId);
 			return res.json({ stage: 'error', content: agentError.message, sessionId: null });
 		}
 
 	} catch (error) {
-		console.error('❌ AI Agent execute error:', error);
+
 		res.status(500).json({
 			stage: 'error',
 			content: error?.message || 'AI Agent execution failed',
@@ -433,7 +418,6 @@ setInterval(() => {
 		const sessionAge = now - parseInt(sessionId.split('-')[1]);
 		if (sessionAge > 10 * 60 * 1000) {
 			aiAgentSessions.delete(sessionId);
-			console.log(`🧹 Cleaned up stale AI session: ${sessionId}`);
 		}
 	}
 }, 5 * 60 * 1000);
@@ -442,7 +426,6 @@ setInterval(() => {
 // Execute tools called by AI agent
 app.post('/api/tools/execute', async (req, res) => {
 	try {
-		console.log('🔧 Tool execution request received');
 
 		const { tool, args, documentId } = req.body;
 
@@ -477,27 +460,18 @@ app.post('/api/tools/execute', async (req, res) => {
 						});
 					}
 				} catch (e) {
-					console.warn('⚠️ Failed to log system-error:', e?.message || e);
+					// Failed to log error
 				}
 				return res.status(400).json({ success: false, html: errorHtml, tool });
 			}
-		}
-
-		console.log(`🔧 Executing tool: ${tool}`);
-		console.log(`📄 Document ID: ${documentId || 'NOT_SET'}`);
-		console.log(`📋 Args:`, JSON.stringify(args, null, 2));
-
-		// Import setCurrentDocument from toolService
+		}		// Import setCurrentDocument from toolService
 		const { setCurrentDocument } = await import('./server/services/toolService.js');
 
 		// Set document context if documentId provided
 		if (documentId && documentId !== 'NOT_SET') {
 			try {
-				console.log(`📂 Setting current document context: ${documentId}`);
 				await setCurrentDocument(documentId);
-				console.log(`✅ Document context set successfully`);
 			} catch (error) {
-				console.error(`❌ Failed to set document context:`, error);
 				return res.status(500).json({
 					success: false,
 					html: `<div class="error-message">Sorry, we couldn't load your document. Please try again.</div>`
@@ -509,10 +483,8 @@ app.post('/api/tools/execute', async (req, res) => {
 		let result;
 		try {
 			result = await toolService.executeTool(tool, args);
-			console.log(`✅ Tool executed successfully: ${tool}`);
-			console.log(`📊 Result:`, JSON.stringify(result, null, 2));
 		} catch (toolError) {
-			console.error(`❌ Tool execution error:`, toolError);
+
 			// Log system error
 			try {
 				if (documentId) {
@@ -524,16 +496,14 @@ app.post('/api/tools/execute', async (req, res) => {
 					});
 				}
 			} catch (e) {
-				console.warn('⚠️ Failed to log system-error:', e?.message || e);
+				// Failed to log error
 			}
 			return res.status(500).json({
 				success: false,
 				html: `<div class="error-message">Sorry, something went wrong while running the tool. Please try again.</div>`,
 				tool: tool
 			});
-		}
-
-		// If tool returned an error, store it as system-error
+		}		// If tool returned an error, store it as system-error
 		if (!result?.success && documentId) {
 			try {
 				await firestore.collection('ChatHistory').add({
@@ -543,15 +513,14 @@ app.post('/api/tools/execute', async (req, res) => {
 					CreatedAt: new Date().toISOString(),
 				});
 			} catch (e) {
-				console.warn('⚠️ Failed to log system-error:', e?.message || e);
+				// Failed to log error
 			}
 		}
 
 		// Return the result
 		res.json(result);
-
 	} catch (error) {
-		console.error('❌ Tool execution endpoint error:', error);
+
 		res.status(500).json({
 			success: false,
 			error: error?.message || 'Tool execution failed',
@@ -609,14 +578,13 @@ app.post('/api/gemini/auth', (req, res) => {
 		// Clean expired sessions
 		cleanExpiredSessions();
 
-		console.log('✅ Dashboard session created:', sessionId.slice(0, 12), '...');
 
 		res.json({
 			sessionId,
 			expiresAt: new Date(expiresAt).toISOString(),
 		});
 	} catch (error) {
-		console.error('❌ Dashboard auth error:', error);
+
 		res.status(500).json({ error: 'Authentication failed' });
 	}
 });
@@ -637,7 +605,7 @@ app.post('/api/gemini/verify-session', (req, res) => {
 			res.json({ valid: false });
 		}
 	} catch (error) {
-		console.error('❌ Session verification error:', error);
+
 		res.status(500).json({ error: 'Verification failed' });
 	}
 });
@@ -648,11 +616,9 @@ app.post('/api/gemini/logout', (req, res) => {
 		const { sessionId } = req.body;
 		if (sessionId) {
 			dashboardSessions.delete(sessionId);
-			console.log('🔓 Dashboard session ended:', sessionId.slice(0, 12), '...');
 		}
 		res.json({ success: true });
 	} catch (error) {
-		console.error('❌ Logout error:', error);
 		res.status(500).json({ error: 'Logout failed' });
 	}
 });
@@ -671,12 +637,10 @@ app.get('/api/gemini/dashboard', async (req, res) => {
 		}
 
 		// Read directly from Firebase
-		console.log('📊 Dashboard requested, reading from Firebase...');
 		const usage = await geminiBalancer.getUsageFromFirebase();
-		console.log('📊 Dashboard data retrieved:', JSON.stringify(usage, null, 2));
 		res.json(usage);
 	} catch (error) {
-		console.error('❌ Gemini dashboard error:', error);
+
 		res.status(500).json({ error: 'Failed to get dashboard' });
 	}
 });
@@ -696,7 +660,7 @@ app.get('/api/github/install-url', async (req, res) => {
 			install_url: `https://github.com/apps/${app.slug}/installations/new`
 		});
 	} catch (error) {
-		console.error('GitHub App error:', error);
+
 		res.status(500).json({
 			error: 'Failed to get GitHub App info',
 			details: error.message
@@ -726,7 +690,7 @@ app.get('/api/github/installations', async (req, res) => {
 
 		res.json({ installations });
 	} catch (error) {
-		console.error('Error fetching installations:', error);
+
 		res.status(500).json({
 			error: 'Failed to fetch installations',
 			details: error.message
@@ -761,7 +725,7 @@ app.get('/api/github/repositories', async (req, res) => {
 
 		res.json({ repositories });
 	} catch (error) {
-		console.error('Error fetching repositories:', error);
+
 		res.status(500).json({
 			error: 'Failed to fetch repositories',
 			details: error.message
@@ -790,7 +754,7 @@ app.get('/api/github/repository/:owner/:repo/contents', async (req, res) => {
 
 		res.json(data);
 	} catch (error) {
-		console.error('Error fetching repository contents:', error);
+
 		res.status(500).json({
 			error: 'Failed to fetch repository contents',
 			details: error.message
@@ -830,7 +794,7 @@ app.get('/api/github/repository/:owner/:repo/file', async (req, res) => {
 			res.status(400).json({ error: 'Path does not point to a file' });
 		}
 	} catch (error) {
-		console.error('Error fetching file:', error);
+
 		res.status(500).json({
 			error: 'Failed to fetch file',
 			details: error.message
@@ -856,10 +820,8 @@ async function getAllTemplates() {
 app.get('/api/templates', async (req, res) => {
 	try {
 		const templates = await getAllTemplates();
-		console.log(`GET /api/templates - Returned ${templates.length} templates`);
 		res.json({ templates });
 	} catch (error) {
-		console.error('GET /api/templates - Error:', error.message);
 		res.status(500).json({
 			error: 'Failed to fetch templates',
 			details: error.message
@@ -874,12 +836,10 @@ app.get('/api/templates', async (req, res) => {
 // Create a new project
 app.post('/api/projects', async (req, res) => {
 	try {
-		console.log('🔥 POST /api/projects received:', req.body);
 		const { name, description, githubLink, selectedRepo, installationId, userId } = req.body;
 
 		// Validate required fields
 		if (!name || !description || !userId) {
-			console.log('❌ Validation failed: missing required fields');
 			return res.status(400).json({ error: 'Name, description, and userId are required' });
 		}
 
@@ -899,7 +859,6 @@ app.post('/api/projects', async (req, res) => {
 		// Add to Firestore Projects collection
 		const docRef = await addDoc(collection(firestore, 'Projects'), project);
 
-		console.log('✅ Project created with ID:', projectId);
 
 		res.status(201).json({
 			success: true,
@@ -909,7 +868,7 @@ app.post('/api/projects', async (req, res) => {
 			}
 		});
 	} catch (error) {
-		console.error('Error creating project:', error);
+
 		res.status(500).json({
 			error: 'Failed to create project',
 			details: error.message
@@ -920,7 +879,6 @@ app.post('/api/projects', async (req, res) => {
 // Get all projects
 app.get('/api/projects', async (req, res) => {
 	try {
-		console.log('📋 GET /api/projects - fetching from Firestore');
 
 		const q = query(collection(firestore, 'Projects'), orderBy('Created_Time', 'desc'));
 		const querySnapshot = await getDocs(q);
@@ -930,14 +888,13 @@ app.get('/api/projects', async (req, res) => {
 			Created_Time: doc.data().Created_Time?.toDate?.()?.toISOString() || new Date().toISOString()
 		}));
 
-		console.log('📋 Returning', projects.length, 'projects from Firestore');
 
 		res.json({
 			success: true,
 			projects
 		});
 	} catch (error) {
-		console.error('Error fetching projects:', error);
+
 		res.status(500).json({
 			error: 'Failed to fetch projects',
 			details: error.message
@@ -949,7 +906,6 @@ app.get('/api/projects', async (req, res) => {
 app.get('/api/projects/:id', async (req, res) => {
 	try {
 		const projectId = req.params.id;
-		console.log('📋 GET /api/projects/' + projectId);
 
 		// Query by Project_Id field
 		const q = query(
@@ -973,7 +929,7 @@ app.get('/api/projects/:id', async (req, res) => {
 			project
 		});
 	} catch (error) {
-		console.error('Error fetching project:', error);
+
 		res.status(500).json({
 			error: 'Failed to fetch project',
 			details: error.message
@@ -985,7 +941,6 @@ app.get('/api/projects/:id', async (req, res) => {
 app.get('/api/projects/user/:userId', async (req, res) => {
 	try {
 		const userId = req.params.userId;
-		console.log('📋 GET /api/projects/user/' + userId);
 
 		const q = query(
 			collection(firestore, 'Projects'),
@@ -1004,7 +959,7 @@ app.get('/api/projects/user/:userId', async (req, res) => {
 			projects
 		});
 	} catch (error) {
-		console.error('Error fetching user projects:', error);
+
 		res.status(500).json({
 			error: 'Failed to fetch user projects',
 			details: error.message
@@ -1040,7 +995,7 @@ app.put('/api/projects/:id', async (req, res) => {
 			message: 'Project updated successfully'
 		});
 	} catch (error) {
-		console.error('Error updating project:', error);
+
 		res.status(500).json({
 			error: 'Failed to update project',
 			details: error.message
@@ -1072,7 +1027,7 @@ app.delete('/api/projects/:id', async (req, res) => {
 			message: 'Project deleted successfully'
 		});
 	} catch (error) {
-		console.error('Error deleting project:', error);
+
 		res.status(500).json({
 			error: 'Failed to delete project',
 			details: error.message
@@ -1087,7 +1042,6 @@ app.delete('/api/projects/:id', async (req, res) => {
 // Create document
 app.post('/api/documents', async (req, res) => {
 	try {
-		console.log('🔥 POST /api/documents received:', req.body);
 		const {
 			Title,
 			DocumentName, // Keep for backward compatibility
@@ -1105,7 +1059,6 @@ app.post('/api/documents', async (req, res) => {
 
 		// Validate required fields
 		if (!documentTitle || !DocumentType || !DocumentCategory || !Project_Id || !User_Id) {
-			console.log('❌ Document validation failed: missing required fields');
 			return res.status(400).json({
 				error: 'Title (or DocumentName), DocumentType, DocumentCategory, Project_Id, and User_Id are required',
 				received: {
@@ -1119,7 +1072,6 @@ app.post('/api/documents', async (req, res) => {
 			});
 		}
 
-		console.log('✅ Document validation passed, creating document...');
 
 		// Create the document object
 		const document = {
@@ -1139,12 +1091,12 @@ app.post('/api/documents', async (req, res) => {
 			version: 1 // Initialize version to 1
 		};
 
-		console.log('Creating document in Firestore:', document);
+
 
 		// Add to Firestore Documents collection
 		const docRef = await addDoc(collection(firestore, 'Documents'), document);
 
-		console.log('✅ Document created with Firestore ID:', docRef.id);
+
 
 		// ✅ Save initial version (version 1) to DocumentHistory
 		try {
@@ -1169,15 +1121,13 @@ app.post('/api/documents', async (req, res) => {
 			Updated_Time: document.Updated_Time.toDate().toISOString()
 		};
 
-		console.log('Sending document response:', responseDocument);
+
 
 		res.status(201).json({
 			success: true,
 			document: responseDocument
 		});
 	} catch (error) {
-		console.error('❌ Error creating document:', error);
-		console.error('Error stack:', error.stack);
 		res.status(500).json({
 			error: 'Failed to create document',
 			details: error.message,
@@ -1190,7 +1140,7 @@ app.post('/api/documents', async (req, res) => {
 app.get('/api/documents/project/:projectId', async (req, res) => {
 	try {
 		const projectId = req.params.projectId;
-		console.log('📋 GET /api/documents/project/' + projectId);
+
 
 		const q = query(
 			collection(firestore, 'Documents'),
@@ -1205,14 +1155,12 @@ app.get('/api/documents/project/:projectId', async (req, res) => {
 			Updated_Time: doc.data().Updated_Time?.toDate?.()?.toISOString() || new Date().toISOString()
 		}));
 
-		console.log('📋 Returning', documents.length, 'documents for project', projectId);
 
 		res.json({
 			success: true,
 			documents
 		});
 	} catch (error) {
-		console.error('Error fetching project documents:', error);
 		res.status(500).json({
 			error: 'Failed to fetch project documents',
 			details: error.message
@@ -1224,13 +1172,12 @@ app.get('/api/documents/project/:projectId', async (req, res) => {
 app.get('/api/documents/:documentId', async (req, res) => {
 	try {
 		const documentId = req.params.documentId;
-		console.log('📄 GET /api/documents/' + documentId);
+
 
 		const docRef = doc(firestore, 'Documents', documentId);
 		const docSnap = await getDoc(docRef);
 
 		if (!docSnap.exists()) {
-			console.log('❌ Document not found:', documentId);
 			return res.status(404).json({
 				success: false,
 				error: 'Document not found'
@@ -1244,14 +1191,13 @@ app.get('/api/documents/:documentId', async (req, res) => {
 			Updated_Time: docSnap.data().Updated_Time?.toDate?.()?.toISOString() || new Date().toISOString()
 		};
 
-		console.log('📄 Returning document:', document.Title || document.DocumentName);
+
 
 		res.json({
 			success: true,
 			document
 		});
 	} catch (error) {
-		console.error('Error fetching document:', error);
 		res.status(500).json({
 			success: false,
 			error: 'Failed to fetch document',
@@ -1265,7 +1211,6 @@ app.put('/api/documents/:documentId', async (req, res) => {
 	try {
 		const documentId = req.params.documentId;
 		const updateData = req.body;
-		console.log('📝 PUT /api/documents/' + documentId, 'Updates:', Object.keys(updateData));
 
 		const docRef = doc(firestore, 'Documents', documentId);
 		const docSnap = await getDoc(docRef);
@@ -1295,13 +1240,11 @@ app.put('/api/documents/:documentId', async (req, res) => {
 					EditedBy: updateData.EditedBy || docData?.EditedBy || 'anonymous',
 					Channel: 'content',
 				});
-				console.log(`📚 Version ${newVersion} saved to DocumentHistory for document ${documentId}`);
 			} catch (historyError) {
 				console.error('❌ Failed to save version history:', historyError);
 			}
 		}
 
-		console.log('📝 Document updated successfully');
 
 		res.json({
 			success: true,
@@ -1309,7 +1252,6 @@ app.put('/api/documents/:documentId', async (req, res) => {
 			version: newVersion
 		});
 	} catch (error) {
-		console.error('Error updating document:', error);
 		res.status(500).json({
 			success: false,
 			error: 'Failed to update document',
@@ -1322,13 +1264,11 @@ app.put('/api/documents/:documentId', async (req, res) => {
 app.delete('/api/documents/:documentId', async (req, res) => {
 	try {
 		const documentId = req.params.documentId;
-		console.log('🗑️ DELETE /api/documents/' + documentId);
 
 		// Delete the document from Firestore
 		const docRef = doc(firestore, 'Documents', documentId);
 		await deleteDoc(docRef);
 
-		console.log('✅ Document deleted successfully:', documentId);
 
 		res.json({
 			success: true,
@@ -1434,7 +1374,6 @@ app.get('/api/users/email/:email', async (req, res) => {
 // Edit user profile
 app.put('/api/profile/edit', async (req, res) => {
 	try {
-		console.log('✏️ PUT /api/profile/edit received:', req.body);
 		const { userId, UserName, UserEmail, currentPassword, newPassword } = req.body;
 
 		// Validate required fields
@@ -1476,14 +1415,12 @@ app.put('/api/profile/edit', async (req, res) => {
 		const updatedUser = { ...userData, ...updateData };
 		const { UserPw: _, ...userResponse } = updatedUser;
 
-		console.log('✅ Profile updated successfully for user:', userId);
 		res.json({
 			success: true,
 			message: 'Profile updated successfully',
 			user: userResponse
 		});
 	} catch (error) {
-		console.error('❌ Error updating profile:', error);
 		res.status(500).json({
 			error: 'Failed to update profile',
 			details: error.message
@@ -1494,7 +1431,6 @@ app.put('/api/profile/edit', async (req, res) => {
 // Delete user profile
 app.delete('/api/profile/delete', async (req, res) => {
 	try {
-		console.log('🗑️ DELETE /api/profile/delete received:', req.body);
 		const { userId, password } = req.body;
 
 		// Validate required fields
@@ -1524,7 +1460,6 @@ app.delete('/api/profile/delete', async (req, res) => {
 		// Delete the user document
 		await deleteDoc(doc(firestore, 'Users', userDoc.id));
 
-		console.log('✅ Profile deleted successfully for user:', userId);
 		res.json({
 			success: true,
 			message: 'Profile deleted successfully'
@@ -1549,13 +1484,7 @@ const server = http.createServer(app);
 
 // Start server
 server.listen(PORT, async () => {
-	console.log(`🚀 GitHub Server running on port ${PORT}`);
-	console.log(`📱 Frontend URL: ${process.env.FRONTEND_URL}`);
-	console.log(`🔑 GitHub App ID: ${process.env.GITHUB_APP_ID}`);
-	console.log(`🔥 Firebase Project: ${process.env.VITE_FIREBASE_PROJECT_ID}`);
-	console.log(`🔌 WebSocket server ready for connections`);
-
-
+	// Server started on PORT
 });
 
 /* ------------------ Utility ------------------ */
@@ -1628,14 +1557,12 @@ app.put("/api/document/editor/content/:docId", async (req, res) => {
 				EditedBy: EditedBy || docData?.EditedBy || 'anonymous',
 				Channel: 'content',
 			});
-			console.log(`📚 Version ${newVersion} saved to DocumentHistory for document ${docId}`);
 		} catch (historyError) {
 			console.error('❌ Failed to save version history:', historyError);
 		}
 
 		res.json({ status: "ok", version: newVersion });
 	} catch (err) {
-		console.error('Error updating document content:', err);
 		res.status(500).json({ error: "SERVER_ERROR" });
 	}
 });
@@ -1669,31 +1596,23 @@ app.delete("/api/document/:docId", async (req, res) => {
 app.get("/api/document/editor/history/:docId", async (req, res) => {
 	try {
 		const { docId } = req.params;
-		console.log('📜 Fetching version history for document:', docId);
 
 		const historyRef = collection(firestore, "DocumentHistory");
 
 		// DEBUG: Get ALL documents in the collection to see what's there
 		const allSnapshot = await getDocs(historyRef);
-		console.log('🔍 Total documents in DocumentHistory collection:', allSnapshot.docs.length);
 		allSnapshot.docs.forEach(doc => {
 			const data = doc.data();
-			console.log('  📄 Doc ID:', doc.id);
-			console.log('     Document_Id:', data.Document_Id);
-			console.log('     Version:', data.Version);
-			console.log('     Content preview:', (data.Content || '').substring(0, 50));
+
 		});
 
 		// Now try the filtered query
 		const q = query(historyRef, where("Document_Id", "==", docId), orderBy("Version", "desc"));
 		const snapshot = await getDocs(q);
 
-		console.log('📊 Found', snapshot.docs.length, 'versions matching docId:', docId);
 		const versions = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
 		res.json({ versions });
 	} catch (err) {
-		console.error('❌ Error fetching version history:', err.message);
-		console.error('Full error:', err);
 		res.status(500).json({ error: "SERVER_ERROR", details: err.message });
 	}
 });
@@ -1707,7 +1626,6 @@ app.post("/api/document/history", async (req, res) => {
 			return res.status(400).json({ error: "Missing required fields" });
 		}
 
-		console.log('💾 Saving document history snapshot:', Document_Id, Version);
 
 		const historyData = {
 			Document_Id,
@@ -1718,7 +1636,6 @@ app.post("/api/document/history", async (req, res) => {
 
 		const historyRef = await addDoc(collection(firestore, "DocumentHistory"), historyData);
 
-		console.log('✅ Document history saved with ID:', historyRef.id);
 		res.status(201).json({
 			success: true,
 			id: historyRef.id,
@@ -2091,13 +2008,11 @@ const wss = new WebSocketServer({ noServer: true });
 const documentRooms = new Map();
 
 wss.on("connection", (ws) => {
-	console.log("Client connected ✅");
 	let currentDocumentId = null;
 
 	ws.on("message", async (msg) => {
 		try {
 			const data = JSON.parse(msg.toString());
-			console.log("Received:", data.type, data.documentId);
 
 			switch (data.type) {
 				case 'join':
@@ -2107,7 +2022,6 @@ wss.on("connection", (ws) => {
 						documentRooms.set(currentDocumentId, new Set());
 					}
 					documentRooms.get(currentDocumentId).add(ws);
-					console.log(`📄 Client joined document: ${currentDocumentId}`);
 					ws.send(JSON.stringify({ type: 'joined', documentId: currentDocumentId }));
 					break;
 
@@ -2125,7 +2039,6 @@ wss.on("connection", (ws) => {
 							// Ensure Summary field exists, add if missing
 							if (!docData.Summary) {
 								await updateDoc(docRef, { Summary: '' });
-								console.log(`➕ Added missing Summary field to document: ${syncDocId}`);
 							}
 
 							// Send appropriate content based on channel
@@ -2143,7 +2056,6 @@ wss.on("connection", (ws) => {
 								version: docData.version || 0,
 								channel: syncChannel,
 							}));
-							console.log(`🔄 Sync response sent for document: ${syncDocId}, channel: ${syncChannel}, version: ${docData.version || 0}`);
 						} else {
 							ws.send(JSON.stringify({
 								type: 'error',
@@ -2152,7 +2064,6 @@ wss.on("connection", (ws) => {
 							}));
 						}
 					} catch (error) {
-						console.error('Error handling sync_request:', error);
 						ws.send(JSON.stringify({
 							type: 'error',
 							message: 'Failed to sync document',
@@ -2166,7 +2077,6 @@ wss.on("connection", (ws) => {
 					const { documentId: editDocId, content: editContent, baseVersion, seq, channel: editChannel } = data;
 					const editIsSummary = editChannel === 'summary';
 
-					console.log(`📝 Processing edit. DocId: ${editDocId}, Seq: ${seq}, BaseVersion: ${baseVersion}, Channel: ${editChannel}`);
 
 					try {
 						const docRef = doc(firestore, 'Documents', editDocId);
@@ -2188,15 +2098,12 @@ wss.on("connection", (ws) => {
 						// Ensure Summary field exists if we're editing summary
 						if (editIsSummary && !docData.Summary) {
 							await updateDoc(docRef, { Summary: '' });
-							console.log(`➕ Added missing Summary field to document: ${editDocId}`);
 						}
 
-						console.log(`📊 Current document version: ${currentVersion}, Incoming baseVersion: ${baseVersion}`);
 
 						// Check if baseVersion matches current version
 						if (baseVersion !== currentVersion) {
 							// Reject stale edit
-							console.log(`⚠️ Rejecting stale edit. Base: ${baseVersion}, Current: ${currentVersion}`);
 							ws.send(JSON.stringify({
 								type: 'reject',
 								documentId: editDocId,
@@ -2216,15 +2123,11 @@ wss.on("connection", (ws) => {
 
 						if (editIsSummary) {
 							updateData.Summary = editContent;
-							console.log(`💾 Updating Summary field (channel: ${editChannel})`);
 						} else {
 							updateData.Content = editContent;
-							console.log(`💾 Updating Content field (channel: ${editChannel})`);
 						}
 
-						console.log(`🔄 Saving to Firestore...`);
 						await updateDoc(docRef, updateData);
-						console.log(`💾 Firestore updated successfully`);
 
 						// Send acknowledgment to sender
 						const ackMessage = {
@@ -2234,10 +2137,7 @@ wss.on("connection", (ws) => {
 							newVersion,
 							channel: editChannel // Include channel in response
 						};
-						console.log(`📤 Sending ACK:`, ackMessage);
 						ws.send(JSON.stringify(ackMessage));
-
-						console.log(`✅ Edit applied. Seq: ${seq}, New version: ${newVersion}, Channel: ${editChannel}`);
 
 						// Broadcast to other clients in the same document room (same channel only)
 						if (documentRooms.has(editDocId)) {
@@ -2311,7 +2211,6 @@ wss.on("connection", (ws) => {
 							});
 						}
 
-						console.log(`💾 Document ${documentId} saved and synced (legacy mode)`);
 					} catch (error) {
 						console.error('Error saving document:', error);
 						ws.send(JSON.stringify({
@@ -2323,7 +2222,6 @@ wss.on("connection", (ws) => {
 					break;
 
 				default:
-					console.log("Unknown message type:", data.type);
 			}
 		} catch (error) {
 			console.error('Error processing WebSocket message:', error);
@@ -2341,9 +2239,7 @@ wss.on("connection", (ws) => {
 			if (documentRooms.get(currentDocumentId).size === 0) {
 				documentRooms.delete(currentDocumentId);
 			}
-			console.log(`📄 Client left document: ${currentDocumentId}`);
 		}
-		console.log("Client disconnected ❌");
 	});
 
 	ws.send(JSON.stringify({ type: "connected" }));

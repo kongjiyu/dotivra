@@ -33,8 +33,6 @@ export default function DocumentHistory() {
 
         try {
             setIsRestoring(true);
-            console.log('🔄 Restoring version for document:', documentId);
-
             // Update document in database
             const response = await fetch(API_ENDPOINTS.document(documentId), {
                 method: 'PUT',
@@ -50,9 +48,6 @@ export default function DocumentHistory() {
             if (!response.ok) {
                 throw new Error(`Failed to restore version: ${response.status}`);
             }
-
-            console.log('✅ Version restored successfully');
-
             // Force a full page reload to ensure all data (title, content, project docs) is fresh
             // Using window.location.href instead of navigate ensures complete remount
             window.location.href = `/document/${documentId}`;

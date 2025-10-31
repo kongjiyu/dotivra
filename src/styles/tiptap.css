@@ -1225,13 +1225,16 @@
   cursor: col-resize;
 }
 
-/* Image edge hover should indicate resizable */
-.tiptap img {
-  cursor: default;
+/* Table cell edge resize cursor - show when hovering near cell borders */
+.tiptap table td,
+.tiptap table th {
+  /* Cursor will be set dynamically by JavaScript when hovering near edges */
+  cursor: text;
 }
 
-.tiptap img:hover {
-  cursor: nwse-resize;
+/* Image edge hover should indicate resizable - cursor will be set by JS */
+.tiptap img {
+  cursor: default;
 }
 
 /* ProseMirror table selection classes */
@@ -1560,10 +1563,11 @@ kbd {
   height: auto;
   border: 1px solid #e5e7eb;
   border-radius: 4px;
-  cursor: pointer;
+  cursor: default; /* Default cursor, will be overridden by JS for resize areas */
   display: block;
   margin: 1rem auto;
   transition: all 0.2s ease;
+  position: relative; /* Needed for pseudo-elements */
 }
 
 .tiptap img.tiptap-image:hover {
@@ -1882,14 +1886,7 @@ kbd {
   padding: 2px 8px;
 }
 
-/* Inline code */
-.tiptap :not(pre) > code {
-  background: #111827;
-  color: #d4d4d4;
-  padding: 0.15rem 0.35rem;
-  border-radius: 4px;
-  border: 1px solid #2d2d2d;
-}
+
 
 /* ============================================================================
    MERMAID DIAGRAM ZOOM CONTROLS STYLES
@@ -2049,4 +2046,55 @@ kbd {
   .ProseMirror h3 {
     scroll-margin-top: 40px; /* Reduced margin for mobile */
   }
+}
+
+/*
+    ============================================================================
+    CHAT SIDEBAR OVERFLOW HANDLING
+    ============================================================================ 
+*/
+
+/* Prevent long words and URLs from overflowing in chat messages */
+.chat-markdown-content {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+/* Handle long URLs and code blocks in chat */
+.chat-markdown-content a,
+.chat-markdown-content code {
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+/* Ensure pre/code blocks scroll horizontally instead of breaking layout */
+.chat-markdown-content pre {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* Ensure tables in chat also handle overflow properly */
+.chat-markdown-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Handle long text in chat message bubbles */
+.chat-message-bubble {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+/* Truncate very long single words with ellipsis if needed */
+.chat-message-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

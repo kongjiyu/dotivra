@@ -28,7 +28,6 @@ export const useLinkPreview = () => {
             x = Math.min(x, viewportWidth - 360 - 20);
         }
 
-        console.log('👁️ Showing link preview:', { url, x, y, isVisible: true });
         setPreviewState(prev => ({
             ...prev,
             isVisible: true,
@@ -39,7 +38,6 @@ export const useLinkPreview = () => {
     }, []);
 
     const hidePreview = useCallback(() => {
-        console.log('🙈 Hiding link preview');
         setPreviewState(prev => ({ ...prev, isVisible: false }));
     }, []);
 

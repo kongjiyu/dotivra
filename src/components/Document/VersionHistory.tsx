@@ -47,7 +47,6 @@ export default function VersionHistory({
     useEffect(() => {
         const fetchVersionHistory = async () => {
             if (!documentId) {
-                console.warn('No documentId provided to VersionHistory');
                 setLoading(false);
                 return;
             }
@@ -56,7 +55,6 @@ export default function VersionHistory({
                 setLoading(true);
                 setError(null);
                 
-                console.log('📜 Fetching version history for document:', documentId);
                 const response = await fetch(API_ENDPOINTS.documentHistory(documentId));
                 
                 if (!response.ok) {
@@ -64,7 +62,6 @@ export default function VersionHistory({
                 }
 
                 const data = await response.json();
-                console.log('📋 Version history received:', data);
 
                 if (data.versions && Array.isArray(data.versions)) {
                     // Convert Firebase versions to VersionEntry format

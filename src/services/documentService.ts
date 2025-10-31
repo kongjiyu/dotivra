@@ -10,8 +10,6 @@ import type { Document, Template } from '@/types';
  * Save current document as a template
  */
 export const saveDocumentAsTemplate = async (document: Document): Promise<Template> => {
-  console.log('💾 Saving document as template:', document.DocumentName);
-  
   // Create template data from document
   const templateData = {
     TemplateName: `${document.DocumentName} Template`,
@@ -32,14 +30,11 @@ export const saveDocumentAsTemplate = async (document: Document): Promise<Templa
 
     if (response.ok) {
       const result = await response.json();
-      console.log('✅ Template created successfully:', result);
       return result.template || result;
     } else {
       throw new Error(`Failed to create template: ${response.status}`);
     }
   } catch (error) {
-    console.log('⚠️ Backend unavailable, creating mock template');
-    
     // Fallback: Create mock template (simulate success)
     const mockTemplate: Template = {
       id: `template-${Date.now()}`,
@@ -54,8 +49,6 @@ export const saveDocumentAsTemplate = async (document: Document): Promise<Templa
     const existingTemplates = JSON.parse(localStorage.getItem('mockTemplates') || '[]');
     existingTemplates.push(mockTemplate);
     localStorage.setItem('mockTemplates', JSON.stringify(existingTemplates));
-    
-    console.log('✅ Mock template created:', mockTemplate);
     return mockTemplate;
   }
 };
@@ -64,8 +57,6 @@ export const saveDocumentAsTemplate = async (document: Document): Promise<Templa
  * Create a copy of the current document
  */
 export const copyDocument = async (document: Document, targetProjectId?: string): Promise<Document> => {
-  console.log('📄 Creating copy of document:', document.DocumentName);
-  
   // Create new document data based on original
   const newDocumentData = {
     DocumentName: `Copy of ${document.DocumentName}`,
@@ -91,14 +82,11 @@ export const copyDocument = async (document: Document, targetProjectId?: string)
 
     if (response.ok) {
       const result = await response.json();
-      console.log('✅ Document copied successfully:', result);
       return result.document || result;
     } else {
       throw new Error(`Failed to copy document: ${response.status}`);
     }
   } catch (error) {
-    console.log('⚠️ Backend unavailable, creating mock document copy');
-    
     // Fallback: Create mock document copy
     const mockDocument: Document = {
       id: `doc-copy-${Date.now()}`,
@@ -120,8 +108,6 @@ export const copyDocument = async (document: Document, targetProjectId?: string)
     const existingDocuments = JSON.parse(localStorage.getItem('mockDocuments') || '[]');
     existingDocuments.push(mockDocument);
     localStorage.setItem('mockDocuments', JSON.stringify(existingDocuments));
-    
-    console.log('✅ Mock document copy created:', mockDocument);
     return mockDocument;
   }
 };
@@ -145,8 +131,6 @@ export const getAllTemplates = async (): Promise<Template[]> => {
       throw new Error(`Failed to fetch templates: ${response.status}`);
     }
   } catch (error) {
-    console.log('⚠️ Backend unavailable, using mock templates');
-    
     // Fallback to mock templates from utils and localStorage
     const { templates: defaultTemplates } = await import('@/utils/mockData');
     const sessionTemplates = JSON.parse(localStorage.getItem('mockTemplates') || '[]');
@@ -169,15 +153,11 @@ export const getAllTemplates = async (): Promise<Template[]> => {
  * Show notification using toast system
  */
 export const showNotification = async (message: string, type: 'success' | 'error' | 'info' | 'warning' = 'success') => {
-  console.log(`🔔 ${type.toUpperCase()}: ${message}`);
-  
   try {
     const { showToast } = await import('@/utils/notifications');
     showToast(message, { type, duration: type === 'error' ? 6000 : 4000 });
   } catch (error) {
     // Fallback to SweetAlert2 if toast system fails
-    console.warn('Toast system not available, falling back to SweetAlert2:', error);
-    
     const { showSuccess, showError, showInfo, showWarning } = await import('@/utils/sweetAlert');
     
     switch (type) {

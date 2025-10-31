@@ -32,10 +32,7 @@ const useDocumentProjectData = (documentId: string | undefined) => {
         try {
             setLoading(true);
             setError(null);
-            console.log('📋 Loading document project data for:', documentId);
-
             const result = await fetchDocumentWithProject(documentId);
-            console.log('📋 Successfully loaded document project data:', result);
             setData(result);
         } catch (err) {
             console.error('❌ Error loading document project data:', err);
@@ -48,13 +45,10 @@ const useDocumentProjectData = (documentId: string | undefined) => {
 
             // Client-side fallback handling
             try {
-                console.log('📋 Attempting to load fallback mock data...');
                 const { createMockDocument, mockProjects, getMockDocumentsByProject } = await import('@/utils/mockProjectData');
                 const mockDocument = createMockDocument(documentId);
                 const defaultProject = mockProjects[0];
                 const mockRelatedDocuments = getMockDocumentsByProject(defaultProject.id!).filter(doc => doc.id !== documentId);
-
-                console.log('📋 Successfully loaded mock fallback data');
                 setData({
                     currentDocument: mockDocument,
                     project: defaultProject,
@@ -144,7 +138,6 @@ export default function DocumentProject() {
         try {
             await navigator.clipboard.writeText(url);
             // You could add a toast notification here
-            console.log('URL copied to clipboard');
         } catch (err) {
             console.error('Failed to copy URL:', err);
         }

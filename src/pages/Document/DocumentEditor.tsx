@@ -64,7 +64,7 @@ export default function DocumentEditor() {
     // Loading state for document
     const [isLoadingDocument, setIsLoadingDocument] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    
+
     // Version history state
     const [versionCount, setVersionCount] = useState<number>(0);
 
@@ -77,7 +77,6 @@ export default function DocumentEditor() {
     useEffect(() => {
         // Check if documentId actually changed (navigation to different document)
         if (previousDocumentIdRef.current !== undefined && previousDocumentIdRef.current !== documentId) {
-            console.log('[DocumentEditor] Switching documents - clearing state. From:', previousDocumentIdRef.current, 'To:', documentId);
             // Clear editor content state
             setDocumentContent('');
             setDocumentTitle('Untitled Document');
@@ -105,11 +104,9 @@ export default function DocumentEditor() {
     // Fetch version count to determine if undo should be enabled
     const fetchVersionCount = async (docId: string) => {
         try {
-            console.log('📊 Fetching version count for document:', docId);
             const response = await fetch(API_ENDPOINTS.documentHistory(docId));
-            
+
             if (!response.ok) {
-                console.warn('Failed to fetch version history:', response.status);
                 setVersionCount(0);
                 return;
             }
@@ -117,9 +114,7 @@ export default function DocumentEditor() {
             const data = await response.json();
             const count = data.versions?.length || 0;
             setVersionCount(count);
-            console.log(`✅ Version count loaded: ${count} version(s)`);
         } catch (error) {
-            console.error('❌ Error fetching version count:', error);
             setVersionCount(0);
         }
     };
@@ -148,7 +143,6 @@ export default function DocumentEditor() {
         onVersionSaved: () => {
             // Increment version count when a new version is saved
             setVersionCount(prev => prev + 1);
-            console.log('✅ Version count incremented');
         },
     });
 
@@ -173,7 +167,6 @@ export default function DocumentEditor() {
 
             // If skipFetch flag is set, use existing content from context (e.g., from version restore)
             if (navigationState?.skipFetch) {
-                console.log('📄 Skipping document fetch - using content from context (restored version)');
                 setDocumentId(documentId);
 
                 // Clear any pending autosave and sync the ref with context content
@@ -187,10 +180,7 @@ export default function DocumentEditor() {
 
             if (navigationState?.documentData) {
                 const documentData = navigationState.documentData;
-                console.log('📄 Using document data from navigation state:', {
-                    id: documentData.id,
-                    contentLength: documentData.Content?.length || 0
-                });
+
 
                 setDocumentId(documentId);
                 setDocumentTitle(documentData.Title || documentData.DocumentName || "Untitled Document");
@@ -206,7 +196,6 @@ export default function DocumentEditor() {
                 // IMPORTANT: Allow saves after loading from navigation state
                 setTimeout(() => {
                     isInitialLoadingRef.current = false;
-                    console.log('✅ Navigation state loaded - saves now enabled');
                 }, 500);
 
                 // Fetch version count
@@ -237,7 +226,6 @@ export default function DocumentEditor() {
                                 }
                             }
                         } catch (projectError) {
-                            console.warn('Could not load project information:', projectError);
                         }
                     }
                 }
@@ -247,8 +235,6 @@ export default function DocumentEditor() {
 
             setIsLoadingDocument(true);
             try {
-                console.log('📄 Loading document from API:', documentId);
-
                 // Use the improved fetchDocument function with fallback logic
                 const documentData = await fetchDocument(documentId);
 
@@ -275,7 +261,6 @@ export default function DocumentEditor() {
 
                         // Skip API call for mock projects
                         if (projectIdFromDoc.startsWith('mock-')) {
-                            console.log('📋 Skipping API call for mock project:', projectIdFromDoc);
                         } else {
                             // Load project details to get repository information
                             try {
@@ -297,15 +282,12 @@ export default function DocumentEditor() {
                                         }
                                     }
                                 } else {
-                                    console.warn('Project API returned error status:', projectResponse.status);
                                 }
                             } catch (projectError) {
-                                console.warn('Could not load project information:', projectError);
                             }
                         }
                     }
                 } else {
-                    console.warn('📄 No document data found in response:', documentData);
                     setDocumentContent("");
                     setDocumentTitle("Document Not Found");
                 }
@@ -337,22 +319,15 @@ export default function DocumentEditor() {
 
         // Skip sendUpdate during initial load
         if (isInitialLoadingRef.current) {
-            console.log('⏸️ Skipping save - still in initial loading phase');
             return;
         }
 
         // Use useDocumentSync hook to save with Firestore real-time sync
         if (documentId) {
-            console.log('💾 Saving changes to Firestore...', {
-                documentId,
-                contentLength: content.length,
-                syncStatus
-            });
             sendUpdate(content);
             setIsSaving(true);
             setTimeout(() => setIsSaving(false), 1000);
         } else {
-            console.warn('⚠️ No documentId - cannot save changes');
         }
     }, [documentId, sendUpdate, syncStatus]);
 

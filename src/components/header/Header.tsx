@@ -38,11 +38,14 @@ const Header: React.FC<HeaderProps> = ({
   // Get user's profile photo from Firebase Auth
   const userPhotoURL = user?.photoURL || userProfile?.photoURL;
 
+  // Check if feedback is enabled via environment variable
+  const isFeedbackEnabled = import.meta.env.VITE_ENABLE_FEEDBACK === 'true';
+
   const navItems = [
     { path: '/dashboard', label: 'Home', icon: Home },
     { path: '/projects', label: 'Projects', icon: Folder },
     { path: '/templates', label: 'Templates', icon: Layout },
-    { path: '/feedback', label: 'Feedback', icon: MessageSquare, action: onFeedbackClick },
+    ...(isFeedbackEnabled ? [{ path: '/feedback', label: 'Feedback', icon: MessageSquare, action: onFeedbackClick }] : []),
   ];
 
   const handleNavigation = (item: typeof navItems[0]) => {
@@ -85,16 +88,15 @@ const Header: React.FC<HeaderProps> = ({
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = isActiveRoute(item.path);
-                
+
                 return (
                   <button
                     key={item.path}
                     onClick={() => handleNavigation(item)}
-                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                      isActive
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${isActive
                         ? 'bg-blue-100 text-blue-700 shadow-sm'
                         : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                    }`}
+                      }`}
                   >
                     <Icon className="h-4 w-4" />
                     {item.label}
@@ -116,8 +118,8 @@ const Header: React.FC<HeaderProps> = ({
                   <span className="text-xs font-medium text-gray-700 hidden sm:block">{displayName}</span>
                   <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-semibold uppercase overflow-hidden">
                     {userPhotoURL ? (
-                      <img 
-                        src={userPhotoURL} 
+                      <img
+                        src={userPhotoURL}
                         alt={displayName}
                         className="w-full h-full object-cover"
                       />
@@ -141,16 +143,15 @@ const Header: React.FC<HeaderProps> = ({
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = isActiveRoute(item.path);
-              
+
               return (
                 <button
                   key={item.path}
                   onClick={() => handleNavigation(item)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                    isActive
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${isActive
                       ? 'bg-blue-100 text-blue-700 shadow-sm'
                       : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
+                    }`}
                 >
                   <Icon className="h-4 w-4" />
                   {item.label}

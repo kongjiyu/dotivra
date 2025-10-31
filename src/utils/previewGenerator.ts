@@ -44,9 +44,6 @@ export function generatePreviewWithHighlights(
     const sortedExecutions = [...toolExecutions]
         .filter(exec => exec.success && isContentModifyingTool(exec.tool))
         .sort((a, b) => a.timestamp - b.timestamp);
-
-    console.log('🎨 Generating preview with', sortedExecutions.length, 'tool executions');
-
     // First pass: collect all changes without modifying content
     let offset = 0;
     for (const execution of sortedExecutions) {

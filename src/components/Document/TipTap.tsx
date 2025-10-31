@@ -57,11 +57,9 @@ const Tiptap = ({
     useEffect(() => {
         // Wait for both editor and isReady to ensure content is loaded
         if (!editor || !isReady) {
-            console.log('⏳ Link preview waiting for editor ready:', { editor: !!editor, isReady });
             return;
         }
 
-        console.log('✅ Link preview event listeners being attached');
 
         const clearHideTimeout = () => {
             if (hideTimeoutRef.current) {
@@ -80,7 +78,6 @@ const Tiptap = ({
             const href = linkElement.getAttribute('href') || '';
             if (!href || !/^https?:\/\//.test(href)) return;
 
-            console.log('🔗 Link hover detected:', href);
             clearHideTimeout();
             showPreview(href, linkElement);
         };
@@ -115,13 +112,11 @@ const Tiptap = ({
                 if (isModifierClick && href) {
                     // Ctrl/Cmd+Click: Open link in new tab
                     event.preventDefault();
-                    console.log('🖱️ Ctrl/Cmd+Click detected, opening link:', href);
                     window.open(href, '_blank', 'noopener,noreferrer');
                     clearHideTimeout();
                     hidePreview();
                 } else {
                     // Regular click: hide preview but allow normal editor behavior
-                    console.log('🖱️ Link clicked, hiding preview');
                     clearHideTimeout();
                     hidePreview();
                 }
@@ -130,16 +125,13 @@ const Tiptap = ({
 
         const editorElement = editor.options.element as HTMLElement | null;
         if (editorElement) {
-            console.log('📎 Attaching link preview listeners to:', editorElement);
             editorElement.addEventListener('mouseover', handleMouseOver);
             editorElement.addEventListener('mouseout', handleMouseOut);
             editorElement.addEventListener('click', handleClick);
         } else {
-            console.warn('⚠️ No editor element found for link preview');
         }
 
         return () => {
-            console.log('🧹 Cleaning up link preview listeners');
             clearHideTimeout();
             if (editorElement) {
                 editorElement.removeEventListener('mouseover', handleMouseOver);
@@ -180,12 +172,7 @@ const Tiptap = ({
         // Only apply if editor is empty OR this is genuinely different content (not just a context update)
         // OR if forceUpdate is true (for cases like generate summary where we want to replace content)
         if (isEditorEmpty || lastAppliedContentRef.current === null || forceUpdate) {
-            console.log('📝 Applying initial content to editor:', {
-                contentLength: initialContent.length,
-                isEditorEmpty,
-                isFirstLoad: lastAppliedContentRef.current === null,
-                forceUpdate
-            });
+         
 
             // Set content without emitting update to avoid triggering onUpdate
             editor.commands.setContent(initialContent, { emitUpdate: false });
@@ -194,7 +181,6 @@ const Tiptap = ({
             // This ensures undo won't revert to empty state
             setTimeout(() => {
                 if (editor && !editor.isDestroyed) {
-                    console.log('🔄 Clearing undo history after initial content load...');
                     
                     try {
                         // Use TipTap's view directly to clear history
@@ -204,15 +190,22 @@ const Tiptap = ({
                         // Create a new transaction that resets history
                         const tr = state.tr;
                         
-                        // Mark this transaction as not being part of history
-                        tr.setMeta('addToHistory', false);
-                        tr.setMeta('preventUpdate', true);
-                        
-                        // Dispatch to apply
-                        view.dispatch(tr);
-                        
-                        // Wait a bit then check and clear any remaining history
-                        setTimeout(() => {
+                        if (historyState) {
+                            
+                            // Create a transaction that clears the history
+                            let tr = state.tr;
+                            
+                            // Try different meta keys that might work
+                            tr.setMeta('addToHistory', false);
+                            tr.setMeta('history', { type: 'clearHistory' });
+                            tr.setMeta('appendedTransaction', true);
+                            tr.setMeta('preventUpdate', true);
+                            
+                            // Dispatch the transaction
+                            view.dispatch(tr);
+                            
+                            // Force a new transaction to reset the history state
+                            setTimeout(() => {
                             if (editor && !editor.isDestroyed) {
                                 // Clear all undo history by calling undo until there's nothing left
                                 let cleared = 0;
@@ -230,6 +223,8 @@ const Tiptap = ({
                                 console.log('✅ History cleared - undo is now disabled for initial load');
                             }
                         }, 50);
+                        } else {
+                        }
                         
                     } catch (error) {
                         console.error('❌ Error clearing history:', error);
@@ -240,10 +235,6 @@ const Tiptap = ({
             // Mark this content as applied
             lastAppliedContentRef.current = initialContent;
         } else {
-            console.log('⏭️ Skipping content update - editor has content:', {
-                currentLength: currentHTML.length,
-                newLength: initialContent.length
-            });
         }
     }, [editor, initialContent, forceUpdate]);
 
