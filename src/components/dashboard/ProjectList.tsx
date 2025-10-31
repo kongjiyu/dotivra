@@ -73,12 +73,10 @@ const ProjectList: React.FC<ProjectListProps> = ({
 
   const loadProjects = async () => {
     try {
-      console.log('🔄 ProjectList: Loading projects from Firestore...');
       setLoading(true);
       setError(null);
 
       if (!user) {
-        console.warn('⚠️ User not authenticated, cannot load user projects');
         // Provide client-side fallback for unauthenticated users
         setProjects(getClientSideFallbackProjects());
         setLoading(false);
@@ -101,7 +99,6 @@ const ProjectList: React.FC<ProjectListProps> = ({
       }
 
       const data = await response.json();
-      console.log('📋 ProjectList received projects:', data);
 
       if (data.success && Array.isArray(data.projects)) {
         // Keep the raw Project data for Firebase compatibility
@@ -123,7 +120,6 @@ const ProjectList: React.FC<ProjectListProps> = ({
           return projectUserId === user.uid;
         });
 
-        console.log('📋 ProjectList filtered user projects:', userProjects.length, 'out of', allProjects.length, 'total projects');
         setProjects(userProjects);
       } else {
         throw new Error('Invalid response format or no projects data');

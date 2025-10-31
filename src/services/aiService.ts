@@ -253,9 +253,6 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
 
                 const data = await response.json();
                 const aiResponse = data.text || '';
-
-                console.log('🤖 AI Response:', aiResponse.substring(0, 200));
-
                 // Try to parse JSON from response
                 // Handle case where AI returns multiple JSON objects on separate lines
                 let parsed: any;
@@ -270,7 +267,6 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                             if (trimmedLine.startsWith('{') && trimmedLine.endsWith('}')) {
                                 parsed = JSON.parse(trimmedLine);
                                 // If we found a valid JSON, break and use only the first one
-                                console.log('✅ Parsed JSON from line:', trimmedLine.substring(0, 100));
                                 break;
                             }
                         } catch (lineError) {
@@ -284,7 +280,6 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                         const jsonMatch = aiResponse.match(/\{[\s\S]*?\}/);
                         if (jsonMatch) {
                             parsed = JSON.parse(jsonMatch[0]);
-                            console.log('✅ Parsed JSON from match:', jsonMatch[0].substring(0, 100));
                         } else {
                             throw new Error('No JSON found in response');
                         }
@@ -302,7 +297,6 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
 
                     // Validate nextStage field (should always be present)
                     if (!parsed.nextStage) {
-                        console.warn('⚠️ Missing nextStage field, inferring from stage');
                         // Infer nextStage based on current stage
                         if (parsed.stage === 'planning') {
                             parsed.nextStage = 'reasoning';
@@ -317,8 +311,6 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
 
                     // Track stage in history
                     stageHistory.push(parsed.stage);
-                    console.log(`✅ Stage: ${parsed.stage} → Next: ${parsed.nextStage}`);
-
                     // Reset retry count on success
                     retryCount = 0;
 
@@ -361,14 +353,12 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                 // If nextStage is 'done', trigger summary stage first
                 if (parsed.nextStage === 'done' && parsed.stage !== 'summary') {
                     currentStage = 'summary';
-                    console.log('🎯 Triggering summary stage before completion');
                 } else {
                     currentStage = parsed.nextStage || 'done';
                 }
 
                 // Handle different stages
                 if (parsed.stage === 'done' || (parsed.stage === 'summary' && parsed.nextStage === 'done')) {
-                    console.log('🏁 Workflow complete');
                     continueExecution = false;
                     break;
                 }
@@ -377,8 +367,6 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                     toolExecutionCount++;
                     
                     const toolData = parsed.content;
-                    console.log(`🔧 Executing tool: ${toolData.tool}`, toolData.args);
-                    
                     // Execute actual tool via API
                     try {
                         let toolResponse = await fetch(TOOLS_EXECUTE_API, {
@@ -415,7 +403,6 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                             };
                         } else {
                             const toolData_response = await toolResponse.json();
-                            console.log(`✅ Tool executed successfully:`, toolData_response);
                             toolResult = {
                                 success: true,
                                 tool: toolData.tool,
@@ -451,9 +438,6 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                             role: 'user',
                             content: resultMessage
                         });
-
-                        console.log(`📋 Tool result passed to next stage (${currentStage}):`, toolResult.success ? 'SUCCESS' : 'FAILED');
-                        
                     } catch (toolError) {
                         console.error('❌ Tool execution error:', toolError);
                         lastToolResult = {
@@ -494,7 +478,6 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
         } catch (error) {
             // Check if it's an abort error
             if (error instanceof Error && error.name === 'AbortError') {
-                console.log('AI Agent execution aborted by user');
                 yield { 
                     stage: 'stopped', 
                     content: 'Generation stopped by user.'
@@ -513,13 +496,6 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
     async generateContent(prompt: string, context?: string): Promise<string> {
         try {
             const fullPrompt = context ? `Context: ${context}\n\nRequest: ${prompt}` : prompt;
-            console.log('🚀 Calling Gemini API:', GENERATE_API);
-            console.log('📝 Request body:', {
-                prompt: fullPrompt.substring(0, 200) + (fullPrompt.length > 200 ? '...' : ''),
-                model: this.defaultModel,
-                generationConfig: { maxOutputTokens: 2048 }
-            });
-            
             const resp = await fetch(GENERATE_API, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -529,14 +505,8 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                     generationConfig: { maxOutputTokens: 2048 },
                 }),
             });
-            
-            console.log('📡 Gemini API Response Status:', resp.status);
-            console.log('📡 Gemini API Response Headers:', Object.fromEntries(resp.headers.entries()));
-            
             // Try to get response body for better error details
             const responseText = await resp.text();
-            console.log('📄 Raw response:', responseText.substring(0, 500));
-            
             if (!resp.ok) {
                 let errorData;
                 try {
@@ -549,9 +519,6 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
             }
             
             const data = JSON.parse(responseText);
-            console.log('✅ Gemini API Success, response keys:', Object.keys(data));
-            console.log('✅ Text length:', data.text?.length || 0);
-            
             return data.text as string;
         } catch (error) {
             console.error('❌ AI Generation Error:', error);
@@ -818,8 +785,6 @@ Analyze the request, leverage the repository knowledge, and provide a comprehens
     ): Promise<string> {
         try {
             onProgress?.('init', 'Starting iterative AI generation...');
-            console.log('🔄 Starting iterative AI document generation...');
-
             // Step 1: Get repository structure
             onProgress?.('structure', 'Fetching repository structure...');
             const repoContext = await repositoryContextService.getRepositoryContext(
@@ -971,10 +936,6 @@ Format: {"needFiles": true, "files": ["path/to/file1", "path/to/file2"], "reason
 
             while (iteration < maxIter) {
                 iteration++;
-                console.log(`\n${'='.repeat(60)}`);
-                console.log(`🔄 ITERATION ${iteration}/${maxIter}`);
-                console.log(`${'='.repeat(60)}`);
-                
                 // More descriptive progress messages
                 if (iteration === 1) {
                     onProgress?.('analysis', 'AI analyzing repository structure...');
@@ -985,12 +946,8 @@ Format: {"needFiles": true, "files": ["path/to/file1", "path/to/file2"], "reason
                 let prompt = '';
                 if (iteration === 1) {
                     prompt = initialPrompt;
-                    console.log('📋 Sending initial prompt with repository structure...');
                 } else {
-                    console.log(`📦 Fetching ${provided.length} requested files...`);
                     const fileContents = await this.getFileContents(user, repositoryInfo, provided);
-                    console.log(`✅ Files fetched successfully (${fileContents.length} chars)`);
-                    
                     // Update progress with file count
                     onProgress?.('files', `Processing ${provided.length} files from repository...`);
                     
@@ -1038,10 +995,7 @@ Option 2 - Ready to generate the document?
 - Example format: {"needFiles": false, "content": "<html><body><h1>Project User Manual</h1>...</body></html>"}
 
 **Respond with JSON only:**`;
-                    console.log('📋 Sending files to AI and asking for next step...');
                 }
-
-                console.log(`🤖 Calling Gemini API (prompt length: ${prompt.length} chars)...`);
                 const res = await fetch(GENERATE_API, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -1053,36 +1007,25 @@ Option 2 - Ready to generate the document?
                 }
                 const payload = await res.json();
                 const text = String(payload.text || '');
-                console.log(`📥 AI Response received (${text.length} chars)`);
-                console.log('📄 AI Response preview:', text.substring(0, 200));
-                
                 let parsed: any;
                 try {
                     const match = text.match(/\{[\s\S]*\}/);
                     if (match) {
                         parsed = JSON.parse(match[0]);
-                        console.log('✅ Successfully parsed JSON response:', JSON.stringify(parsed, null, 2));
                     } else {
-                        console.log('⚠️ No JSON found in response, treating as raw content');
                         parsed = null;
                     }
                 } catch (parseError) {
-                    console.log('❌ JSON parsing failed:', parseError);
-                    console.log('📝 Using raw AI response as content');
                     content = this.cleanHTMLContent(text);
                     break;
                 }
 
                 if (!parsed) {
-                    console.log('📝 No parsed JSON, using raw text as content');
                     content = this.cleanHTMLContent(text);
                     break;
                 }
 
                 if (parsed.needFiles && parsed.files?.length > 0) {
-                    console.log(`📂 AI REQUESTED FILES: ${JSON.stringify(parsed.files)}`);
-                    console.log(`💭 AI's reason: ${parsed.reason || 'No reason provided'}`);
-                    
                     // Show what AI is looking for
                     const filePreview = parsed.files.slice(0, 3).join(', ');
                     const moreCount = parsed.files.length > 3 ? ` and ${parsed.files.length - 3} more` : '';
@@ -1091,28 +1034,20 @@ Option 2 - Ready to generate the document?
                     // Clear and set new files to fetch
                     provided.length = 0;
                     provided.push(...parsed.files);
-                    console.log(`📋 Files queued for next iteration: ${provided.join(', ')}`);
                 } else if (parsed.needFiles === false && parsed.content) {
-                    console.log(`✅ AI READY TO GENERATE!`);
-                    console.log(`📄 Content received: ${parsed.content.length} chars`);
-                    console.log(`📄 Content preview: ${parsed.content.substring(0, 200)}...`);
                     onProgress?.('generate', 'AI writing document content...');
                     content = parsed.content;
                     break;
                 } else {
-                    console.log(`⚠️ Unexpected AI response format:`, parsed);
-                    console.log('📝 Using raw text as fallback');
                     content = text;
                     break;
                 }
             }
 
             if (!content) {
-                console.warn(`⚠️ Reached ${maxIter} iterations without generating content, using fallback`);
                 onProgress?.('generate', 'Finalizing with template content...');
                 content = this.generateFallbackContent(templatePrompt, repositoryInfo, documentName, documentRole);
             } else {
-                console.log(`✅ Content generation complete: ${content.length} characters`);
             }
 
             onProgress?.('done', 'Complete!');
@@ -1139,11 +1074,9 @@ Option 2 - Ready to generate the document?
         onProgress?: (stage: string, message?: string) => void
     ): Promise<string> {
         try {
-            console.log('🔄 Starting TRUE iterative section-by-section generation...');
             onProgress?.('init', 'Preparing iterative generation...');
 
             // PHASE 1: Collect repository files using existing iterative method
-            console.log('📚 PHASE 1: Collecting repository files...');
             onProgress?.('files', 'Collecting repository files...');
             
             const repoContext = await repositoryContextService.getRepositoryContext(
@@ -1185,8 +1118,6 @@ Focus on core implementation files, main components, configuration files.
 Format: {"files": ["path1", "path2", "path3"]}
 
 Respond with JSON only:`;
-
-            console.log('📋 Asking AI which files to collect...');
             const fileRes = await fetch(GENERATE_API, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1206,11 +1137,9 @@ Respond with JSON only:`;
                         const parsed = JSON.parse(match[0]);
                         if (parsed.files && Array.isArray(parsed.files)) {
                             requestedFiles.push(...parsed.files);
-                            console.log(`📂 AI requested ${requestedFiles.length} files:`, requestedFiles);
                         }
                     }
                 } catch (e) {
-                    console.warn('Failed to parse file request, will use README only');
                 }
             }
 
@@ -1231,18 +1160,12 @@ Respond with JSON only:`;
                                 content: file.content.substring(0, 3000), // Limit to 3000 chars per file
                                 language: file.language || 'text'
                             });
-                            console.log(`✅ Collected: ${path}`);
                         }
                     } catch (error) {
-                        console.warn(`⚠️ Could not fetch ${path}`);
                     }
                 }
             }
-
-            console.log(`📦 Collected ${collectedFiles.length} files for context`);
-
             // PHASE 2: Plan document sections
-            console.log('📋 PHASE 2: Planning document sections...');
             onProgress?.('planning', 'Planning document sections...');
 
             const planPrompt = `${templatePrompt}
@@ -1279,7 +1202,6 @@ Respond with JSON only:`;
                         }
                     }
                 } catch (e) {
-                    console.warn('Failed to parse sections, using defaults');
                 }
             }
 
@@ -1287,11 +1209,7 @@ Respond with JSON only:`;
             if (sections.length === 0) {
                 sections = ['Introduction', 'Getting Started', 'Core Features', 'Technical Details', 'Conclusion'];
             }
-
-            console.log(`📋 Planned ${sections.length} sections:`, sections);
-
             // PHASE 3: Generate each section with full 8192 token budget
-            console.log('✍️ PHASE 3: Generating sections...');
             const generatedSections: string[] = [];
             const filesContext = collectedFiles.map(f => 
                 `**${f.path}** (${f.language}):\n\`\`\`${f.language}\n${f.content}\n\`\`\``
@@ -1300,8 +1218,6 @@ Respond with JSON only:`;
             for (let i = 0; i < sections.length; i++) {
                 const sectionName = sections[i];
                 onProgress?.('generate', `Generating ${i + 1}/${sections.length}: ${sectionName}`);
-                console.log(`\n📝 Generating section ${i + 1}/${sections.length}: ${sectionName}`);
-
                 const sectionPrompt = `${templatePrompt}
 
 ---
@@ -1372,7 +1288,6 @@ Generate the "${sectionName}" section now:`;
                 });
 
                 if (!sectionRes.ok) {
-                    console.warn(`⚠️ Failed to generate section: ${sectionName}, skipping...`);
                     continue;
                 }
 
@@ -1382,18 +1297,13 @@ Generate the "${sectionName}" section now:`;
                 // Clean the section content
                 const cleaned = this.cleanHTMLContent(sectionContent);
                 generatedSections.push(cleaned);
-                
-                console.log(`✅ Section ${i + 1} generated: ${cleaned.length} characters`);
             }
 
             // PHASE 4: Combine all sections
-            console.log('🔗 PHASE 4: Combining sections...');
             onProgress?.('finalize', 'Combining all sections...');
 
             const finalDocument = `<h1>${documentName}</h1>
 ${generatedSections.join('\n\n')}`;
-
-            console.log(`✅ COMPLETE! Total document: ${finalDocument.length} characters`);
             onProgress?.('done', 'Document generation complete!');
 
             return finalDocument;
@@ -1423,38 +1333,27 @@ ${generatedSections.join('\n\n')}`;
         const contents: string[] = [];
         const successFiles: string[] = [];
         const failedFiles: string[] = [];
-        
-        console.log(`📦 Attempting to fetch ${paths.length} files...`);
-        
         for (const path of paths) {
             try {
-                console.log(`  Fetching: ${path}...`);
                 const file = await repositoryContextService.getFileWithContext(user, repoInfo.owner, repoInfo.repo, path);
                 if (file?.content) {
                     const truncated = file.content.length > 5000;
                     const contentToShow = file.content.substring(0, 5000);
                     contents.push(`**${path}** ${truncated ? `(${file.content.length} chars, showing first 5000)` : `(${file.content.length} chars)`}\n\`\`\`${file.language || 'text'}\n${contentToShow}\n\`\`\``);
                     successFiles.push(path);
-                    console.log(`  ✅ ${path} - ${file.content.length} chars`);
                 } else {
                     contents.push(`**${path}**: ⚠️ File exists but has no content`);
                     failedFiles.push(path);
-                    console.log(`  ⚠️ ${path} - No content`);
                 }
             } catch (error) {
                 const errorMsg = error instanceof Error ? error.message : 'Unknown error';
                 contents.push(`**${path}**: ❌ NOT FOUND (${errorMsg})`);
                 failedFiles.push(path);
-                console.log(`  ❌ ${path} - ${errorMsg}`);
             }
         }
-        
-        console.log(`📊 File fetch summary: ${successFiles.length} succeeded, ${failedFiles.length} failed`);
         if (successFiles.length > 0) {
-            console.log(`  ✅ Success: ${successFiles.join(', ')}`);
         }
         if (failedFiles.length > 0) {
-            console.log(`  ❌ Failed: ${failedFiles.join(', ')}`);
         }
         
         // Add summary at the beginning
@@ -1483,11 +1382,6 @@ ${failedFiles.length > 0 ? `\n**Files that don't exist:** ${failedFiles.join(', 
         documentName: string
     ): Promise<string> {
         try {
-            console.log('🤖 Starting AI document generation...');
-            console.log('📋 Template:', templatePrompt.substring(0, 100) + '...');
-            console.log('📦 Repository:', repositoryInfo.fullName);
-            console.log('👤 Role:', documentRole);
-
             // Get repository context
             const repoContext = await repositoryContextService.getRepositoryContext(
                 user,
@@ -1553,9 +1447,6 @@ ${contextFormatted}
 <p>Analysis of important files and their purposes...</p>
 
 Now generate the complete ${documentName} document following these guidelines:`;
-
-            console.log('🚀 Sending request to Gemini AI...');
-            
             // Generate content using Gemini
             const res = await fetch(GENERATE_API, {
                 method: 'POST',
@@ -1568,10 +1459,6 @@ Now generate the complete ${documentName} document following these guidelines:`;
             }
             const payload = await res.json();
             let htmlContent = String(payload.text || '');
-
-            console.log('✅ AI generation complete');
-            console.log('📄 Generated content length:', htmlContent.length);
-
             // Clean up the response
             htmlContent = this.cleanHTMLContent(htmlContent);
 
@@ -1603,7 +1490,6 @@ Now generate the complete ${documentName} document following these guidelines:`;
         // SAFEGUARD: Check if content has NO HTML tags (plain text)
         const hasHTMLTags = /<[a-z][\s\S]*>/i.test(html);
         if (!hasHTMLTags && html.length > 0) {
-            console.warn('⚠️ AI returned plain text instead of HTML, wrapping in HTML structure');
             // Convert plain text to HTML paragraphs
             const paragraphs = html.split(/\n\n+/).map(para => {
                 const trimmed = para.trim();

@@ -25,7 +25,7 @@ const Projects: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-
+  // Debug: Log the modal state and projects
   // Load projects from API
   const loadProjects = async () => {
     try {
@@ -34,7 +34,6 @@ const Projects: React.FC = () => {
 
       // Only fetch projects if user is logged in
       if (!user?.uid) {
-        console.warn('⚠️ No user logged in, skipping project fetch');
         setAllProjects([]);
         setLoading(false);
         return;
@@ -42,7 +41,6 @@ const Projects: React.FC = () => {
 
       // Fetch only the current user's projects
       const response = await fetch(API_ENDPOINTS.userProjects(user.uid));
-
       if (!response.ok) {
         throw new Error('Failed to load projects');
       }
@@ -76,10 +74,8 @@ const Projects: React.FC = () => {
         };
       });
 
-      console.log('📦 Setting projects:', normalizedProjects);
       setAllProjects(normalizedProjects);
     } catch (err) {
-      console.error('❌ Error loading projects:', err);
       setError(err instanceof Error ? err.message : 'Failed to load projects');
     } finally {
       setLoading(false);
@@ -104,6 +100,7 @@ const Projects: React.FC = () => {
     });
   }, [searchQuery, allProjects]);
 
+  // Debug filtered projects
 
   const handleNewProject = () => {
     setIsModalOpen(true);
@@ -122,7 +119,6 @@ const Projects: React.FC = () => {
     if (!projectToEdit || !projectToEdit.id) return;
 
     try {
-
       const response = await fetch(API_ENDPOINTS.project(projectToEdit.id), {
         method: 'PUT',
         headers: {
@@ -137,7 +133,6 @@ const Projects: React.FC = () => {
       if (!response.ok) {
         throw new Error('Failed to update project');
       }
-
       showSuccess('Success', 'Project updated successfully');
 
       // Close modal and reload projects
@@ -160,7 +155,6 @@ const Projects: React.FC = () => {
     }
 
     try {
-
       const response = await fetch(API_ENDPOINTS.deleteProject(project.id), {
         method: 'DELETE',
         headers: {
@@ -172,7 +166,6 @@ const Projects: React.FC = () => {
         const errorData = await response.json();
         throw new Error(errorData.error || 'Failed to delete project');
       }
-
       showSuccess('Success', `Project "${project.ProjectName}" deleted successfully`);
 
       // Reload projects to refresh the list
@@ -211,7 +204,7 @@ const Projects: React.FC = () => {
                 onClick={handleNewProject}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
               >
-                <Plus className="w-4 h-4 text-white" />
+                <Plus className="w-4 h-4" />
                 <span>New Project</span>
               </button>
             </div>
@@ -250,7 +243,7 @@ const Projects: React.FC = () => {
                   onClick={handleNewProject}
                   className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors inline-flex items-center gap-2"
                 >
-                  <Plus className="w-4 h-4 text-white" />
+                  <Plus className="w-4 h-4" />
                   Create New Project
                 </button>
               </div>
@@ -270,8 +263,13 @@ const Projects: React.FC = () => {
               <p className="text-gray-600 mb-4">
                 {searchQuery ? 'Try adjusting your search terms' : 'Create your first project to get started'}
               </p>
-              {/* When there are no projects, we purposely do not render the extra Create Project button here.
-                  Users can use the New Project button in the header. */}
+              <button
+                onClick={handleNewProject}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Create Project</span>
+              </button>
             </div>
           )}
         </div>
@@ -284,19 +282,11 @@ const Projects: React.FC = () => {
         onClose={() => setIsModalOpen(false)}
         onSubmit={async (projectData) => {
           try {
-
             // Add userId to project data (required by backend)
             const projectDataWithUser = {
-              // Backend expects: name, description, userId; githubLink optional
-              name: (projectData.name || '').trim(),
-              description: (projectData.description || '').trim(),
-              userId: user?.uid || ('anonymous-user-' + Date.now()),
-              githubLink: projectData.githubLink ?? projectData.selectedRepo ?? '',
-              selectedRepo: projectData.selectedRepo ?? '',
-              installationId: null,
+              ...projectData,
+              userId: user?.uid || 'anonymous-user-' + Date.now()
             };
-
-
             const response = await fetch(API_ENDPOINTS.projects(), {
               method: 'POST',
               headers: {
@@ -306,16 +296,10 @@ const Projects: React.FC = () => {
             });
 
             if (!response.ok) {
-              let serverMsg = 'Failed to create project';
-              try {
-                const errJson = await response.json();
-                serverMsg = errJson?.error || serverMsg;
-              } catch {}
-              throw new Error(serverMsg);
+              throw new Error('Failed to create project');
             }
 
             const result = await response.json();
-
             // Close modal and reload projects
             setIsModalOpen(false);
             await loadProjects();

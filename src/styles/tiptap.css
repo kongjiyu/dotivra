@@ -33,7 +33,10 @@
 /* Ensure all direct children allow text selection */
 .tiptap > *,
 .ProseMirror > *,
-.document-content > * {
+.document-content > *,
+.tiptap .node-view-wrapper,
+.ProseMirror .node-view-wrapper,
+.document-content .node-view-wrapper {
   user-select: text !important;
   -webkit-user-select: text !important;
   -moz-user-select: text !important;
@@ -706,6 +709,11 @@
   border-radius: 8px;
   overflow: hidden;
   font-family: 'Monaco', 'Menlo', 'Courier New', 'Consolas', monospace;
+  position: relative;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  -moz-user-select: text !important;
+  -ms-user-select: text !important;
 }
 
 .code-block-wrapper pre {
@@ -726,42 +734,7 @@
   caret-color: white;
 }
 
-/* Language-specific background colors for better visual distinction */
-.code-block-wrapper.language-javascript {
-  border-left: 4px solid #f7df1e;
-}
-
-.code-block-wrapper.language-typescript {
-  border-left: 4px solid #3178c6;
-}
-
-.code-block-wrapper.language-python {
-  border-left: 4px solid #3776ab;
-}
-
-.code-block-wrapper.language-java {
-  border-left: 4px solid #ed8b00;
-}
-
-.code-block-wrapper.language-html {
-  border-left: 4px solid #e34f26;
-}
-
-.code-block-wrapper.language-css {
-  border-left: 4px solid #1572b6;
-}
-
-.code-block-wrapper.language-json {
-  border-left: 4px solid #000000;
-}
-
-.code-block-wrapper.language-markdown {
-  border-left: 4px solid #083fa1;
-}
-
-.code-block-wrapper.language-plaintext {
-  border-left: 4px solid #6b7280;
-}
+/* Language-specific styling removed */
 
 /* Highlight.js Theme Integration */
 
@@ -1022,6 +995,24 @@
   text-decoration: underline;
 }
 
+/* Mermaid diagram component styling */
+.mermaid-diagram {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.mermaid-content {
+  max-width: 100%;
+}
+
+/* Ensure Mermaid SVG scales properly */
+.mermaid-content svg {
+  max-width: 100% !important;
+  height: auto !important;
+  display: block;
+}
+
 /* Mermaid diagram styling */
 .theme-dark .language-mermaid {
   color: #d4d4d4;
@@ -1234,13 +1225,16 @@
   cursor: col-resize;
 }
 
-/* Image edge hover should indicate resizable */
-.tiptap img {
-  cursor: default;
+/* Table cell edge resize cursor - show when hovering near cell borders */
+.tiptap table td,
+.tiptap table th {
+  /* Cursor will be set dynamically by JavaScript when hovering near edges */
+  cursor: text;
 }
 
-.tiptap img:hover {
-  cursor: nwse-resize;
+/* Image edge hover should indicate resizable - cursor will be set by JS */
+.tiptap img {
+  cursor: default;
 }
 
 /* ProseMirror table selection classes */
@@ -1569,10 +1563,11 @@ kbd {
   height: auto;
   border: 1px solid #e5e7eb;
   border-radius: 4px;
-  cursor: pointer;
+  cursor: default; /* Default cursor, will be overridden by JS for resize areas */
   display: block;
   margin: 1rem auto;
   transition: all 0.2s ease;
+  position: relative; /* Needed for pseudo-elements */
 }
 
 .tiptap img.tiptap-image:hover {
@@ -1891,12 +1886,215 @@ kbd {
   padding: 2px 8px;
 }
 
-/* Inline code */
-.tiptap :not(pre) > code {
-  background: #111827;
-  color: #d4d4d4;
-  padding: 0.15rem 0.35rem;
-  border-radius: 4px;
-  border: 1px solid #2d2d2d;
+
+
+/* ============================================================================
+   MERMAID DIAGRAM ZOOM CONTROLS STYLES
+   ============================================================================ */
+
+/* Zoom button hover effects */
+.zoom-button:hover:not(:disabled) {
+  background-color: #f3f4f6 !important;
+  border-color: #9ca3af !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+.zoom-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+/* Mermaid diagram focus outline */
+.mermaid-diagram:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 2px;
+}
+
+.mermaid-diagram:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ============================================================================
+   PRINT STYLES FOR MERMAID DIAGRAMS
+   ============================================================================ */
+
+@media print {
+  /* Hide zoom controls when printing */
+  .no-print,
+  .mermaid-zoom-controls {
+    display: none !important;
+  }
+
+  /* Page break rules for headings */
+  .tiptap h1,
+  .ProseMirror h1 {
+    page-break-before: always !important;
+    break-before: page !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+    margin-top: 0 !important;
+  }
+
+  /* First h1 should not force a page break */
+  .tiptap h1:first-child,
+  .ProseMirror h1:first-child {
+    page-break-before: auto !important;
+    break-before: auto !important;
+  }
+
+  .tiptap h2,
+  .ProseMirror h2 {
+    page-break-before: always !important;
+    break-before: page !important;
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  /* Prevent orphaned headings */
+  .tiptap h1,
+  .tiptap h2,
+  .tiptap h3,
+  .tiptap h4,
+  .tiptap h5,
+  .tiptap h6 {
+    page-break-after: avoid !important;
+    break-after: avoid !important;
+  }
+
+  /* Keep heading with at least 2 lines of following content */
+  .tiptap h1 + p,
+  .tiptap h2 + p,
+  .tiptap h3 + p {
+    page-break-before: avoid !important;
+    break-before: avoid !important;
+  }
+
+
+  /* Reset Mermaid diagram container for print */
+  .mermaid-diagram {
+    border: 1px solid #e0e0e0 !important;
+    border-radius: 0 !important;
+    padding: 20px !important;
+    background-color: white !important;
+    margin: 10px 0 !important;
+    max-width: 100% !important;
+    overflow: visible !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Reset zoom transform and pan for print */
+  .mermaid-content-wrapper,
+  .mermaid-content {
+    transform: none !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    cursor: default !important;
+  }
+
+  /* Ensure Mermaid SVG fits properly on print */
+  .mermaid-content svg {
+    max-width: 100% !important;
+    height: auto !important;
+    display: block !important;
+    margin: 0 auto !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Prevent page breaks inside diagrams */
+  .mermaid-diagram,
+  .mermaid-content,
+  .mermaid-preview {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  /* Ensure diagram text is readable */
+  .mermaid-content svg text {
+    fill: #000000 !important;
+  }
+
+  /* Ensure diagram shapes have visible borders */
+  .mermaid-content svg rect,
+  .mermaid-content svg circle,
+  .mermaid-content svg ellipse,
+  .mermaid-content svg polygon,
+  .mermaid-content svg path {
+    stroke: #000000 !important;
+  }
+}
+
+/*
+    ============================================================================
+    NAVIGATION HEADINGRESPONSIVE STYLES
+    ============================================================================ 
+*/
+
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6 {
+  scroll-margin-top: 50px; /* Adjusted for toolbar + padding with scroll-into-view-if-needed */
+}
+
+@media (max-width: 768px) {
+  .ProseMirror h1,
+  .ProseMirror h2,
+  .ProseMirror h3 {
+    scroll-margin-top: 40px; /* Reduced margin for mobile */
+  }
+}
+
+/*
+    ============================================================================
+    CHAT SIDEBAR OVERFLOW HANDLING
+    ============================================================================ 
+*/
+
+/* Prevent long words and URLs from overflowing in chat messages */
+.chat-markdown-content {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+/* Handle long URLs and code blocks in chat */
+.chat-markdown-content a,
+.chat-markdown-content code {
+  word-break: break-all;
+  overflow-wrap: anywhere;
+}
+
+/* Ensure pre/code blocks scroll horizontally instead of breaking layout */
+.chat-markdown-content pre {
+  max-width: 100%;
+  overflow-x: auto;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* Ensure tables in chat also handle overflow properly */
+.chat-markdown-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Handle long text in chat message bubbles */
+.chat-message-bubble {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+/* Truncate very long single words with ellipsis if needed */
+.chat-message-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

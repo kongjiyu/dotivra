@@ -91,7 +91,6 @@ import {
     AlignJustify,
     List,
     ListOrdered,
-    Quote,
     Code,
     MoreHorizontal,
     ChevronDown,
@@ -562,7 +561,29 @@ const ToolBar = ({
     if (!editor) return <div>No editor available</div>;
 
     // Helper for active state
-    const isActive = (name: string, attrs?: any) => editor.isActive(name, attrs);
+    const isActive = (name: string, attrs?: any) => {
+        if (!editor) return false;
+        
+        // Special handling for blockquote to detect when selection is inside a blockquote
+        if (name === 'blockquote') {
+            const { from, to } = editor.state.selection;
+            const { doc } = editor.state;
+            
+            // Check if the selection is entirely within a blockquote
+            let isInBlockquote = false;
+            doc.nodesBetween(from, to, (node, pos) => {
+                if (node.type.name === 'blockquote') {
+                    isInBlockquote = true;
+                    return false; // Stop iteration
+                }
+            });
+            
+            // Also check the standard isActive as a fallback
+            return isInBlockquote || editor.isActive(name, attrs);
+        }
+        
+        return editor.isActive(name, attrs);
+    };
 
     // Close the dropdown when clicking outside without blocking scroll via overlays
     useEffect(() => {
@@ -774,8 +795,7 @@ const ToolBar = ({
                                         isActive('heading', { level: 3 }) ? 'h3' :
                                             isActive('heading', { level: 4 }) ? 'h4' :
                                                 isActive('heading', { level: 5 }) ? 'h5' :
-                                                    isActive('blockquote') ? 'blockquote' :
-                                                        isActive('codeBlock') ? 'codeBlock' : 'paragraph'
+                                                    isActive('codeBlock') ? 'codeBlock' : 'paragraph'
                             }
                             onValueChange={(value) => {
                                 // Get current selection
@@ -784,7 +804,7 @@ const ToolBar = ({
                                 const hasSelection = from !== to;
 
                                 // Helper to apply a block type to the current selection or block
-                                const applyBlockType = (target: 'paragraph' | 'blockquote' | 'codeBlock' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5') => {
+                                const applyBlockType = (target: 'paragraph' | 'codeBlock' | 'h1' | 'h2' | 'h3' | 'h4' | 'h5') => {
                                     // Store the original selection range
                                     const originalFrom = from;
                                     const originalTo = to;
@@ -795,15 +815,12 @@ const ToolBar = ({
 
                                         // Clear conflicting types first
                                         if (target !== 'codeBlock' && editor.isActive('codeBlock')) c.toggleCodeBlock();
-                                        if (target !== 'blockquote' && editor.isActive('blockquote')) c.toggleBlockquote();
+                                        // Don't use toggleBlockquote here, handle it in the switch
                                         if (target === 'paragraph' && editor.isActive('heading')) c.setParagraph();
 
                                         switch (target) {
                                             case 'paragraph':
                                                 c.setParagraph();
-                                                break;
-                                            case 'blockquote':
-                                                c.setBlockquote();
                                                 break;
                                             case 'codeBlock':
                                                 c.setCodeBlock();
@@ -832,11 +849,10 @@ const ToolBar = ({
                                         // Use setNode for block types which will apply to all selected blocks
                                         switch (target) {
                                             case 'paragraph':
+                                                if (editor.isActive('codeBlock')) {
+                                                    chain.toggleCodeBlock();
+                                                }
                                                 chain.setParagraph();
-                                                break;
-                                            case 'blockquote':
-                                                // First convert to paragraphs, then wrap in blockquote
-                                                chain.setParagraph().setBlockquote();
                                                 break;
                                             case 'codeBlock':
                                                 chain.setCodeBlock();
@@ -894,7 +910,7 @@ const ToolBar = ({
                                 };
 
                                 // Apply the selected block type
-                                if (value === 'paragraph' || value === 'h1' || value === 'h2' || value === 'h3' || value === 'h4' || value === 'h5' || value === 'blockquote' || value === 'codeBlock') {
+                                if (value === 'paragraph' || value === 'h1' || value === 'h2' || value === 'h3' || value === 'h4' || value === 'h5' || value === 'codeBlock') {
                                     applyBlockType(value as any);
                                 }
                             }}
@@ -908,9 +924,8 @@ const ToolBar = ({
                                         {isActive('heading', { level: 3 }) && "Heading 3"}
                                         {isActive('heading', { level: 4 }) && "Heading 4"}
                                         {isActive('heading', { level: 5 }) && "Heading 5"}
-                                        {isActive('blockquote') && "Quote"}
                                         {isActive('codeBlock') && "Code Block"}
-                                        {(!isActive('heading') && !isActive('blockquote') && !isActive('codeBlock')) && "Paragraph"}
+                                        {(!isActive('heading') && !isActive('codeBlock')) && "Paragraph"}
                                     </>
                                 </SelectValue>
                             </SelectTrigger>
@@ -949,12 +964,6 @@ const ToolBar = ({
                                     <div className="flex items-center gap-2">
                                         <span className="text-xs font-bold">H5</span>
                                         <span>Heading 5</span>
-                                    </div>
-                                </SelectItem>
-                                <SelectItem value="blockquote">
-                                    <div className="flex items-center gap-2">
-                                        <Quote className="w-3.5 h-3.5" />
-                                        <span>Quote</span>
                                     </div>
                                 </SelectItem>
                                 <SelectItem value="codeBlock">
@@ -1552,46 +1561,54 @@ D --> E`;
                                         // If cursor is in a link, remove the link
                                         editor.chain().focus().unsetLink().run();
                                     } else {
-                                        // Check if text is selected
+                                        // Always show modal for link insertion
                                         const { state } = editor;
                                         const { from, to } = state.selection;
                                         const hasSelection = from !== to;
+                                        const selectedText = hasSelection ? state.doc.textBetween(from, to, ' ', ' ').trim() : '';
 
-                                        if (hasSelection) {
-                                            // Get selected text
-                                            const selectedText = state.doc.textBetween(from, to, ' ', ' ').trim();
-
-                                            // Check if the selected text is a valid URL
-                                            const urlPattern = /^https?:\/\/.+/i;
-                                            if (urlPattern.test(selectedText)) {
-                                                // If selected text is a valid URL, make it a link
-                                                editor.chain().focus().setLink({ href: selectedText }).run();
-                                            }
-                                            // If selected text is not a valid URL, do nothing
-                                        } else {
-                                            // No selection: collect URL/text via SweetAlert2 modal
-                                            import('sweetalert2').then(async ({ default: Swal }) => {
-                                                const { value: formValues } = await Swal.fire({
-                                                    title: 'Insert link',
-                                                    html:
-                                                        '<input id="swal-link-url" class="swal2-input" placeholder="https://example.com" />' +
-                                                        '<input id="swal-link-text" class="swal2-input" placeholder="Link text (optional)" />',
-                                                    focusConfirm: false,
-                                                    showCancelButton: true,
-                                                    preConfirm: () => {
-                                                        const url = (document.getElementById('swal-link-url') as HTMLInputElement)?.value?.trim();
-                                                        const text = (document.getElementById('swal-link-text') as HTMLInputElement)?.value?.trim();
-                                                        if (!url) return null;
-                                                        return { url, text };
+                                        // Show modal for link insertion
+                                        import('sweetalert2').then(async ({ default: Swal }) => {
+                                            const { value: formValues } = await Swal.fire({
+                                                title: 'Insert Link',
+                                                html:
+                                                    '<input id="swal-link-url" class="swal2-input" placeholder="https://example.com" style="margin-bottom: 10px;" />' +
+                                                    (hasSelection
+                                                        ? `<div style="margin: 10px 0; padding: 10px; background: #f3f4f6; border-radius: 6px; text-align: left;"><strong>Selected text:</strong> ${selectedText}</div>`
+                                                        : '<input id="swal-link-text" class="swal2-input" placeholder="Link text (optional)" />'),
+                                                focusConfirm: false,
+                                                showCancelButton: true,
+                                                confirmButtonColor: '#3B82F6',
+                                                cancelButtonColor: '#6B7280',
+                                                confirmButtonText: 'Insert Link',
+                                                preConfirm: () => {
+                                                    const url = (document.getElementById('swal-link-url') as HTMLInputElement)?.value?.trim();
+                                                    const text = !hasSelection ? (document.getElementById('swal-link-text') as HTMLInputElement)?.value?.trim() : '';
+                                                    if (!url) {
+                                                        Swal.showValidationMessage('Please enter a URL');
+                                                        return null;
                                                     }
-                                                });
-                                                if (formValues && formValues.url) {
-                                                    const href = formValues.url;
+                                                    // Validate URL format
+                                                    const urlPattern = /^https?:\/\/.+/i;
+                                                    if (!urlPattern.test(url)) {
+                                                        Swal.showValidationMessage('Please enter a valid URL starting with http:// or https://');
+                                                        return null;
+                                                    }
+                                                    return { url, text };
+                                                }
+                                            });
+                                            if (formValues && formValues.url) {
+                                                const href = formValues.url;
+                                                if (hasSelection) {
+                                                    // Apply link to selected text
+                                                    editor.chain().focus().setLink({ href }).run();
+                                                } else {
+                                                    // Insert new link with text
                                                     const text = formValues.text || formValues.url;
                                                     editor.chain().focus().insertContent(`<a href="${href}">${text}</a>`).run();
                                                 }
-                                            });
-                                        }
+                                            }
+                                        });
                                     }
                                 }}
                                 className="flex items-center gap-1.5 px-2 py-1 h-7 rounded-md hover:bg-gray-100 transition-colors text-sm"
@@ -1662,10 +1679,6 @@ D --> E`;
                                         <DropdownMenuItem onClick={() => editor.chain().focus().setHeading({ level: 3 }).run()}>
                                             <span className="text-sm font-bold mr-2">H3</span>
                                             <span>Heading 3</span>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => editor.chain().focus().setBlockquote().run()}>
-                                            <Quote className="w-3.5 h-3.5 mr-2" />
-                                            <span>Quote</span>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().setCodeBlock().run()}>
                                             <Code className="w-3.5 h-3.5 mr-2" />

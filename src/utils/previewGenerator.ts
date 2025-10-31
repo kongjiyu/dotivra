@@ -28,16 +28,22 @@ export interface HighlightedChange {
 export function generatePreviewWithHighlights(
     originalContent: string,
     toolExecutions: ToolExecution[]
-): { previewHtml: string; changes: HighlightedChange[] } {
+): { 
+    previewHtml: string; 
+    changes: {
+        additions: number;
+        deletions: number;
+        modifications: number;
+        replacements?: number;
+        totalChanges?: number;
+    }
+} {
     const changes: HighlightedChange[] = [];
 
     // Sort tool executions by timestamp to maintain order
     const sortedExecutions = [...toolExecutions]
         .filter(exec => exec.success && isContentModifyingTool(exec.tool))
         .sort((a, b) => a.timestamp - b.timestamp);
-
-    console.log('🎨 Generating preview with', sortedExecutions.length, 'tool executions');
-
     // First pass: collect all changes without modifying content
     let offset = 0;
     for (const execution of sortedExecutions) {
@@ -107,9 +113,18 @@ export function generatePreviewWithHighlights(
     // Apply highlights to original content (don't modify structure)
     const highlightedHtml = applyHighlightsToHtml(originalContent, changes);
 
+    // Get change statistics
+    const stats = getChangeStatistics(changes);
+
     return {
         previewHtml: highlightedHtml,
-        changes
+        changes: {
+            additions: stats.additions,
+            deletions: stats.deletions,
+            modifications: stats.replacements, // For backward compatibility
+            replacements: stats.replacements,
+            totalChanges: stats.totalChanges
+        }
     };
 }
 
@@ -130,6 +145,7 @@ function isContentModifyingTool(tool: string): boolean {
 /**
  * Apply color-coded highlights to HTML content based on changes
  * This version creates a complete diff view showing all changes
+ * Preserves HTML structure including Mermaid diagrams
  */
 function applyHighlightsToHtml(htmlContent: string, changes: HighlightedChange[]): string {
     if (changes.length === 0) {
@@ -145,7 +161,7 @@ function applyHighlightsToHtml(htmlContent: string, changes: HighlightedChange[]
     for (const change of sortedChanges) {
         const { type, from, to, content: newContent, originalContent } = change;
 
-        // Add unchanged content before this change
+        // Add unchanged content before this change (preserve HTML)
         if (from > lastPosition) {
             result += htmlContent.substring(lastPosition, from);
         }
@@ -153,29 +169,49 @@ function applyHighlightsToHtml(htmlContent: string, changes: HighlightedChange[]
         // Apply highlighting based on change type
         switch (type) {
             case 'deletion':
-                // Show deleted content in red with strikethrough
+                // Show deleted content in red with strikethrough (preserve HTML if present)
                 const deletedText = originalContent || htmlContent.substring(from, to);
-                result += `<span class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px;">${escapeHtml(deletedText)}</span>`;
+                // Check if deleted content contains HTML tags
+                const hasHtml = /<[a-z][\s\S]*>/i.test(deletedText);
+                if (hasHtml) {
+                    // Wrap HTML content with deletion styling
+                    result += `<div class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px; opacity: 0.7;">${deletedText}</div>`;
+                } else {
+                    result += `<span class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px;">${escapeHtml(deletedText)}</span>`;
+                }
                 lastPosition = to;
                 break;
 
             case 'addition':
-                // Show new content in green
-                result += `<span class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px;">${newContent || ''}</span>`;
+                // Show new content in green (preserve HTML if present)
+                const hasHtmlNew = /<[a-z][\s\S]*>/i.test(newContent || '');
+                if (hasHtmlNew) {
+                    result += `<div class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px;">${newContent || ''}</div>`;
+                } else {
+                    result += `<span class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px;">${newContent || ''}</span>`;
+                }
                 lastPosition = from; // Don't advance past the insertion point
                 break;
 
             case 'replacement':
                 // Show old content struck through in red, then new content in green
                 const replacedText = originalContent || htmlContent.substring(from, to);
-                result += `<span class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px;">${escapeHtml(replacedText)}</span>`;
-                result += `<span class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px; margin-left: 4px;">${newContent || ''}</span>`;
+                const hasHtmlOld = /<[a-z][\s\S]*>/i.test(replacedText);
+                const hasHtmlReplacement = /<[a-z][\s\S]*>/i.test(newContent || '');
+                
+                if (hasHtmlOld || hasHtmlReplacement) {
+                    result += `<div class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px; opacity: 0.7; margin-bottom: 8px;">${hasHtmlOld ? replacedText : escapeHtml(replacedText)}</div>`;
+                    result += `<div class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px;">${newContent || ''}</div>`;
+                } else {
+                    result += `<span class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px;">${escapeHtml(replacedText)}</span>`;
+                    result += `<span class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px; margin-left: 4px;">${newContent || ''}</span>`;
+                }
                 lastPosition = to;
                 break;
         }
     }
 
-    // Add remaining unchanged content
+    // Add remaining unchanged content (preserve HTML)
     if (lastPosition < htmlContent.length) {
         result += htmlContent.substring(lastPosition);
     }

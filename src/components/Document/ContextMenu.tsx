@@ -41,6 +41,7 @@ interface ContextMenuProps {
     position: { x: number; y: number }
     onClose: () => void
     isTableContext?: boolean
+    isImageContext?: boolean
     onOpenChat?: (selectedText: string, isReply?: boolean) => void
 }
 
@@ -50,6 +51,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     position,
     onClose,
     isTableContext = false,
+    isImageContext = false,
     onOpenChat,
 }) => {
     const menuRef = useRef<HTMLDivElement>(null)
@@ -61,7 +63,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
 
     // Color palettes
     const TEXT_COLORS = [
-        '#000000', '#374151', '#6B7280', '#EF4444', '#F97316', 
+        '#000000', '#374151', '#6B7280', '#EF4444', '#F97316',
         '#F59E0B', '#EAB308', '#84CC16', '#22C55E', '#10B981',
         '#14B8A6', '#06B6D4', '#0EA5E9', '#3B82F6', '#6366F1',
         '#8B5CF6', '#A855F7', '#D946EF', '#EC4899', '#F43F5E'
@@ -96,7 +98,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             const rect = menuRef.current.getBoundingClientRect()
             setMenuHeight(rect.height)
         }
-    }, [isVisible, isTableContext])
+    }, [isVisible, isTableContext, isImageContext])
 
     // Early return after all hooks
     if (!isVisible || !editor) {
@@ -111,7 +113,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
     const isTextSelected = !editor.state.selection.empty
 
     // Detect selection type
-    const isImageSelected = editor.isActive('image')
+    const isImageSelected = editor.isActive('image') || isImageContext
     const isTableSelected = editor.isActive('table') || isTableContext
 
     // Determine context menu mode
@@ -216,7 +218,6 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                             const text = await navigator.clipboard.readText()
                             editor.commands.insertContent(text)
                         } catch (err) {
-                            console.warn('Paste operation failed:', err)
                         }
                     })}
                 >
@@ -237,7 +238,6 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                             // Insert as plain text without formatting
                             editor.commands.insertContent({ type: 'text', text })
                         } catch (err) {
-                            console.warn('Paste without formatting failed:', err)
                         }
                     })}
                 >
@@ -421,7 +421,6 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
                                                 new ClipboardItem({ [blob.type]: blob })
                                             ])
                                         }
-                                        console.log('Image copied to clipboard')
                                     }
                                 } catch (error) {
                                     console.error('Failed to copy image:', error)
@@ -708,7 +707,7 @@ D --> E`;
                             <Minus className="w-3.5 h-3.5 mr-2" />
                             <span>Divider</span>
                         </Button>
-                        
+
                         <div className="border-t border-gray-100 my-1"></div>
 
                         {/* Font Color */}

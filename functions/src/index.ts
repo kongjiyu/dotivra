@@ -13,6 +13,9 @@ import crypto from "crypto";
 admin.initializeApp();
 const db = admin.firestore();
 
+// Initialize toolService with Firestore
+import * as toolService from "./services/toolService";
+toolService.initFirestore(db);
 
 // MCP integration removed
 
@@ -1695,7 +1698,6 @@ app.get('/api/templates', async (req, res) => {
 // Create document endpoint - supports both old and new field naming conventions
 app.post('/api/documents', async (req, res) => {
   try {
-    console.log('🔥 POST /api/documents received:', req.body);
     
     // Support both old (lowercase) and new (capital) field names for backwards compatibility
     const { 
@@ -1727,7 +1729,6 @@ app.post('/api/documents', async (req, res) => {
     
     // Validate required fields
     if (!documentName || !projectIdValue || !userIdValue) {
-      console.log('❌ Document validation failed: missing required fields');
       return res.status(400).json({ 
         error: 'DocumentName, Project_Id, and User_Id are required',
         received: { 
@@ -1738,7 +1739,6 @@ app.post('/api/documents', async (req, res) => {
       });
     }
 
-    console.log('✅ Document validation passed, creating document...');
     
     const docData = {
       DocumentName: documentName,
@@ -1752,14 +1752,29 @@ app.post('/api/documents', async (req, res) => {
       EditedBy: userIdValue,
       Created_Time: admin.firestore.Timestamp.now(),
       Updated_Time: admin.firestore.Timestamp.now(),
-      Hash: null
+      Hash: null,
+      version: 1 // Initialize version to 1
     };
     
-    console.log('Creating document in Firestore:', docData);
     
     const docRef = await db.collection('Documents').add(docData);
     
-    console.log('✅ Document created with Firestore ID:', docRef.id);
+    
+    // ✅ Save initial version (version 1) to DocumentHistory
+    try {
+      await db.collection('DocumentHistory').add({
+        Document_Id: docRef.id,
+        Content: contentValue,
+        Version: 1,
+        Edited_Time: admin.firestore.Timestamp.now(),
+        EditedBy: userIdValue,
+        Channel: 'content',
+      });
+      logger.info(`📚 Initial version (1) saved to DocumentHistory for document ${docRef.id}`);
+    } catch (historyError) {
+      logger.error('❌ Failed to save initial version history:', historyError);
+      // Don't fail document creation if history save fails
+    }
     
     const responseData = {
       id: docRef.id,

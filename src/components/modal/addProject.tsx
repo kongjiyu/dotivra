@@ -151,7 +151,6 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
         selectedRepo: formData.useGithub ? formData.selectedRepo : undefined
       };
 
-      console.log('Creating project:', projectData);
       
       if (onSubmit) {
         onSubmit(projectData);
@@ -222,10 +221,8 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
     setGithubState(prev => ({ ...prev, isLoadingRepositories: true }));
     
     try {
-      console.log('🔄 Loading GitHub repositories via OAuth with authentication...');
       
       if (!user) {
-        console.warn('User not authenticated, cannot load repositories');
         setGithubState(prev => ({ 
           ...prev, 
           filteredRepositories: [],
@@ -236,7 +233,6 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
 
       // Check if user has GitHub connected
       if (!userProfile?.githubUsername) {
-        console.warn('User has not connected GitHub account');
         setGithubState(prev => ({ 
           ...prev, 
           filteredRepositories: [],
@@ -248,7 +244,6 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
       // Use the existing githubRepoService which handles authentication properly
       const repositories = await githubRepoService.getUserRepositories(user);
       
-      console.log('📊 Total repositories loaded via OAuth:', repositories.length);
       
       setGithubState(prev => ({
         ...prev,
@@ -257,8 +252,7 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
       }));
       
     } catch (error) {
-      console.error('Error loading GitHub repositories via OAuth:', error);
-      console.warn('This might mean the user has not connected their GitHub account yet.');
+     
       setGithubState(prev => ({ 
         ...prev, 
         filteredRepositories: [],
@@ -280,11 +274,9 @@ const AddProjectModal: React.FC<AddProjectModalProps> = ({
   // ============================================================================
   
   if (!isOpen) {
-    console.log('❌ AddProjectModal NOT rendering - isOpen is false');
     return null;
   }
 
-  console.log('✅ AddProjectModal IS rendering, isOpen:', isOpen);
 
   // ============================================================================
   // RENDER

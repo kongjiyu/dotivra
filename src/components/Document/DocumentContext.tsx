@@ -14,7 +14,8 @@ const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
     const [contextMenu, setContextMenu] = useState({
         isVisible: false,
         position: { x: 0, y: 0 },
-        isTableContext: false
+        isTableContext: false,
+        isImageContext: false
     });
     const editorContentRef = useRef<HTMLDivElement>(null);
     const savedSelectionRef = useRef<{ from: number; to: number } | null>(null);
@@ -66,19 +67,38 @@ const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
                 }
             }
 
-            // Check if right-click is on a table
+            // Check if right-click is on a table or image
             const target = event.target as HTMLElement;
             const isInTable = target.closest('table, td, th, tr');
+            const isOnImage = target.tagName === 'IMG' && target.classList.contains('tiptap-image');
 
             setContextMenu({
                 isVisible: true,
                 position: { x, y },
-                isTableContext: !!isInTable
+                isTableContext: !!isInTable,
+                isImageContext: isOnImage
             });
         };
 
         const handleClick = (event: MouseEvent) => {
             const target = event.target as HTMLElement;
+
+            // IMPORTANT: Don't interfere if user has made a selection (e.g., highlighting text)
+            const selection = window.getSelection();
+            const hasTextSelection = selection && !selection.isCollapsed && selection.toString().trim().length > 0;
+            
+            // If there's a text selection, preserve it - don't move cursor
+            if (hasTextSelection) {
+                return;
+            }
+
+            // Also check editor's internal selection state
+            const editorSelection = editor.state.selection;
+            const hasEditorSelection = !editorSelection.empty;
+            
+            if (hasEditorSelection) {
+                return;
+            }
 
             // More robust check: detect if click is on blank space (not on actual content nodes)
             // Check if target is container/wrapper, not actual content elements
@@ -195,6 +215,7 @@ const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
                 position={contextMenu.position}
                 onClose={closeContextMenu}
                 isTableContext={contextMenu.isTableContext}
+                isImageContext={contextMenu.isImageContext}
                 onOpenChat={onOpenChat} // Pass onOpenChat to ContextMenu
             />
         </div>

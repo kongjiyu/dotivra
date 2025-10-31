@@ -127,7 +127,6 @@ const ProjectOverview: React.FC = () => {
       } else {
         const errorText = await documentsResponse.text();
         console.error('❌ Failed to load documents:', documentsResponse.status, errorText);
-        console.warn('Continuing without documents');
         setDocuments([]);
       }
 
@@ -209,7 +208,6 @@ const ProjectOverview: React.FC = () => {
 
     try {
       const projectId = (project.Project_Id || project.id) as string;
-      console.log('🗑️ Deleting project:', projectId);
 
       const response = await fetch(API_ENDPOINTS.deleteProject(projectId), {
         method: 'DELETE',
@@ -221,7 +219,6 @@ const ProjectOverview: React.FC = () => {
       }
 
       const result = await response.json();
-      console.log('✅ Project deleted successfully:', result);
 
       // Close the dialog
       setDeleteProjectDialogOpen(false);
@@ -269,7 +266,6 @@ const ProjectOverview: React.FC = () => {
     setIsDeleting(true);
 
     try {
-      console.log('🗑️ Deleting document:', documentToDelete.id);
 
       const response = await fetch(API_ENDPOINTS.deleteDocument(documentToDelete.id), {
         method: 'DELETE',
@@ -281,7 +277,6 @@ const ProjectOverview: React.FC = () => {
       }
 
       const result = await response.json();
-      console.log('✅ Document deleted successfully:', result);
 
       // Update the documents list by removing the deleted document
       setDocuments(prevDocs => prevDocs.filter(doc => doc.id !== documentToDelete.id));
@@ -440,7 +435,6 @@ const ProjectOverview: React.FC = () => {
               await new Promise(resolve => setTimeout(resolve, 1500));
             }
           } else {
-            console.warn('⚠️ Could not parse repository URL:', repositoryUrl);
           }
         } catch (error) {
           console.error('❌ Repository processing failed:', error);
@@ -557,8 +551,6 @@ const ProjectOverview: React.FC = () => {
           if (!projectId) return;
 
           try {
-            console.log('Updating project:', projectId, updatedProject);
-
             const response = await fetch(API_ENDPOINTS.project(projectId), {
               method: 'PUT',
               headers: {
@@ -574,14 +566,12 @@ const ProjectOverview: React.FC = () => {
               throw new Error('Failed to update project');
             }
 
-            console.log('✅ Project updated successfully');
             showSuccess('Project Updated!', 'Your project has been updated successfully.');
 
             // Close modal and reload project data
             setEditedProjectModalOpen(false);
             await loadProjectAndDocuments();
           } catch (err) {
-            console.error('❌ Error updating project:', err);
             showError(
               'Failed to Update Project',
               err instanceof Error ? err.message : 'Unknown error'

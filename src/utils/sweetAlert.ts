@@ -11,6 +11,9 @@ export const showSuccess = (title: string, message?: string) => {
     confirmButtonColor: '#10b981',
     timer: 3000,
     timerProgressBar: true,
+    customClass: {
+      confirmButton: '!text-white'
+    }
   });
 };
 
@@ -23,6 +26,9 @@ export const showError = (title: string, message?: string) => {
     title,
     text: message,
     confirmButtonColor: '#ef4444',
+    customClass: {
+      confirmButton: '!text-white'
+    }
   });
 };
 
@@ -35,6 +41,9 @@ export const showWarning = (title: string, message?: string) => {
     title,
     text: message,
     confirmButtonColor: '#f59e0b',
+    customClass: {
+      confirmButton: '!text-white'
+    }
   });
 };
 
@@ -47,6 +56,9 @@ export const showInfo = (title: string, message?: string) => {
     title,
     text: message,
     confirmButtonColor: '#3b82f6',
+    customClass: {
+      confirmButton: '!text-white'
+    }
   });
 };
 
@@ -63,6 +75,10 @@ export const showConfirm = (title: string, message?: string, confirmButtonText =
     cancelButtonColor: '#6b7280',
     confirmButtonText,
     cancelButtonText,
+    customClass: {
+      confirmButton: '!text-white',
+      cancelButton: '!text-white'
+    }
   });
 };
 
@@ -81,6 +97,10 @@ export const showDeleteConfirm = (itemName?: string) => {
     cancelButtonColor: '#6b7280',
     confirmButtonText: 'Yes, delete it!',
     cancelButtonText: 'Cancel',
+    customClass: {
+      confirmButton: '!text-white',
+      cancelButton: '!text-white'
+    }
   });
 };
 

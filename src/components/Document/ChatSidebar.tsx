@@ -171,7 +171,7 @@ export default function ChatSidebar({
     // Combine external messages (if any) with internal state
     const messages = useMemo(() => externalMessages ?? internalMessages, [externalMessages, internalMessages]);
 
-    // Load initial chat history from Firebase when chat opens
+    // Load initial chat history from Firebase when chat opens (last 5 pairs = 10 messages)
     useEffect(() => {
         const loadHistory = async () => {
             if (open && documentId && user?.uid && !externalMessages && internalMessages.length === 0) {
@@ -179,7 +179,9 @@ export default function ChatSidebar({
                 try {
                     const history = await chatHistoryService.loadInitialHistory(documentId);
                     if (history.length > 0) {
-                        setInternalMessages(history);
+                        // Only keep last 10 messages (5 pairs of user + assistant)
+                        const limitedHistory = history.slice(-10);
+                        setInternalMessages(limitedHistory);
                     } else {
                         // No history - load recommendations
                         initMessage();
@@ -234,7 +236,7 @@ export default function ChatSidebar({
             if (response.ok) {
                 const data = await response.json();
                 setRecommendations(data.recommendations || []);
-                
+
             } else {
                 const errorData = await response.json();
                 console.error('Failed to load recommendations:', errorData);
@@ -515,7 +517,7 @@ From structure improvements to real-time content updates, I ensure your work rem
     const handleSaveEdit = async () => {
         if (!editingMessageId || !editedContent.trim()) return;
 
-        
+
 
         // Update the message content
         const updatedMessages = messages.map(m =>
@@ -540,7 +542,7 @@ From structure improvements to real-time content updates, I ensure your work rem
 
     // Preview modal handlers
     const handleAcceptChanges = async () => {
-        
+
         setShowPreviewModal(false);
 
         // Save the current editor content to Firebase
@@ -561,13 +563,13 @@ From structure improvements to real-time content updates, I ensure your work rem
                     body: JSON.stringify({ Content: currentContent })
                 });
 
-                
+
 
                 // Reload to ensure sync
                 const doc = await fetchDocument(documentId);
                 if (doc.Content) {
                     editor.commands.setContent(doc.Content);
-                    
+
                 }
             } catch (err) {
                 console.error('Failed to update document:', err);
@@ -576,7 +578,7 @@ From structure improvements to real-time content updates, I ensure your work rem
     };
 
     const handleRejectChanges = async () => {
-        
+
         setShowPreviewModal(false);
 
         // Restore original content before AI changes
@@ -589,7 +591,7 @@ From structure improvements to real-time content updates, I ensure your work rem
 
             // Restore original content
             editor.commands.setContent(aiBeforeContent);
-            
+
 
             // Also update Firebase to revert changes
             if (documentId) {
@@ -599,7 +601,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ Content: aiBeforeContent })
                     });
-                    
+
                 } catch (err) {
                     console.error('Failed to revert document in Firebase:', err);
                 }
@@ -608,7 +610,7 @@ From structure improvements to real-time content updates, I ensure your work rem
     };
 
     const handleRegenerateChanges = () => {
-        
+
         setShowPreviewModal(false);
 
         // Restore original content first
@@ -623,7 +625,7 @@ From structure improvements to real-time content updates, I ensure your work rem
     };
 
     const handleStopGeneration = () => {
-        
+
 
         // Set abort flag to prevent preview modal
         wasAbortedRef.current = true;
@@ -658,21 +660,21 @@ From structure improvements to real-time content updates, I ensure your work rem
         // Reset abort flag for new generation
         wasAbortedRef.current = false;
 
-        
-        if (replyToMessage) {
-            
-        }
-        if (selectedText) {
-            
-        }
-
         // Build full prompt with selected text if present
         let fullPrompt = text;
         let displayContent = text;
 
-        // If this is a reply from document selection (isReply=true), treat selectedText as replyToMessage
-        if (isReply && selectedText) {
-            // Set up reply context with selected text
+        // Store references to clear later
+        const hadReplyToMessage = !!replyToMessage;
+        const hadSelectedText = !!selectedText;
+
+        // Priority: replyToMessage takes precedence over selectedText (only one reply container allowed)
+        if (replyToMessage) {
+            // Replying to a previous message
+            fullPrompt = `Previous message context: "${getContentAsString(replyToMessage.content)}"\n\nUser request: ${text}`;
+            displayContent = text;
+        } else if (isReply && selectedText) {
+            // If this is a reply from document selection (isReply=true), treat selectedText as replyToMessage
             const documentReply: ChatMessage = {
                 id: crypto.randomUUID(),
                 role: 'assistant', // Treat as assistant for UI purposes
@@ -685,6 +687,14 @@ From structure improvements to real-time content updates, I ensure your work rem
         } else if (selectedText) {
             fullPrompt = `Selected text from document: "${selectedText}"\n\nUser request: ${text}`;
             displayContent = text; // Show only user's prompt in UI
+        }
+
+        // Clear reply containers immediately after building the prompt
+        if (hadReplyToMessage) {
+            setReplyToMessage(null);
+        }
+        if (hadSelectedText && onClearSelection) {
+            onClearSelection();
         }
 
         // Add user message with reply context
@@ -726,7 +736,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                         role: replyToMessage.role,
                         content: `[Context from previous message]: ${getContentAsString(replyToMessage.content)}`
                     });
-                    
+
                 }
 
                 const timestamp = Date.now();
@@ -734,7 +744,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                 let currentProgressMessageId: string | null = null;
                 let messageStages: ChatMessageStage[] = []; // Store structured stages
 
-                
+
 
                 // Capture current document content before modifications
                 try {
@@ -745,7 +755,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                         setAiBeforeContent(editor.getHTML());
                     }
                 } catch (e) {
-                    
+
                     if (editor) setAiBeforeContent(editor.getHTML());
                 }
 
@@ -760,7 +770,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                     throw new Error('Document ID is required for AI agent execution. Please make sure you have a document open.');
                 }
 
-                
+
 
                 // Create abort controller for this generation
                 abortControllerRef.current = new AbortController();
@@ -772,7 +782,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                     selectedText,
                     abortControllerRef.current.signal
                 )) {
-                    
+
 
                     // Collect all stages for HTML generation
                     allStages.push({
@@ -790,7 +800,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                     }
 
                     if (stage.stage === 'done') {
-                        
+
                         break;
                     }
 
@@ -900,7 +910,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                         toolExecutions: []
                                     };
                                     setDocumentSnapshot(snapshot);
-                                    
+
 
                                     // Save snapshot to DocumentHistory
                                     try {
@@ -932,10 +942,10 @@ From structure improvements to real-time content updates, I ensure your work rem
                                         }
 
                                         if (response.ok) {
-                                            
+
                                         }
                                     } catch (saveError) {
-                                        
+
                                     }
                                 } catch (err) {
                                     console.error('Failed to create snapshot:', err);
@@ -1005,7 +1015,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                     }
                 }
 
-                
+
 
                 // Prepare interaction session data
                 const sessionEndTime = Date.now();
@@ -1048,7 +1058,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                             }
                         } as any);
 
-                        
+
                     } catch (error) {
                         console.error('Failed to save assistant message:', error);
                     }
@@ -1057,7 +1067,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                 // If tools were used, apply highlights to editor and show preview modal
                 if (toolsUsed > 0 && allToolExecutions.length > 0 && documentId && editor) {
                     try {
-                        
+
 
                         // Get current document content (after all tool operations)
                         const currentDoc = await fetchDocument(documentId);
@@ -1096,7 +1106,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                 .run();
                                         }
                                     } catch (e) {
-                                        
+
                                     }
                                 } else if (execution.tool === 'insert_document_content' ||
                                     execution.tool === 'append_document_content' ||
@@ -1108,7 +1118,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                             .setHighlight({ color: '#ccffcc' })
                                             .run();
                                     } catch (e) {
-                                        
+
                                     }
                                 } else if (execution.tool === 'replace_document_content') {
                                     // For replacements, highlight in yellow
@@ -1118,7 +1128,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                             .setHighlight({ color: '#ffffcc' })
                                             .run();
                                     } catch (e) {
-                                        
+
                                     }
                                 }
                             }
@@ -1133,34 +1143,38 @@ From structure improvements to real-time content updates, I ensure your work rem
                         }
 
                         // For preview modal, replay operations on snapshot for accurate diff
+                        let hasChanges = false;
                         if (documentSnapshot && documentSnapshot.content) {
-                            
+
 
                             // Use snapshot as base for preview with diff highlighting
-                            const { previewHtml: diffHtml, changes } = generatePreviewWithHighlights(
+                            const { previewHtml: diffHtml, changes: changeStats } = generatePreviewWithHighlights(
                                 documentSnapshot.content, // Use snapshot as baseline
                                 allToolExecutions
                             );
 
                             setPreviewHtml(diffHtml); // Use the diff-highlighted HTML
-                            setPreviewChanges(changes);
+                            setPreviewChanges(changeStats as any);
+                            hasChanges = (changeStats.additions || 0) > 0 || (changeStats.deletions || 0) > 0 || (changeStats.modifications || 0) > 0;
                         } else {
                             // Fallback to current approach if no snapshot
-                            const { previewHtml: diffHtml, changes } = generatePreviewWithHighlights(
+                            const { previewHtml: diffHtml, changes: changeStats } = generatePreviewWithHighlights(
                                 aiBeforeContent || '',
                                 allToolExecutions
                             );
 
                             setPreviewHtml(diffHtml); // Use the diff-highlighted HTML
-                            setPreviewChanges(changes);
+                            setPreviewChanges(changeStats as any);
+                            hasChanges = (changeStats.additions || 0) > 0 || (changeStats.deletions || 0) > 0 || (changeStats.modifications || 0) > 0;
                         }
 
-                        // Only show preview if generation wasn't aborted
-                        if (!wasAbortedRef.current) {
+                        // Only show preview if generation wasn't aborted and there are actual changes
+                        if (!wasAbortedRef.current && hasChanges) {
                             setShowPreviewModal(true);
+                        } else if (!hasChanges) {
                         }
 
-                        
+
                     } catch (err) {
                         console.error('Failed to apply highlights:', err);
                         // Fallback: just reload the document
@@ -1174,11 +1188,11 @@ From structure improvements to real-time content updates, I ensure your work rem
                 } else if (toolsUsed > 0 && editor && documentId) {
                     // No tool executions tracked, fallback to direct reload
                     try {
-                        
+
                         const doc = await fetchDocument(documentId);
                         if (doc.Content) {
                             editor.commands.setContent(doc.Content);
-                            
+
                         }
                     } catch (err) {
                         console.error('Failed to reload document:', err);
@@ -1187,7 +1201,7 @@ From structure improvements to real-time content updates, I ensure your work rem
             } catch (error) {
                 // Check if it's an abort error (user stopped generation)
                 if (error instanceof Error && error.name === 'AbortError') {
-                    
+
                     // Remove temporary progress messages
                     setInternalMessages(prev => prev.filter(msg => !msg.isTemporary));
                     // Don't show error message for user-initiated stops
@@ -1219,18 +1233,7 @@ From structure improvements to real-time content updates, I ensure your work rem
             } finally {
                 setIsGenerating(false);
                 abortControllerRef.current = null; // Clean up abort controller
-
-                // Clear reply state after sending (success or failure)
-                if (replyToMessage) {
-                    
-                    setReplyToMessage(null);
-                }
-
-                // Clear selected text if present
-                if (selectedText && onClearSelection) {
-                    
-                    onClearSelection();
-                }
+                // Note: Reply containers are cleared at the start of handleSend for immediate UI feedback
             }
         }
         // Record last user prompt for regenerate
@@ -1279,6 +1282,11 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                 setInternalMessages([]);
                                                 // Also clear any cached data
                                                 setHasMoreHistory(true);
+                                                // Clear reply containers
+                                                setReplyToMessage(null);
+                                                if (onClearSelection) {
+                                                    onClearSelection();
+                                                }
                                             } catch (error) {
                                                 console.error('Failed to clear chat history:', error);
                                             } finally {
@@ -1422,7 +1430,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                                 <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-2">
                                                                     <div className="animate-spin h-4 w-4 border-2 border-purple-600 border-t-transparent rounded-full"></div>
                                                                     <span className="text-sm font-medium text-purple-800">
-                                                                        Reasoning...
+                                                                        Thinking...
                                                                     </span>
                                                                 </div>
                                                             )}
@@ -1634,8 +1642,8 @@ From structure improvements to real-time content updates, I ensure your work rem
                                         key={idx}
                                         className="p-3 text-left text-sm border-2 border-blue-200 rounded-lg hover:bg-gradient-to-br hover:from-blue-50 hover:to-purple-50 hover:border-blue-300 bg-white transition-all duration-200 hover:scale-105 hover:shadow-md"
                                         onClick={() => {
-                                            setInput(rec.action);
-                                            setTimeout(() => handleSend(), 0);
+                                            // Directly send the message without showing it in input
+                                            handleSend(rec.action);
                                         }}
                                     >
                                         <div className="font-semibold text-blue-700 mb-1">{rec.title}</div>
@@ -1649,51 +1657,51 @@ From structure improvements to real-time content updates, I ensure your work rem
 
                     {/* Composer */}
                     <div className="p-3 border-t border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-                        {/* Reply indicator */}
-                        {replyToMessage && (
+                        {/* Reply indicator - only show ONE: replyToMessage takes precedence over selectedText */}
+                        {replyToMessage ? (
                             <div className="mb-2 p-2 bg-blue-50 border-l-4 border-blue-500 rounded flex items-center justify-between">
                                 <div className="flex-1 text-sm">
-                                    <div className="text-blue-700 font-semibold">
-                                        {selectedText ? 'From Document' : `Replying to ${replyToMessage.role === 'user' ? 'your message' : 'assistant'}`}
-                                    </div>
+                                    <div className="font-semibold text-blue-700 text-xs mb-1">Replying to:</div>
                                     <div className="text-gray-600 truncate">
                                         {(() => {
                                             const contentStr = getContentAsString(replyToMessage.content);
-                                            return contentStr.substring(0, 60) + '...';
+                                            if (contentStr.length <= 50) return contentStr;
+                                            return contentStr.substring(0, 50) + '...';
                                         })()}
                                     </div>
                                 </div>
                                 <button
                                     onClick={() => setReplyToMessage(null)}
                                     className="text-gray-400 hover:text-gray-600 ml-2"
+                                    title="Cancel reply"
                                 >
                                     <X className="w-4 h-4" />
                                 </button>
                             </div>
-                        )}
-
-                        {/* Selected text indicator */}
-                        {selectedText && (
-                            <div className="mb-2 p-2 bg-gradient-to-r from-purple-50 to-blue-50 border-l-4 border-purple-500 rounded flex items-center justify-between">
+                        ) : selectedText ? (
+                            <div className="mb-2 p-2 bg-green-50 border-l-4 border-green-500 rounded flex items-center justify-between">
                                 <div className="flex-1 text-sm">
-                                    <div className="text-purple-700 font-semibold flex items-center gap-1.5">
-                                        <Sparkles className="w-3.5 h-3.5" />
-                                        From Document
-                                    </div>
+                                    <div className="font-semibold text-green-700 text-xs mb-1">Selected text:</div>
                                     <div className="text-gray-600 truncate">
-                                        {selectedText.length > 80
-                                            ? `${selectedText.substring(0, 80)}...`
-                                            : selectedText}
+                                        {(() => {
+                                            if (selectedText.length <= 50) return selectedText;
+                                            return selectedText.substring(0, 50) + '...';
+                                        })()}
                                     </div>
                                 </div>
                                 <button
-                                    onClick={onClearSelection}
+                                    onClick={() => {
+                                        if (onClearSelection) {
+                                            onClearSelection();
+                                        }
+                                    }}
                                     className="text-gray-400 hover:text-gray-600 ml-2"
+                                    title="Clear selection"
                                 >
                                     <X className="w-4 h-4" />
                                 </button>
                             </div>
-                        )}
+                        ) : null}
 
                         <div className="flex items-center gap-2">
                             <Input
@@ -1762,14 +1770,14 @@ From structure improvements to real-time content updates, I ensure your work rem
                                             const endpoint = 'api/tools/execute';
                                             const primary = buildApiUrl(endpoint);
                                             let tr = await fetch(primary, {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json' },
-                                            body: JSON.stringify({
-                                                tool: 'replace_document_content',
-                                                args: { position: { from: 0, to: toLen }, content: aiBeforeContent || '', reason: 'Revert AI change' },
-                                                documentId
-                                            })
-                                        });
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    tool: 'replace_document_content',
+                                                    args: { position: { from: 0, to: toLen }, content: aiBeforeContent || '', reason: 'Revert AI change' },
+                                                    documentId
+                                                })
+                                            });
                                             if (tr.status === 404) {
                                                 const fallback = `https://us-central1-dotivra.cloudfunctions.net/${endpoint}`;
                                                 tr = await fetch(fallback, {

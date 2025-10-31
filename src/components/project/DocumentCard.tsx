@@ -27,7 +27,6 @@ const DocumentCard: React.FC<DocumentCardProps> = ({ document, onEdit, onDelete 
   };
 
   const handleCardClick = () => {
-    console.log('Opening document:', document.Title || document.DocumentName, 'ID:', document.id);
     if (document.id) {
       navigate(`/document/${document.id}`);
     }

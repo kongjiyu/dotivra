@@ -173,9 +173,6 @@ export default function DocsHelp({ isOpen, onClose }: DocsHelpProps) {
                                         <p>
                                             <strong>Templates:</strong> Save frequently used document structures as templates using "Save as Template" from the More Options menu.
                                         </p>
-                                        <p>
-                                            <strong>Make a Copy:</strong> Create a duplicate of your document using "Make a Copy" from the More Options menu.
-                                        </p>
                                     </div>
                                 </section>
 

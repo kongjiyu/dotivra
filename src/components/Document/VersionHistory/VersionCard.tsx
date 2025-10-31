@@ -35,13 +35,6 @@ export default function VersionCard({
     onSelect,
     onRestore
 }: VersionCardProps) {
-    // Debug logging
-    console.log('VersionCard render:', {
-        version: version.version,
-        index,
-        isSelected,
-        shouldShowRestore: isSelected && index > 0
-    });
 
     const formatTime = (timestamp: number) => {
         const date = new Date(timestamp);
@@ -140,7 +133,6 @@ export default function VersionCard({
                             <Button
                                 onClick={(e) => {
                                     e.stopPropagation();
-                                    console.log('Restore button clicked for version:', version.version);
                                     onRestore();
                                 }}
                                 className="w-full bg-blue-600 hover:bg-blue-700 "

@@ -43,7 +43,6 @@ class ChatHistoryService {
     try {
       const key = this.getStorageKey(documentId);
       localStorage.setItem(key, JSON.stringify(messages));
-      console.log(`💾 Saved ${messages.length} messages to localStorage`);
     } catch (error) {
       console.error('❌ Error saving to localStorage:', error);
     }
@@ -58,7 +57,6 @@ class ChatHistoryService {
       const stored = localStorage.getItem(key);
       if (stored) {
         const messages = JSON.parse(stored);
-        console.log(`📦 Loaded ${messages.length} messages from localStorage`);
         return messages;
       }
     } catch (error) {
@@ -74,7 +72,6 @@ class ChatHistoryService {
     try {
       const key = this.getStorageKey(documentId);
       localStorage.removeItem(key);
-      console.log('🗑️ Cleared localStorage cache');
     } catch (error) {
       console.error('❌ Error clearing localStorage:', error);
     }
@@ -99,9 +96,6 @@ class ChatHistoryService {
           toolCalls: message.toolCalls || [],
           createdAt: Timestamp.now(),
         });
-        
-      console.log('💾 Chat message saved to Firebase');
-      
       // Update localStorage cache
       const cached = this.loadFromLocalStorage(documentId) || [];
       cached.push(message);
@@ -122,7 +116,6 @@ class ChatHistoryService {
     // Try loading from localStorage first
     const cachedMessages = this.loadFromLocalStorage(documentId);
     if (cachedMessages && cachedMessages.length > 0) {
-      console.log(`✨ Using cached messages from localStorage`);
       // Still fetch from Firebase in background to ensure cache is up-to-date
       this.fetchAndUpdateCache(documentId).catch(err => 
         console.error('Background cache update failed:', err)
@@ -131,7 +124,6 @@ class ChatHistoryService {
     }
 
     // If not in cache, load from Firebase
-    console.log(`🔍 No cache found, loading from Firebase...`);
     return this.fetchAndUpdateCache(documentId);
   }
 
@@ -148,7 +140,6 @@ class ChatHistoryService {
       );
 
         const snapshot = await getDocs(q);
-        console.log(`📄 Retrieved ${snapshot.size} chat messages from Firebase`);
       const messages: ChatMessage[] = [];
 
       snapshot.forEach((doc) => {
@@ -167,8 +158,6 @@ class ChatHistoryService {
       
       // Update localStorage cache
       this.saveToLocalStorage(documentId, orderedMessages);
-      
-      console.log(`📜 Loaded ${orderedMessages.length} initial chat messages`);
       return orderedMessages;
     } catch (error) {
       console.error('❌ Error loading initial chat history:', error);
@@ -195,7 +184,6 @@ class ChatHistoryService {
       const lastMessageSnapshot = await getDocs(lastMessageQuery);
       
       if (lastMessageSnapshot.empty) {
-        console.warn('⚠️ Could not find last message for pagination');
         return [];
       }
 
@@ -223,8 +211,6 @@ class ChatHistoryService {
           toolCalls: data.toolCalls || [],
         });
       });
-
-      console.log(`📜 Loaded ${messages.length} more chat messages`);
       return messages.reverse();
     } catch (error) {
       console.error('❌ Error loading more chat history:', error);
@@ -247,9 +233,6 @@ class ChatHistoryService {
       // Use deleteDoc for each document
       const deletePromises = snapshot.docs.map((doc) => deleteDoc(doc.ref));
       await Promise.all(deletePromises);
-
-      console.log(`🗑️ Cleared ${snapshot.size} chat messages from Firebase`);
-      
       // Clear localStorage cache
       this.clearLocalStorage(documentId);
     } catch (error) {

@@ -13,7 +13,13 @@ interface AIChangesPreviewModalProps {
     isOpen: boolean;
     onClose: () => void;
     previewHtml: string;
-    changes: HighlightedChange[];
+    changes: HighlightedChange[] | {
+        additions: number;
+        deletions: number;
+        modifications?: number;
+        replacements?: number;
+        totalChanges?: number;
+    };
     onAccept: () => void;
     onReject: () => void;
     onRegenerate: () => void;
@@ -30,7 +36,15 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
 }) => {
     if (!isOpen) return null;
 
-    const stats = getChangeStatistics(changes);
+    // Handle both array and statistics object format
+    const stats = Array.isArray(changes)
+        ? getChangeStatistics(changes)
+        : {
+            additions: changes.additions || 0,
+            deletions: changes.deletions || 0,
+            replacements: changes.replacements || changes.modifications || 0,
+            totalChanges: changes.totalChanges || ((changes.additions || 0) + (changes.deletions || 0) + (changes.replacements || changes.modifications || 0))
+        };
 
     return (
         <div className="fixed inset-0 z-100 mt-[120px] flex items-center justify-center bg-gray-900/50 backdrop-blur-sm">

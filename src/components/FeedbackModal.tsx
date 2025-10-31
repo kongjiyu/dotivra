@@ -3,8 +3,8 @@ import { X, CheckCircle2 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { FirebaseService } from '../services/firebaseService';
-import { 
-  GeneralFeedback, 
+import {
+  GeneralFeedback,
   FeedbackSubmit
 } from './feedback';
 import type { FeedbackData } from './feedback';
@@ -17,7 +17,10 @@ interface FeedbackModalProps {
 const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
   const location = useLocation();
   const { user } = useAuth();
-  
+
+  // Check if feedback is enabled via environment variable
+  const isFeedbackEnabled = import.meta.env.VITE_ENABLE_FEEDBACK === 'true';
+
   const [feedbackData, setFeedbackData] = useState<FeedbackData>({
     email: '',
     comment: '',
@@ -55,13 +58,13 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
 
     setIsSubmitting(true);
-    
+
     try {
       // Submit feedback to Firestore
       await FirebaseService.submitFeedback(
@@ -72,10 +75,10 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
           userId: user?.uid || undefined
         }
       );
-      
+
       // Show success state
       setSubmitSuccess(true);
-      
+
       // Wait a moment to show success message
       setTimeout(() => {
         // Reset form and close modal
@@ -84,7 +87,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
         setSubmitSuccess(false);
         onClose();
       }, 2000);
-      
+
     } catch (error) {
       console.error('Failed to submit feedback:', error);
       alert('Failed to submit feedback. Please try again.');
@@ -95,7 +98,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
 
   const handleInputChange = (field: keyof FeedbackData, value: string) => {
     setFeedbackData(prev => ({ ...prev, [field]: value }));
-    
+
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
@@ -110,19 +113,20 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
     }
   };
 
-  if (!isOpen) return null;
+  // Don't render if feedback is disabled or not open
+  if (!isFeedbackEnabled || !isOpen) return null;
 
   return (
     <>
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-black/50 z-50 transition-opacity"
         onClick={handleClose}
       />
-      
+
       {/* Modal */}
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div 
+        <div
           className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
           onClick={(e) => e.stopPropagation()}
         >
@@ -161,7 +165,7 @@ const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose }) => {
                   errors={errors}
                   onChange={handleInputChange}
                 />
-                
+
                 <FeedbackSubmit
                   isSubmitting={isSubmitting}
                   onSubmit={handleSubmit}

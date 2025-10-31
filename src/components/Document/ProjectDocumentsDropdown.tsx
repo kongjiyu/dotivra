@@ -79,7 +79,6 @@ export default function ProjectDocumentsDropdown({
     }, [projectId, currentDocumentId]);
 
     const handleDocumentClick = (documentId: string) => {
-        console.log('[ProjectDocuments] Clearing state before navigation to:', documentId);
         // Clear all document-related state before navigation
         setDocumentContent('');
         setDocumentTitle('Untitled Document');

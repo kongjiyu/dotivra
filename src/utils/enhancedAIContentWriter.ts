@@ -49,14 +49,8 @@ export class EnhancedAIContentWriter {
     newContent: string
   ): Promise<string> {
     const changeId = `add-${Date.now()}`;
-    
-    console.log('➕ Adding content (before processing):', { changeId, position, original: newContent });
-
     // Process content to convert markdown/HTML to TipTap-compatible format
     const processedContent = enhancedContentProcessor(newContent);
-    
-    console.log('✨ Processed content:', { processedContent });
-
     // Insert processed content at position
     this.editor.commands.insertContentAt(position.from, processedContent);
     
@@ -91,9 +85,6 @@ export class EnhancedAIContentWriter {
     position: ContentPosition
   ): Promise<string> {
     const changeId = `remove-${Date.now()}`;
-    
-    console.log('🗑️ Marking for removal:', { changeId, position });
-
     // Store original content
     const originalContent = this.editor.state.doc.textBetween(position.from, position.to);
 
@@ -121,17 +112,11 @@ export class EnhancedAIContentWriter {
     newContent: string
   ): Promise<string> {
     const changeId = `replace-${Date.now()}`;
-    
-    console.log('🔄 Replacing content (before processing):', { changeId, position, original: newContent });
-
     // Store original content
     const originalContent = this.editor.state.doc.textBetween(position.from, position.to);
 
     // Process the new content to convert markdown/HTML to TipTap-compatible format
     const processedNewContent = enhancedContentProcessor(newContent);
-    
-    console.log('✨ Processed replacement content:', { processedNewContent });
-
     // Create combined content showing replacement
     const combinedContent = `${originalContent} → ${processedNewContent}`;
 
@@ -171,9 +156,6 @@ export class EnhancedAIContentWriter {
   public acceptChange(changeId: string): void {
     const change = this.activeChanges.get(changeId);
     if (!change) return;
-
-    console.log(`✅ Accepting ${change.type}:`, change);
-
     switch (change.type) {
       case 'removal':
         // Delete the highlighted content
@@ -219,9 +201,6 @@ export class EnhancedAIContentWriter {
   public rejectChange(changeId: string): void {
     const change = this.activeChanges.get(changeId);
     if (!change) return;
-
-    console.log(`❌ Rejecting ${change.type}:`, change);
-
     switch (change.type) {
       case 'addition':
         // Remove the added content entirely

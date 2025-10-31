@@ -28,6 +28,7 @@ import {
 	BookOpen,
 	Settings,
 	Sparkles,
+	Bot,
 } from "lucide-react";
 
 // Import new components
@@ -103,6 +104,7 @@ export default function DocumentMenu({
 	const [showWordCount, setShowWordCount] = useState(initialPrefs.showWordCount);
 	const [showDocsHelp, setShowDocsHelp] = useState(false);
 	const [showShortcutKeys, setShowShortcutKeys] = useState(false);
+	const [showAboutAI, setShowAboutAI] = useState(false);
 	const [showToolbar, setShowToolbar] = useState(initialPrefs.showToolbar);
 
 	// Import confirmation modal state
@@ -181,7 +183,6 @@ export default function DocumentMenu({
 		const key = searchPluginKeyRef.current;
 		const existingPlugin = editor.state.plugins.find((plugin: any) => plugin.spec?.key === key);
 		if (existingPlugin) {
-			console.warn('Plugin with key already exists, skipping registration');
 			return;
 		}
 
@@ -215,7 +216,6 @@ export default function DocumentMenu({
 				try {
 					editor.unregisterPlugin(searchPluginKeyRef.current);
 				} catch (error) {
-					console.warn('Error unregistering plugin:', error);
 				}
 				searchPluginRef.current = null;
 			}
@@ -250,11 +250,9 @@ export default function DocumentMenu({
 		}
 
 		try {
-			console.log('[Print] Starting print process...');
 
 			// Process Mermaid diagrams first
 			const processedContent = await processMermaidForExport(contentToPrint);
-			console.log('[Print] Mermaid diagrams processed');
 
 			// --- STEP 1: Parse and modify HTML ---
 			const parser = new DOMParser();
@@ -675,7 +673,6 @@ export default function DocumentMenu({
 		const fileName = file.name;
 		const fileExtension = fileName.split('.').pop()?.toLowerCase();
 
-		console.log('[Import] File selected:', fileName, 'Extension:', fileExtension);
 
 		// Only accept Markdown files
 		if (fileExtension !== 'md') {
@@ -684,27 +681,21 @@ export default function DocumentMenu({
 		}
 
 		try {
-			console.log('[Import] Reading markdown file...');
 			// Handle Markdown files
 			const markdownContent = await file.text();
-			console.log('[Import] Markdown content length:', markdownContent.length);
 
 			// Convert markdown to HTML
 			const htmlContent = await marked(markdownContent);
-			console.log('[Import] Converted HTML length:', htmlContent.length);
 
 			// Check if there's existing content
 			const hasContent = editor && editor.getText().trim().length > 0;
-			console.log('[Import] Has existing content:', hasContent);
 
 			if (hasContent) {
 				// Show confirmation modal
 				setPendingImport({ content: htmlContent, fileName });
 				setShowImportConfirm(true);
-				console.log('[Import] Showing confirmation modal');
 			} else {
 				// No existing content, just import directly
-				console.log('[Import] Importing directly (no existing content)');
 				if (editor) {
 					// Use editor's setContent for better control
 					editor.commands.setContent(htmlContent);
@@ -712,17 +703,13 @@ export default function DocumentMenu({
 					setTimeout(() => {
 						addDividersAfterHeadings(editor);
 					}, 100);
-					console.log('[Import] Content set in editor');
 				} else if (onUpdate) {
 					onUpdate(htmlContent);
-					console.log('[Import] Content sent via onUpdate callback');
 				} else {
-					console.warn('[Import] No editor or onUpdate callback available');
 				}
 				showNotification(`Imported ${fileName} successfully`, 'success');
 			}
 		} catch (error) {
-			console.error('[Import] Error importing file:', error);
 			showNotification('Error importing file. Please check the file format and try again.', 'error');
 		}
 
@@ -733,8 +720,6 @@ export default function DocumentMenu({
 	const handleImportConfirm = (action: 'overwrite' | 'append') => {
 		if (!pendingImport) return;
 
-		console.log('[Import] Confirmed action:', action);
-
 		if (action === 'overwrite') {
 			// Replace all content
 			if (editor) {
@@ -743,10 +728,10 @@ export default function DocumentMenu({
 				setTimeout(() => {
 					addDividersAfterHeadings(editor);
 				}, 100);
-				console.log('[Import] Content replaced in editor');
+
 			} else if (onUpdate) {
 				onUpdate(pendingImport.content);
-				console.log('[Import] Content replaced via onUpdate');
+
 			}
 			showNotification(`Imported ${pendingImport.fileName} successfully (overwrite)`, 'success');
 		} else if (action === 'append') {
@@ -759,11 +744,9 @@ export default function DocumentMenu({
 				setTimeout(() => {
 					addDividersAfterHeadings(editor);
 				}, 100);
-				console.log('[Import] Content appended in editor');
 			} else if (onUpdate) {
 				const combinedContent = (documentContent || '') + '<p></p>' + pendingImport.content;
 				onUpdate(combinedContent);
-				console.log('[Import] Content appended via onUpdate');
 			}
 			showNotification(`Imported ${pendingImport.fileName} successfully (append)`, 'success');
 		}
@@ -840,7 +823,6 @@ export default function DocumentMenu({
 
 		// If no custom handler, use the built-in service
 		if (!currentDocument) {
-			console.warn("No document data available for copying");
 			return;
 		}
 
@@ -1127,6 +1109,18 @@ export default function DocumentMenu({
 										<Keyboard className="w-4 h-4 mr-2" />
 										<span className="text-sm">Shortcut Keys</span>
 									</Button>
+									<Button
+										variant="ghost"
+										size="sm"
+										onClick={() => {
+											setShowAboutAI(true);
+											setShowHelpMenu(false);
+										}}
+										className="w-full justify-start h-8 px-2 text-gray-700"
+									>
+										<Bot className="w-4 h-4 mr-2" />
+										<span className="text-sm">About AI Assistant</span>
+									</Button>
 								</div>
 							</PopoverContent>
 						</Popover>
@@ -1268,6 +1262,92 @@ export default function DocumentMenu({
 				isOpen={showShortcutKeys}
 				onClose={() => setShowShortcutKeys(false)}
 			/>
+
+			{/* About AI Assistant Modal */}
+			{showAboutAI && (
+				<div className="fixed inset-0 bg-black flex items-center justify-center z-50">
+					<div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-y-auto">
+						<div className="flex items-center justify-between mb-4">
+							<div className="flex items-center gap-2">
+								<Bot className="w-6 h-6 text-blue-600" />
+								<h2 className="text-xl font-semibold text-gray-900">About AI Assistant</h2>
+							</div>
+							<button
+								onClick={() => setShowAboutAI(false)}
+								className="text-gray-400 hover:text-gray-600 transition-colors"
+							>
+								<X className="w-5 h-5" />
+							</button>
+						</div>
+
+						<div className="space-y-4 text-gray-700">
+							<div>
+								<h3 className="font-semibold text-lg mb-2 text-gray-900">🤖 Your Intelligent Document Assistant</h3>
+								<p className="leading-relaxed">
+									The AI Assistant in the chat sidebar is your powerful companion for document creation and editing.
+									It understands your documents, your project repository, and can help you work more efficiently.
+								</p>
+							</div>
+
+							<div>
+								<h3 className="font-semibold text-lg mb-2 text-gray-900">✨ Key Capabilities</h3>
+								<ul className="space-y-2 list-disc list-inside">
+									<li><strong>Document Manipulation:</strong> Add, edit, search, and replace content intelligently</li>
+									<li><strong>Repository Awareness:</strong> Scans your GitHub repository structure and recent commits</li>
+									<li><strong>Context Understanding:</strong> Analyzes your document to provide relevant suggestions</li>
+									<li><strong>Smart Insertions:</strong> Places new content at the most appropriate locations</li>
+									<li><strong>Change Tracking:</strong> Keeps up with recent repository changes automatically</li>
+								</ul>
+							</div>
+
+							<div>
+								<h3 className="font-semibold text-lg mb-2 text-gray-900">💡 How to Use</h3>
+								<ol className="space-y-2 list-decimal list-inside">
+									<li>Open the chat sidebar using the chat icon or <kbd className="px-2 py-1 bg-gray-100 rounded text-sm">Ctrl+/</kbd></li>
+									<li>Ask the assistant to help with your document (e.g., "Create a project overview")</li>
+									<li>The assistant will scan your document and repository if needed</li>
+									<li>Review and accept the AI's suggestions</li>
+									<li>Continue the conversation for refinements</li>
+								</ol>
+							</div>
+
+							<div>
+								<h3 className="font-semibold text-lg mb-2 text-gray-900">🔧 Available Tools</h3>
+								<div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+									<div className="p-2 bg-blue-50 rounded">
+										<strong>Document Tools:</strong> Scan, search, modify content
+									</div>
+									<div className="p-2 bg-green-50 rounded">
+										<strong>Repository Tools:</strong> Check structure and commits
+									</div>
+									<div className="p-2 bg-purple-50 rounded">
+										<strong>Summary Tools:</strong> Work with document summaries
+									</div>
+									<div className="p-2 bg-orange-50 rounded">
+										<strong>Project Tools:</strong> Access project metadata
+									</div>
+								</div>
+							</div>
+
+							<div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+								<p className="text-sm">
+									<strong>💡 Pro Tip:</strong> The AI Assistant works best when you provide clear, specific instructions.
+									It will automatically check your repository for context and recent changes to give you the most relevant help.
+								</p>
+							</div>
+						</div>
+
+						<div className="mt-6 flex justify-end">
+							<Button
+								onClick={() => setShowAboutAI(false)}
+								className="bg-blue-600 hover:bg-blue-700 text-white"
+							>
+								Got it!
+							</Button>
+						</div>
+					</div>
+				</div>
+			)}
 
 			{/* Import Confirmation Modal */}
 			<ImportConfirmationModal

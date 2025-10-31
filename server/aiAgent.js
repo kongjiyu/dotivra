@@ -17,17 +17,22 @@ export class AIAgent {
     /**
      * Execute AI agent workflow with streaming
      * Yields stage-based JSON objects: {stage: "...", content: ...}
+     * @param {string} repoLink - Optional GitHub repository link for document context
      */
-    async* executeWithStream(userPrompt, documentId, conversationHistory = []) {
-        console.log('🤖 AI Agent starting execution...');
-        console.log('📝 User prompt:', userPrompt);
-        console.log('📄 Document ID:', documentId);
+    async* executeWithStream(userPrompt, documentId, conversationHistory = [], repoLink = null) {
 
         // Get available tools
         const toolRegistry = await getToolsRegistry();
-        const tools = toolRegistry.tools;
+        let tools = toolRegistry.tools;
 
-        console.log(`🔧 Loaded ${tools.length} tools from registry`);
+        // Filter out repo tools if no repo link is provided
+        if (!repoLink) {
+            tools = tools.filter(tool =>
+                tool.name !== 'get_repo_structure' &&
+                tool.name !== 'get_repo_commits'
+            );
+        }
+
 
         // Build tool descriptions for the AI
         const toolDescriptions = tools.map(tool => {
@@ -41,13 +46,54 @@ export class AIAgent {
             return `• ${tool.name}(${paramList}) - ${tool.description}`;
         }).join('\n');
 
+        // Build repository awareness section if repo link is provided
+        const repoSection = repoLink ? `
+REPOSITORY INTEGRATION:
+This document is linked to the GitHub repository: ${repoLink}
+
+You have access to GitHub repository tools that allow you to:
+- get_repo_structure: Scan the complete file/folder structure of the repository (use repoLink: "${repoLink}")
+- get_repo_commits: View recent commits and changes to track project evolution (use repoLink: "${repoLink}")
+
+IMPORTANT: When using these tools, always pass repoLink as "${repoLink}"
+
+Use these tools when:
+- User asks about project structure, recent changes, or repository analysis
+- User requests to "analyze", "optimize", or "review" the document (check repo for context)
+- You need context about what files exist or how they're organized
+- Generating documentation that references repository structure or recent activity
+- Answering questions about specific files or components
+
+ADAPTIVE BEHAVIOR:
+- When user asks to "analyze and optimize", ALWAYS use get_repo_structure first to understand the project
+- Check repo structure before claiming files don't exist
+- Use commit history to understand recent changes and context
+- When documenting, reference actual file paths from the repo structure
+- Stay updated with the latest changes by checking commits when needed
+` : '';
+
         // System prompt for AI agent
         const systemPrompt = `You are an Advanced Document Manipulation AI Agent working with HTML documents.
 
 IMPORTANT: You are working with HTML document content. When analyzing or modifying content, you're manipulating HTML tags, attributes, and text.
+${repoSection}
 
 AVAILABLE TOOLS:
 ${toolDescriptions}
+
+SPECIAL INSTRUCTIONS FOR "ANALYZE AND OPTIMIZE" REQUESTS:
+When user asks to "analyze", "optimize", "review", or "improve" the document:
+1. FIRST, get the document content using get_document_content
+2. SECOND, if repository is linked, use get_repo_structure to understand the project context
+3. ANALYZE the document thoroughly:
+   - Check for completeness, accuracy, clarity, and structure
+   - Identify outdated information, missing sections, or unclear content
+   - Compare against repository context (if available) for technical accuracy
+4. VALIDATE if optimization is needed:
+   - If document is already well-structured and complete, acknowledge this in your response
+   - Only suggest or apply changes if there are clear improvements to make
+5. IF CHANGES ARE NEEDED, apply them using appropriate tools (replace, insert, etc.)
+6. Provide a summary of analysis findings and changes made
 
 SPECIAL INSTRUCTIONS FOR "CREATE" OR "GENERATE" REQUESTS:
 When user asks to "create" or "generate" something (e.g., "create a project overview", "generate a summary"):
@@ -125,13 +171,9 @@ User Request: ${userPrompt}
         const maxToolExecutions = 15; // Prevent infinite loops
 
         while (toolExecutionCount < maxToolExecutions) {
-            console.log(`\n${'='.repeat(60)}`);
-            console.log(`🔄 Iteration ${toolExecutionCount + 1} - Current stage: ${currentStage}`);
-            console.log(`${'='.repeat(60)}`);
 
             try {
                 // Call Gemini
-                console.log('🤖 Calling Gemini...');
                 const result = await this.geminiBalancer.generate({
                     model: 'gemini-2.5-pro',
                     contents,
@@ -145,7 +187,6 @@ User Request: ${userPrompt}
                 });
 
                 const aiResponse = result.text.trim();
-                console.log('📥 AI Response:', aiResponse.substring(0, 200));
 
                 // Parse JSON response
                 let parsed;
@@ -190,7 +231,6 @@ User Request: ${userPrompt}
                     continue;
                 }
 
-                console.log(`✅ Parsed stage: ${parsed.stage}`);
                 currentStage = parsed.stage;
 
                 // Yield the stage to the client
@@ -223,8 +263,6 @@ User Request: ${userPrompt}
                         continue;
                     }
 
-                    console.log(`🔧 Executing tool: ${toolData.tool}`);
-                    console.log(`📋 Tool args:`, toolData.args);
 
                     try {
                         // Execute the tool
@@ -232,8 +270,6 @@ User Request: ${userPrompt}
                             toolData.tool,
                             toolData.args
                         );
-
-                        console.log(`✅ Tool executed successfully:`, toolResult);
 
                         const toolResultStage = {
                             stage: 'toolResult',
@@ -283,7 +319,6 @@ User Request: ${userPrompt}
                     }
                 } else if (parsed.stage === 'summary') {
                     // Agent has completed - break the loop
-                    console.log('✅ Agent completed with summary');
                     break;
                 } else {
                     // For planning, reasoning, executing stages, add to conversation
@@ -312,13 +347,10 @@ User Request: ${userPrompt}
         }
 
         if (toolExecutionCount >= maxToolExecutions) {
-            console.warn('⚠️ Max tool executions reached');
             yield {
                 stage: 'summary',
                 content: 'Process completed after maximum tool executions'
             };
         }
-
-        console.log('🏁 AI Agent execution complete');
     }
 }

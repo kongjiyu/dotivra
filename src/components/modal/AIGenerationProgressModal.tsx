@@ -72,7 +72,7 @@ const AIGenerationProgressModal: React.FC<AIGenerationProgressModalProps> = ({
             <div className="hidden sm:flex items-center gap-2">
               <span className="text-xs text-blue-100">Estimated</span>
               <span className="text-xs font-semibold px-2 py-1 rounded-md bg-white/20">
-                {estimatedSecondsRange ? `${estimatedSecondsRange[0]}–${estimatedSecondsRange[1]}s` : '10–30s'}
+                {estimatedSecondsRange ? `${estimatedSecondsRange[0]}–${estimatedSecondsRange[1]}s` : '85–135s'}
               </span>
             </div>
           </div>
@@ -123,7 +123,7 @@ const AIGenerationProgressModal: React.FC<AIGenerationProgressModalProps> = ({
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-200">
           <div className="flex items-center justify-between">
             <p className="text-xs text-gray-500">
-              This may take {estimatedSecondsRange ? `${estimatedSecondsRange[0]}–${estimatedSecondsRange[1]} seconds` : '10–30 seconds'} depending on repository size
+              This may take {estimatedSecondsRange ? `${estimatedSecondsRange[0]}–${estimatedSecondsRange[1]} seconds` : '85–135 seconds'} depending on repository size
             </p>
             {onCancel && (
               <button

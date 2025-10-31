@@ -4,7 +4,6 @@ let firestore = null;
 // Initialize firestore reference
 export const initFirestore = (firestoreInstance) => {
     firestore = firestoreInstance;
-    console.log('✅ Firestore initialized in toolService');
 };
 
 
@@ -32,7 +31,6 @@ const logToolUsage = (toolName, args, result, documentId = null) => {
         toolUsageLog.shift();
     }
 
-    console.log(`🔧 Tool used: ${toolName}`, logEntry.result.summary);
 
     return logEntry;
 };
@@ -394,7 +392,6 @@ export const setCurrentDocument = async (documentId) => {
             throw new Error('Firestore not initialized in toolService');
         }
 
-        console.log(`📄 Attempting to load document: ${documentId}`);
 
         // For regular Firebase SDK
         const { doc, getDoc } = await import('firebase/firestore');
@@ -405,7 +402,6 @@ export const setCurrentDocument = async (documentId) => {
         });
 
         const docRef = doc(firestore, 'Documents', documentId);
-        console.log(`📄 Fetching from Firestore collection: Documents/${documentId}`);
 
         const docSnap = await Promise.race([getDoc(docRef), timeoutPromise]);
 
@@ -417,7 +413,6 @@ export const setCurrentDocument = async (documentId) => {
         currentDocumentId = documentId;
         currentDocumentContent = docData.Content || '';
 
-        console.log(`✅ Document loaded successfully: ${documentId} (${currentDocumentContent.length} chars)`);
 
         return {
             success: true,
@@ -435,7 +430,6 @@ export const setCurrentDocument = async (documentId) => {
 const syncToFirebase = async () => {
     if (!currentDocumentId || !firestore) {
         // This is OK for testing or read-only operations
-        console.log('ℹ️  No document context set - changes will not be persisted to Firebase');
         return { success: false, error: 'No document set or firestore not initialized' };
     }
 
@@ -451,9 +445,6 @@ const syncToFirebase = async () => {
             IsDraft: true // Mark as draft when AI modifies content
         });
 
-        console.log(`💾 Synced to Firebase: ${currentDocumentId} (${currentDocumentContent.length} chars)`);
-        console.log(`📝 Document status updated to draft`);
-
         return { success: true };
     } catch (error) {
         console.error('❌ Firebase sync error:', error);
@@ -463,7 +454,6 @@ const syncToFirebase = async () => {
 
 export const get_document_content = async ({ documentId, reason }) => {
     try {
-        console.log(`📖 get_document_content called: ${reason || 'No reason provided'}`);
 
         // If documentId provided, fetch from Firebase
         if (documentId && documentId !== currentDocumentId) {
@@ -525,7 +515,6 @@ export const scan_document_content = async ({ reason }) => {
 }
 
 export const search_document_content = async ({ query, reason }) => {
-    console.log(`🔍 Searching document for query: "${query}"`);
 
     try {
         // Validate inputs
@@ -534,7 +523,6 @@ export const search_document_content = async ({ query, reason }) => {
         }
 
         if (!currentDocumentContent || currentDocumentContent.trim().length === 0) {
-            console.warn('⚠️ Document content is empty');
             return {
                 success: true,
                 query,
@@ -550,7 +538,6 @@ export const search_document_content = async ({ query, reason }) => {
         const lowerQuery = query.toLowerCase();
         const lowerContent = currentDocumentContent.toLowerCase();
 
-        console.log(`📄 Document content length: ${currentDocumentContent.length} characters`);
 
         // Parse HTML elements using regex (no JSDOM needed)
         // Match HTML elements: p, h1-h6, blockquote, li, td, th, code, pre
@@ -560,7 +547,6 @@ export const search_document_content = async ({ query, reason }) => {
         let elementIndex = 0;
         const processedPositions = new Set(); // Avoid duplicate matches
 
-        console.log(`🔎 Searching for HTML elements...`);
 
         while ((elementMatch = elementRegex.exec(currentDocumentContent)) !== null) {
             try {
@@ -604,7 +590,6 @@ export const search_document_content = async ({ query, reason }) => {
             }
         }
 
-        console.log(`✅ Search complete: found ${matches.length} matches`);
 
         const result = {
             success: true,
@@ -753,7 +738,6 @@ export const replace_document_content = async ({ position, content, reason }) =>
     const totalLength = currentDocumentContent.length;
 
     if (replacementLength > totalLength * 0.8 && content.length < replacementLength * 0.1) {
-        console.warn(`⚠️ Attempted to replace ${replacementLength} chars with ${content.length} chars (>80% removal)`);
         return {
             success: false,
             html: `<div class="error-message">Cannot replace more than 80% of document with significantly smaller content. This looks like accidental deletion. Please be more specific.</div>`
@@ -792,7 +776,6 @@ export const remove_document_content = async ({ position, reason }) => {
     const totalLength = currentDocumentContent.length;
 
     if (removalLength > totalLength * 0.8) {
-        console.warn(`⚠️ Attempted to remove ${removalLength} chars from ${totalLength} total (>80%)`);
         return {
             success: false,
             html: `<div class="error-message">Cannot remove more than 80% of document content in a single operation. Please be more specific about what you want to remove.</div>`
@@ -1003,7 +986,6 @@ export const search_document_summary = async ({ query, reason }) => {
     };
 };
 export const get_all_documents_metadata_within_project = async ({ documentId, reason }) => {
-    console.log(`📚 get_all_documents_metadata_within_project called for documentId: ${documentId}`);
 
     try {
         if (!firestore) {
@@ -1039,12 +1021,6 @@ export const get_all_documents_metadata_within_project = async ({ documentId, re
 
         const docData = docSnap.data();
         const projectId = docData.ProjectID || docData.Project_Id;
-
-        console.log(`📚 Document data:`, {
-            documentId: targetDocId,
-            projectId,
-            allFields: Object.keys(docData)
-        });
 
         if (!projectId) {
             return {
@@ -1102,7 +1078,6 @@ export const get_all_documents_metadata_within_project = async ({ documentId, re
 
 // New tool: Get document summary
 export const get_document_summary = async ({ documentId, reason }) => {
-    console.log(`📝 get_document_summary called for documentId: ${documentId}`);
 
     try {
         if (!firestore) {
@@ -1189,7 +1164,6 @@ const parseGitHubRepo = (repoLink) => {
 
 // Tool: Get repository structure
 export const get_repo_structure = async ({ repoLink, branch = 'main', reason }) => {
-    console.log(`🌳 get_repo_structure called for repo: ${repoLink}, branch: ${branch}`);
 
     try {
         const { owner, repo } = parseGitHubRepo(repoLink);
@@ -1265,8 +1239,6 @@ export const get_repo_structure = async ({ repoLink, branch = 'main', reason }) 
 
 // Tool: Get repository commits
 export const get_repo_commits = async ({ repoLink, branch = 'main', page = 1, per_page = 30, reason }) => {
-    console.log(`📜 get_repo_commits called for repo: ${repoLink}, branch: ${branch}, page: ${page}`);
-
     try {
         const { owner, repo } = parseGitHubRepo(repoLink);
 

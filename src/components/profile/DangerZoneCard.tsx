@@ -16,7 +16,7 @@ const DangerZoneCard: React.FC<DangerZoneCardProps> = ({ onDeleteAccount }) => {
         </div>
         <button 
           onClick={onDeleteAccount}
-          className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 transition-colors font-medium"
+          className="px-4 py-2 bg-red-600 text-sm rounded-lg hover:bg-red-700 transition-colors font-medium text-white"
         >
           Delete Account
         </button>
