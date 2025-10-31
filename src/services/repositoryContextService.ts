@@ -246,7 +246,7 @@ class RepositoryContextService {
     if (!context) return [];
 
     const term = searchTerm.toLowerCase();
-    return context.structure.filter(file => 
+    return context.structure.filter(file =>
       file.name.toLowerCase().includes(term) ||
       file.path.toLowerCase().includes(term) ||
       file.language?.toLowerCase().includes(term)
