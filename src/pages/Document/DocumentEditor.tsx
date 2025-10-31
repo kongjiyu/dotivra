@@ -155,6 +155,9 @@ export default function DocumentEditor() {
     // Load document when documentId changes
     useEffect(() => {
         const loadDocument = async () => {
+            // Reset initial loading flag when starting to load a new document
+            isInitialLoadingRef.current = true;
+            
             if (!documentId) {
                 // If no documentId, start with empty content
                 setDocumentContent("");
@@ -207,7 +210,7 @@ export default function DocumentEditor() {
                 setTimeout(() => {
                     isInitialLoadingRef.current = false;
                     console.log('✅ Navigation state loaded - saves now enabled');
-                }, 500);
+                }, 800);
 
                 // Fetch version count
                 fetchVersionCount(documentId);
@@ -319,7 +322,8 @@ export default function DocumentEditor() {
                 // Allow sendUpdate after initial load completes
                 setTimeout(() => {
                     isInitialLoadingRef.current = false;
-                }, 1000);
+                    console.log('✅ API document loaded - saves now enabled');
+                }, 800);
             }
         };
 
