@@ -19,7 +19,6 @@ import {
 	X,
 	Download,
 	BookTemplate,
-	Copy,
 	Wrench,
 	HelpCircle,
 	Menu,
@@ -59,13 +58,10 @@ import type { Editor } from "@tiptap/react";
 
 interface DocumentMenuProps {
 	onUpdate?: (content: string) => void;
-	onCopyDocument?: () => void;
 	documentTitle?: string;
 	editor?: Editor; // TipTap editor instance
 	documentContent?: string; // Current document content for PDF export
 	versionCount?: number; // Number of versions in history (for undo button)
-	context?: 'main' | 'project'; // To distinguish between main menu and project tab imports
-	currentDocument?: any; // Current document data for template/copy operations
 	onToolbarToggle?: (show: boolean) => void; // Callback when toolbar visibility changes
 	onNavigationPaneToggle?: (show: boolean) => void; // Callback when navigation pane visibility changes
 	documentId?: string; // Document ID
@@ -73,13 +69,10 @@ interface DocumentMenuProps {
 
 export default function DocumentMenu({
 	onUpdate,
-	onCopyDocument,
 	documentTitle = "Untitled Document",
 	editor,
 	documentContent,
 	versionCount = 0,
-	context = 'main',
-	currentDocument,
 	onToolbarToggle,
 	onNavigationPaneToggle,
 }: DocumentMenuProps) {
@@ -815,39 +808,6 @@ export default function DocumentMenu({
 		setShowImportOptions(false);
 	};
 
-	const handleCopyDocument = async () => {
-		if (onCopyDocument) {
-			onCopyDocument();
-			return;
-		}
-
-		// If no custom handler, use the built-in service
-		if (!currentDocument) {
-			return;
-		}
-
-		try {
-			const { copyDocument, showNotification } = await import('@/services/documentService');
-
-			// Get current content from editor
-			const content = editor ? editor.getHTML() : (documentContent || '');
-
-			// Create document object with current content
-			const documentToCopy = {
-				...currentDocument,
-				Content: content,
-				Title: documentTitle
-			};
-
-			const copiedDoc = await copyDocument(documentToCopy);
-			showNotification(`Document copy "${copiedDoc.Title || copiedDoc.DocumentName}" created successfully!`, 'success');
-		} catch (error) {
-			console.error('Error copying document:', error);
-			const { showNotification } = await import('@/services/documentService');
-			showNotification('Failed to copy document', 'error');
-		}
-	};
-
 	// Undo/Redo state
 	// Disable undo if there's only 1 version (initial state) or 0 versions
 	const canUndo = versionCount > 1 && !!editor?.can().undo();
@@ -915,7 +875,7 @@ export default function DocumentMenu({
 
 						<div className="w-px h-4 bg-gray-300 mx-1"></div>
 
-						{/* File Menu - Combined Import (Markdown only), Export, Make a Copy */}
+						{/* File Menu - Combined Import (Markdown only), Export */}
 						<Popover open={showImportOptions} onOpenChange={setShowImportOptions}>
 							<PopoverTrigger asChild>
 								<Button
@@ -976,19 +936,7 @@ export default function DocumentMenu({
 
 									<div className="border-t border-gray-200 my-1"></div>
 
-									{/* Document Actions - Removed Save as Template */}
-									<Button
-										variant="ghost"
-										size="sm"
-										onClick={() => {
-											handleCopyDocument();
-											setShowImportOptions(false);
-										}}
-										className="w-full justify-start h-8 px-2 text-gray-700"
-									>
-										<Copy className="w-4 h-4 mr-2" />
-										<span className="text-sm">Make a Copy</span>
-									</Button>
+
 								</div>
 							</PopoverContent>
 						</Popover>						{/* Tools Menu */}

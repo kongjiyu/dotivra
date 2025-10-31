@@ -1,7 +1,7 @@
 // server/aiAgent.js
 // Simplified AI Agent with Direct Tool Registry Integration
 
-import { getToolsRegistry } from './services/toolService.js';
+import { getToolsRegistry } from './services/toolService.ts';
 
 /**
  * AI Agent with stage-based execution
@@ -76,6 +76,36 @@ ADAPTIVE BEHAVIOR:
         const systemPrompt = `You are an Advanced Document Manipulation AI Agent working with HTML documents.
 
 IMPORTANT: You are working with HTML document content. When analyzing or modifying content, you're manipulating HTML tags, attributes, and text.
+
+CONTENT STRUCTURE AND FORMATTING BEST PRACTICES:
+When creating or modifying content, ALWAYS prioritize structure and readability by using appropriate HTML list elements:
+
+1. **Bullet Lists** (<ul><li>): Use for unordered items, features, key points, or any non-sequential information
+   Example: Features, benefits, requirements, characteristics, options
+
+2. **Numbered Lists** (<ol><li>): Use for sequential steps, ranked items, ordered processes, or priority-based information
+   Example: Instructions, procedures, rankings, chronological events, step-by-step guides
+
+3. **Task Lists**: Use for action items, todos, or checkable items (use <ul> with special formatting)
+   Example: Project tasks, action items, checklists, goals
+
+WHY USE LISTS:
+- Lists make content scannable and easier to read
+- Lists provide clear visual hierarchy and structure
+- Lists help organize related information into digestible chunks
+- Lists are better than long paragraphs for presenting multiple points
+- Lists improve document accessibility and user experience
+
+WHEN TO USE LISTS:
+- Whenever presenting 3 or more related items
+- When describing features, benefits, or characteristics
+- When outlining steps, procedures, or instructions
+- When listing requirements, prerequisites, or dependencies
+- When presenting options, alternatives, or choices
+- When documenting APIs, functions, or technical specifications
+
+AVOID: Long paragraphs with comma-separated items or manually typed bullets. Instead, convert them to proper HTML list elements.
+
 ${repoSection}
 
 AVAILABLE TOOLS:
@@ -119,10 +149,18 @@ Stage 1 - Planning:
 {"stage":"planning","content":"Brief plan of what I'll do"}
 
 Stage 2 - Reasoning (repeatable):
-{"stage":"reasoning","content":"My analysis and thinking"}
+{"stage":"reasoning","content":"My analysis and thinking - IMPORTANT: Do NOT mention specific tool names here, only describe what action you want to take"}
 
 Stage 3 - Executing (when ready to use a tool):
-{"stage":"executing","content":"I will now use [tool_name] to [action]"}
+{"stage":"executing","content":"I will now [describe the action without mentioning tool name]"}
+
+REASONING STAGE EXAMPLES:
+✅ GOOD: "I need to retrieve the document content to analyze its structure"
+✅ GOOD: "I'll insert a new section after the introduction"
+✅ GOOD: "I need to check the repository structure for context"
+❌ BAD: "I will use get_document_content tool"
+❌ BAD: "Using insert_document_content_at_location"
+❌ BAD: "I'll call the get_repo_structure tool"
 
 Stage 4 - ToolUsed (CRITICAL - Must be valid JSON):
 {"stage":"toolUsed","content":{"tool":"tool_name","args":{"param1":"value1","param2":"value2"}}}
@@ -168,7 +206,7 @@ User Request: ${userPrompt}
         let currentStage = 'planning';
         let retryCount = 0;
         let toolExecutionCount = 0;
-        const maxToolExecutions = 15; // Prevent infinite loops
+        const maxToolExecutions = 14; // Request limit before asking for continuation
 
         while (toolExecutionCount < maxToolExecutions) {
 
@@ -347,9 +385,10 @@ User Request: ${userPrompt}
         }
 
         if (toolExecutionCount >= maxToolExecutions) {
+            // Reached request limit - provide summary and ask if user wants to continue
             yield {
                 stage: 'summary',
-                content: 'Process completed after maximum tool executions'
+                content: `I've completed ${maxToolExecutions} operations. The task may require additional steps to fully complete. Would you like me to continue? (Reply with "continue" or describe what else you'd like me to do)`
             };
         }
     }

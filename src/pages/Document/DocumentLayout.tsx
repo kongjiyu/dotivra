@@ -302,19 +302,6 @@ export default function DocumentLayout({
                             editor={currentEditor}
                             documentContent={documentContent}
                             versionCount={versionCount}
-                            context="main"
-                            currentDocument={{
-                                id: documentId,
-                                Title: documentTitle,
-                                Content: documentContent,
-                                DocumentType: 'Document',
-                                DocumentCategory: 'general',
-                                Project_Id: 'current-project',
-                                User_Id: 'current-user',
-                                Created_Time: new Date(),
-                                Updated_Time: new Date(),
-                                IsDraft: true
-                            }}
                             onToolbarToggle={setShowToolbar}
                             onNavigationPaneToggle={setShowNavigationPane}
                             documentId={documentId}

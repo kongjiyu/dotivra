@@ -12,7 +12,7 @@ export interface ToolExecution {
 }
 
 export interface HighlightedChange {
-    type: 'deletion' | 'addition' | 'replacement';
+    type: 'deletion' | 'addition';
     from: number;
     to: number;
     content?: string;
@@ -83,12 +83,18 @@ export function generatePreviewWithHighlights(
                 const replaceContent = args.content || '';
                 const originalText = originalContent.slice(replaceFrom, replaceTo);
                 
+                // Convert replacement into deletion + addition
                 changes.push({
-                    type: 'replacement',
+                    type: 'deletion',
                     from: replaceFrom,
                     to: replaceTo,
-                    content: replaceContent,
                     originalContent: originalText
+                });
+                changes.push({
+                    type: 'addition',
+                    from: replaceFrom,
+                    to: replaceFrom,
+                    content: replaceContent
                 });
                 offset += replaceContent.length - (replaceTo - replaceFrom);
                 break;
@@ -121,8 +127,7 @@ export function generatePreviewWithHighlights(
         changes: {
             additions: stats.additions,
             deletions: stats.deletions,
-            modifications: stats.replacements, // For backward compatibility
-            replacements: stats.replacements,
+            modifications: 0, // Modifications are tracked as deletion + addition pairs
             totalChanges: stats.totalChanges
         }
     };
@@ -192,22 +197,6 @@ function applyHighlightsToHtml(htmlContent: string, changes: HighlightedChange[]
                 }
                 lastPosition = from; // Don't advance past the insertion point
                 break;
-
-            case 'replacement':
-                // Show old content struck through in red, then new content in green
-                const replacedText = originalContent || htmlContent.substring(from, to);
-                const hasHtmlOld = /<[a-z][\s\S]*>/i.test(replacedText);
-                const hasHtmlReplacement = /<[a-z][\s\S]*>/i.test(newContent || '');
-                
-                if (hasHtmlOld || hasHtmlReplacement) {
-                    result += `<div class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px; opacity: 0.7; margin-bottom: 8px;">${hasHtmlOld ? replacedText : escapeHtml(replacedText)}</div>`;
-                    result += `<div class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px;">${newContent || ''}</div>`;
-                } else {
-                    result += `<span class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px;">${escapeHtml(replacedText)}</span>`;
-                    result += `<span class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px; margin-left: 4px;">${newContent || ''}</span>`;
-                }
-                lastPosition = to;
-                break;
         }
     }
 
@@ -234,12 +223,10 @@ function escapeHtml(text: string): string {
 export function getChangeStatistics(changes: HighlightedChange[]): {
     additions: number;
     deletions: number;
-    replacements: number;
     totalChanges: number;
 } {
     let additions = 0;
     let deletions = 0;
-    let replacements = 0;
 
     for (const change of changes) {
         switch (change.type) {
@@ -249,16 +236,12 @@ export function getChangeStatistics(changes: HighlightedChange[]): {
             case 'deletion':
                 deletions++;
                 break;
-            case 'replacement':
-                replacements++;
-                break;
         }
     }
 
     return {
         additions,
         deletions,
-        replacements,
         totalChanges: changes.length
     };
 }

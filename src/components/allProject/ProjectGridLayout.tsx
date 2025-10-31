@@ -19,7 +19,7 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
   onProjectEdit,
   onProjectDelete,
 }) => {
-  
+
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
@@ -46,7 +46,7 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
                   </div>
                 </div>
               </div>
-              
+
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -90,7 +90,7 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
               {project.Description || 'No description provided.'}
             </p>
 
-           
+
             {/* Footer */}
             <div className="flex items-center justify-between pt-3 border-t border-gray-100">
               <div className="text-xs text-gray-500">
@@ -100,18 +100,19 @@ const ProjectsGridView: React.FC<ProjectsGridViewProps> = ({
                   <span>No repository</span>
                 )}
               </div>
-              
+
               {project.GitHubRepo && (
-                <a
-                  href={project.GitHubRepo}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(project.GitHubRepo, '_blank', 'noopener,noreferrer');
+                  }}
                   className="inline-flex items-center gap-1.5 text-xs text-gray-600 hover:text-gray-900 transition-colors"
+                  title="Open repository"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
-                  Open
-                </a>
+                  <span>Open</span>
+                </button>
               )}
             </div>
           </div>

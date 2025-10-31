@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { X, Check, RotateCcw } from 'lucide-react';
+import { Check, RotateCcw } from 'lucide-react';
 import type { HighlightedChange } from '@/utils/previewGenerator';
 import { getChangeStatistics } from '@/utils/previewGenerator';
 import '@/styles/tiptap.css'; // Import TipTap editor styles
@@ -13,26 +13,30 @@ interface AIChangesPreviewModalProps {
     isOpen: boolean;
     onClose: () => void;
     previewHtml: string;
+    originalHtml: string; // Add original content for side-by-side view
     changes: HighlightedChange[] | {
         additions: number;
         deletions: number;
-        modifications?: number;
-        replacements?: number;
         totalChanges?: number;
     };
     onAccept: () => void;
     onReject: () => void;
     onRegenerate: () => void;
+    onApplyOriginal?: () => void; // New: Apply original content directly
+    onCopyModified?: () => void; // New: Copy modified content
 }
 
 export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
     isOpen,
     onClose,
     previewHtml,
+    originalHtml,
     changes,
     onAccept,
     onReject,
-    onRegenerate
+    onRegenerate,
+    onApplyOriginal,
+    onCopyModified
 }) => {
     if (!isOpen) return null;
 
@@ -42,14 +46,13 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
         : {
             additions: changes.additions || 0,
             deletions: changes.deletions || 0,
-            replacements: changes.replacements || changes.modifications || 0,
-            totalChanges: changes.totalChanges || ((changes.additions || 0) + (changes.deletions || 0) + (changes.replacements || changes.modifications || 0))
+            totalChanges: changes.totalChanges || ((changes.additions || 0) + (changes.deletions || 0))
         };
 
     return (
         <div className="fixed inset-0 z-100 mt-[120px] flex items-center justify-center bg-gray-900/50 backdrop-blur-sm">
-            <div className="relative w-[60vw] h-[75vh] max-w-7xl bg-white dark:bg-gray-900 rounded-lg shadow-2xl flex flex-col">
-                {/* Header */}
+            <div className="relative w-[70vw] h-[75vh] max-w-7xl bg-white dark:bg-gray-900 rounded-lg shadow-2xl flex flex-col">
+                {/* Header - No close button */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
                     <div>
                         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
@@ -59,13 +62,6 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
                             Review the changes before applying them to your document
                         </p>
                     </div>
-                    <button
-                        onClick={onClose}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
-                        aria-label="Close preview"
-                    >
-                        <X className="w-5 h-5 text-gray-500 dark:text-gray-400" />
-                    </button>
                 </div>
 
                 {/* Statistics Panel */}
@@ -81,12 +77,6 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
                             <span className="w-3 h-3 rounded-sm bg-red-200"></span>
                             <span className="text-gray-700 dark:text-gray-300">
                                 {stats.deletions} Deletion{stats.deletions !== 1 ? 's' : ''}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-sm bg-yellow-200"></span>
-                            <span className="text-gray-700 dark:text-gray-300">
-                                {stats.replacements} Replacement{stats.replacements !== 1 ? 's' : ''}
                             </span>
                         </div>
                         <div className="ml-auto font-medium text-gray-900 dark:text-white">
@@ -122,11 +112,6 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
                         <div className="flex items-center gap-2">
                             <mark style={{ backgroundColor: '#ffcccc', textDecoration: 'line-through', padding: '2px 4px' }}>red strikethrough</mark>
                             <span>= Removed content</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <mark style={{ backgroundColor: '#ffcccc', textDecoration: 'line-through', padding: '2px 4px', marginRight: '2px' }}>old</mark>
-                            <mark style={{ backgroundColor: '#ccffcc', padding: '2px 4px' }}>new</mark>
-                            <span>= Replacement</span>
                         </div>
                     </div>
                 </div>
@@ -176,6 +161,37 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
 
                 .preview-content {
                     scroll-behavior: smooth;
+                }
+
+                /* Remove inline code styling (backticks) in preview */
+                .preview-content code:not(pre code) {
+                    background-color: transparent !important;
+                    color: inherit !important;
+                    padding: 0 !important;
+                    font-size: inherit !important;
+                    font-family: inherit !important;
+                    border: none !important;
+                    border-radius: 0 !important;
+                }
+
+                /* Keep code block styling */
+                .preview-content pre {
+                    background-color: #f6f8fa;
+                    border: 1px solid #e1e4e8;
+                    border-radius: 6px;
+                    padding: 16px;
+                    overflow-x: auto;
+                    margin: 16px 0;
+                }
+
+                .preview-content pre code {
+                    background-color: transparent !important;
+                    color: #24292e !important;
+                    padding: 0 !important;
+                    font-size: 13px !important;
+                    font-family: 'Consolas', 'Monaco', 'Courier New', monospace !important;
+                    border: none !important;
+                    line-height: 1.5 !important;
                 }
 
                 .stage-block {

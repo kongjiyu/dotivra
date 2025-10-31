@@ -479,7 +479,6 @@ const AllTemplate: React.FC = () => {
         <div className="flex items-end justify-between gap-4 py-6">
           <div>
             <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight">Templates</h1>
-            <p className="text-gray-600 text-sm mt-1">Choose a template to kickstart your project documentation</p>
           </div>
         </div>
 
