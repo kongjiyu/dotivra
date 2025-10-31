@@ -1096,6 +1096,54 @@
   max-width: 100%;
 }
 
+/* Force Mermaid SVG text to be white for visibility on dark background */
+.mermaid-diagram svg text,
+.mermaid-content svg text,
+.mermaid-preview svg text,
+.mermaid-content-wrapper svg text {
+  fill: #ffffff !important;
+  color: #ffffff !important;
+}
+
+/* Force Mermaid SVG labels and message text to be white */
+.mermaid-diagram svg .label text,
+.mermaid-content svg .label text,
+.mermaid-preview svg .label text,
+.mermaid-diagram svg .messageText,
+.mermaid-content svg .messageText,
+.mermaid-preview svg .messageText,
+.mermaid-diagram svg tspan,
+.mermaid-content svg tspan,
+.mermaid-preview svg tspan {
+  fill: #ffffff !important;
+  color: #ffffff !important;
+}
+
+/* Ensure sequence diagram text is white */
+.mermaid-diagram svg .sequence .label text,
+.mermaid-content svg .sequence .label text,
+.mermaid-preview svg .sequence .label text {
+  fill: #ffffff !important;
+}
+
+/* Ensure all other text elements in Mermaid are white */
+.mermaid-diagram svg text[fill],
+.mermaid-content svg text[fill],
+.mermaid-preview svg text[fill] {
+  fill: #ffffff !important;
+}
+
+/* Ensure Mermaid diagram background is dark for white text contrast */
+.mermaid-diagram,
+.mermaid-content,
+.mermaid-preview {
+  background-color: #1e1e1e !important;
+}
+
+.mermaid-preview {
+  background-color: #1e1e1e !important;
+}
+
 .theme-dark .mermaid-preview {
   background-color: #2d2d30;
 }
@@ -2010,9 +2058,33 @@ kbd {
     break-inside: avoid !important;
   }
 
-  /* Ensure diagram text is readable */
-  .mermaid-content svg text {
-    fill: #000000 !important;
+  /* Print: White text on dark background (same as editor view) */
+  .mermaid-content svg text,
+  .mermaid-diagram svg text,
+  .mermaid-preview svg text,
+  .mermaid-content-wrapper svg text,
+  .mermaid-content svg .label text,
+  .mermaid-diagram svg .label text,
+  .mermaid-preview svg .label text,
+  .mermaid-content svg .messageText,
+  .mermaid-diagram svg .messageText,
+  .mermaid-preview svg .messageText,
+  .mermaid-content svg tspan,
+  .mermaid-diagram svg tspan,
+  .mermaid-preview svg tspan,
+  .mermaid-content svg text[fill],
+  .mermaid-diagram svg text[fill],
+  .mermaid-preview svg text[fill] {
+    fill: #ffffff !important;
+    color: #ffffff !important;
+  }
+
+  /* Print: Dark background for Mermaid diagrams (same as editor view) */
+  .mermaid-diagram,
+  .mermaid-content,
+  .mermaid-preview {
+    background-color: #1e1e1e !important;
+    border: 1px solid #2d2d2d !important;
   }
 
   /* Ensure diagram shapes have visible borders */

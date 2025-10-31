@@ -54,8 +54,12 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
           throw new Error('Failed to fetch templates');
         }
         const data = await response.json();
-        // Ensure data is an array
-        const templatesArray = Array.isArray(data) ? data : [];
+        // Backend returns { templates: [...] }, extract the array
+        const templatesArray = Array.isArray(data.templates) 
+          ? data.templates 
+          : Array.isArray(data) 
+          ? data 
+          : [];
         setTemplates(templatesArray);
       } catch (error) {
         console.error('Error fetching templates:', error);
@@ -318,7 +322,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                   </div>
 
                   {/* Fixed height scrollable container */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-[400px] overflow-y-auto pr-2 border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-[450px] overflow-y-auto pr-2 border border-gray-200 rounded-lg p-4 bg-gray-50/50">
                     {loadingTemplates ? (
                       <div className="col-span-2 flex items-center justify-center h-full">
                         <div className="text-center">
@@ -338,40 +342,40 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                           <div
                             key={template.id}
                             onClick={() => handleTemplateClick(template)}
-                            className={`relative rounded-lg p-3 transition-all duration-200 cursor-pointer group border-2 overflow-hidden h-[140px] flex flex-col ${isSelected
+                            className={`relative rounded-lg p-4 transition-all duration-200 cursor-pointer group border-2 overflow-hidden h-[180px] flex flex-col ${isSelected
                               ? 'border-blue-500 bg-blue-50/50 shadow-lg shadow-blue-100/50 ring-1 ring-blue-200/30'
                               : 'border-gray-200 hover:border-blue-300 hover:shadow-md hover:shadow-gray-100/50 bg-white hover:bg-gray-50/30'
                               }`}
                           >
                             {/* Selection indicator */}
                             {isSelected && (
-                              <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                              <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center shadow-lg z-10">
                                 <span className="text-white text-xs font-bold">✓</span>
                               </div>
                             )}
 
                             {/* Icon and Title Section */}
-                            <div className="flex items-start space-x-3 flex-1">
+                            <div className="flex items-start space-x-3 flex-1 min-h-0 mb-3">
                               <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-200 shadow-sm ${isSelected
                                 ? 'bg-blue-500 text-white shadow-blue-200'
                                 : 'bg-gray-100 text-gray-600 group-hover:bg-blue-500 group-hover:text-white group-hover:shadow-blue-200'
                                 }`}>
                                 <Icon className="h-5 w-5" />
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <h4 className={`font-semibold text-sm mb-1 transition-colors ${isSelected ? 'text-blue-900' : 'text-gray-900 group-hover:text-blue-900'
+                              <div className="flex-1 min-w-0 overflow-hidden">
+                                <h4 className={`font-semibold text-sm mb-1.5 transition-colors line-clamp-1 ${isSelected ? 'text-blue-900' : 'text-gray-900 group-hover:text-blue-900'
                                   }`}>
                                   {template.TemplateName}
                                 </h4>
-                                <p className="text-xs text-gray-600 leading-snug line-clamp-3">
+                                <p className="text-xs text-gray-600 leading-relaxed line-clamp-2">
                                   {template.Description}
                                 </p>
                               </div>
                             </div>
 
                             {/* Category Badge */}
-                            <div className="flex items-center justify-start mt-2 pt-2 border-t border-gray-200">
-                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${template.Category === 'user'
+                            <div className="flex items-center justify-start pt-3 border-t border-gray-200 flex-shrink-0">
+                              <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${template.Category === 'user'
                                 ? 'bg-emerald-50 text-emerald-700'
                                 : template.Category === 'developer'
                                   ? 'bg-purple-50 text-purple-700'
