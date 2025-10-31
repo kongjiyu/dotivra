@@ -13,6 +13,9 @@ import crypto from "crypto";
 admin.initializeApp();
 const db = admin.firestore();
 
+// Initialize toolService with Firestore
+import * as toolService from "./services/toolService";
+toolService.initFirestore(db);
 
 // MCP integration removed
 

@@ -7,7 +7,6 @@ import {
     CloudUpload,
     CloudOff,
     FileText,
-    FolderOpen,
     Sparkles,
     AlignJustify
 } from "lucide-react";
@@ -212,30 +211,6 @@ export default function DocumentLayout({
         setTimeout(() => setIsAIGenerating(false), 600);
     };
 
-    const handleCopyDocument = async () => {
-        try {
-            const { copyDocument, showNotification } = await import('@/services/documentService');
-
-            const documentToCopy = {
-                id: documentId,
-                Title: documentTitle,
-                Content: documentContent,
-                DocumentType: 'Document',
-                DocumentCategory: 'general',
-                Project_Id: 'current-project',
-                User_Id: 'current-user',
-                Created_Time: new Date(),
-                Updated_Time: new Date(),
-                IsDraft: true
-            };
-
-            const copiedDoc = await copyDocument(documentToCopy);
-            showNotification(`Document copy "${copiedDoc.Title || copiedDoc.DocumentName}" created successfully!`, 'success');
-        } catch (error) {
-            console.error('Error copying document:', error);
-        }
-    };
-
     return (
         <div className="m-h-screen bg-gray-50">
             {/* Header (fixed) */}
@@ -243,12 +218,10 @@ export default function DocumentLayout({
                 <div className="flex items-center w-full">
                     <div className="flex items-center space-x-4">
                         <div className="flex items-center gap-3">
-                            {/* Home button */}
-                            <Button asChild variant="ghost" size="icon" className="h-12 w-12">
-                                <Link to="/dashboard">
-                                    <FolderOpen className="h-9 w-9 text-blue-600" />
-                                </Link>
-                            </Button>
+                            {/* Home button with Dotivra logo */}
+                            <Link to="/dashboard" className="flex items-center hover:opacity-80 transition-opacity">
+                                <img src="/logo-icon.png" alt="Dotivra Home" className="h-12 w-12 object-contain" />
+                            </Link>
 
                             {/* Editable Document Title */}
                             {isEditingTitle && shouldAllowTitleEdit() ? (
@@ -343,7 +316,6 @@ export default function DocumentLayout({
                     <div className="fixed top-20 left-0 right-0 z-30 bg-white border-b border-gray-200">
                         <DocumentMenu
                             onUpdate={setDocumentContent}
-                            onCopyDocument={handleCopyDocument}
                             documentTitle={documentTitle}
                             editor={currentEditor}
                             documentContent={documentContent}

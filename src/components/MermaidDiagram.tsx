@@ -16,29 +16,34 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default
 
   useEffect(() => {
     mermaid.initialize({
-      startOnLoad: false, // Disable auto-rendering to prevent errors on dashboard
+      startOnLoad: false,
       theme,
       securityLevel: 'loose',
-      // Suppress error rendering in DOM
       suppressErrorRendering: true,
     });
 
     const renderDiagram = async () => {
       if (elementRef.current && chart.trim()) {
         try {
-          // Clear previous content
           elementRef.current.innerHTML = '';
-
-          // Generate unique ID
           const id = `mermaid-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-          // Render the diagram
           const { svg } = await mermaid.render(id, chart);
-
-          // Set the SVG content
           elementRef.current.innerHTML = svg;
 
-          // Aggressively remove ALL error divs from entire document
+          // Ensure any mermaid-generated error containers are not editable
+          try {
+            elementRef.current.querySelectorAll('.error, .mermaid-error, [id^="d"]').forEach((el) => {
+              if (el instanceof HTMLElement) {
+                el.setAttribute('contenteditable', 'false');
+                el.style.userSelect = 'none';
+                el.tabIndex = -1;
+              }
+            });
+          } catch (e) {
+            // ignore
+          }
+
+          // Remove error divs from document
           setTimeout(() => {
             const errorSelectors = [
               '#d' + id,
@@ -51,7 +56,6 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default
             errorSelectors.forEach(selector => {
               document.querySelectorAll(selector).forEach(div => {
                 if (div !== elementRef.current && div.parentNode) {
-                  // Check if it's actually an error div and not part of our content
                   if (div.textContent?.includes('Syntax error') ||
                     div.textContent?.includes('error') ||
                     div.id.includes('error')) {
@@ -61,7 +65,6 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default
               });
             });
 
-            // Also remove from body directly
             Array.from(document.body.children).forEach(child => {
               if (child instanceof HTMLElement &&
                 child !== document.getElementById('root') &&
@@ -73,7 +76,6 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, theme = 'default
 
         } catch (error) {
           console.error('Error rendering Mermaid diagram:', error);
-          // Don't show error UI - just fail silently
           elementRef.current.innerHTML = '';
         }
       }
