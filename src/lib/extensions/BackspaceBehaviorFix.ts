@@ -143,6 +143,61 @@ export const BackspaceBehaviorFix = Extension.create({
                             return true
                         }
                         
+                        // Handle code blocks
+                        if (currentBlockType === 'codeBlock') {
+                            event.preventDefault()
+                            
+                            const codeContent = currentBlockNode.content
+                            
+                            // If code block is empty or only has whitespace, delete it and merge with previous block
+                            const codeText = currentBlockNode.textContent.trim()
+                            
+                            if (codeText === '') {
+                                // Empty code block - delete it entirely
+                                const $before = state.doc.resolve(currentBlockPos)
+                                const before = $before.nodeBefore
+                                
+                                if (before) {
+                                    // Move cursor to end of previous block
+                                    const beforePos = currentBlockPos - before.nodeSize
+                                    let tr = state.tr.delete(currentBlockPos, currentBlockPos + currentBlockNode.nodeSize)
+                                    
+                                    // Set cursor to end of previous block
+                                    const newPos = beforePos + before.nodeSize - 1
+                                    try {
+                                        tr = tr.setSelection(TextSelection.create(tr.doc, newPos))
+                                    } catch (e) {
+                                        const $newPos = tr.doc.resolve(beforePos)
+                                        tr = tr.setSelection(TextSelection.near($newPos))
+                                    }
+                                    
+                                    if (dispatch && tr.docChanged) {
+                                        dispatch(tr)
+                                    }
+                                    return true
+                                }
+                            } 
+                            
+                            // Code block has content - convert to paragraph
+                            const newParagraph = state.schema.nodes.paragraph.create({}, codeContent)
+                            let tr = state.tr.replaceWith(currentBlockPos, currentBlockPos + currentBlockNode.nodeSize, newParagraph)
+                            
+                            const newCursorPos = currentBlockPos + 1
+                            
+                            try {
+                                tr = tr.setSelection(TextSelection.create(tr.doc, newCursorPos))
+                            } catch (e) {
+                                const $fallback = tr.doc.resolve(currentBlockPos)
+                                tr = tr.setSelection(TextSelection.near($fallback))
+                            }
+                            
+                            if (dispatch && tr.docChanged) {
+                                dispatch(tr)
+                            }
+                            
+                            return true
+                        }
+                        
                         return false
                     }
                 }

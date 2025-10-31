@@ -80,6 +80,23 @@ const DocumentContext = memo(({ editor, children }: DocumentContextProps) => {
         const handleClick = (event: MouseEvent) => {
             const target = event.target as HTMLElement;
 
+            // IMPORTANT: Don't interfere if user has made a selection (e.g., highlighting text)
+            const selection = window.getSelection();
+            const hasTextSelection = selection && !selection.isCollapsed && selection.toString().trim().length > 0;
+            
+            // If there's a text selection, preserve it - don't move cursor
+            if (hasTextSelection) {
+                return;
+            }
+
+            // Also check editor's internal selection state
+            const editorSelection = editor.state.selection;
+            const hasEditorSelection = !editorSelection.empty;
+            
+            if (hasEditorSelection) {
+                return;
+            }
+
             // More robust check: detect if click is on blank space (not on actual content nodes)
             // Check if target is container/wrapper, not actual content elements
             const isEditorContainer = target.classList.contains('tiptap') ||
