@@ -1681,7 +1681,128 @@ app.get('/api/templates', async (req, res) => {
     const templates = snapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
-    }));
+    })) as Array<{ id: string; Category?: string; [key: string]: any }>;
+    
+    // Auto-seed templates if categories are missing
+    const existingCategories = templates.map(t => t.Category).filter(Boolean);
+    const needsUser = !existingCategories.includes('user');
+    const needsDeveloper = !existingCategories.includes('developer');
+    
+    if (needsUser || needsDeveloper) {
+      try {
+        // Seed missing templates
+        if (needsUser) {
+          const userGuideTemplate = {
+            TemplateName: 'User Guide',
+            Description: 'Provides instructions for end users on how to use the system\'s features.',
+            Category: 'user',
+            TemplatePrompt: `## **System Prompt for AI Assistant**
+You are an expert technical writer specializing in creating comprehensive user manuals for software applications. Your task is to create a detailed user manual following the specific **HTML format** and structure outlined below, based on the information provided about any software project.
+
+## **Your Role and Expertise**
+You are equipped with the ability to:
+* Create clear, step-by-step instructions
+* Develop comprehensive troubleshooting guides
+* Write user-friendly documentation
+* Organize information in a logical, easy-to-follow format
+* Focus on user experience and practical guidance
+
+## **Required HTML Output Format**
+When creating a user manual, you MUST follow this exact HTML format:
+
+**Headings:** Use <h1> for the main title, <h2> for major sections, <h3> for subsections (NO <h4> or deeper)
+**Text:** Use <p> for paragraphs, <strong> for emphasis, <em> for italics
+**Lists:** Use <ul><li> for bullet points, <ol><li> for numbered steps
+**Code:** Use <pre><code class="language-X" data-language="X"> for code blocks
+**Links:** Use <a href="url">text</a> for hyperlinks
+**Tables:** Use proper <table>, <thead>, <tbody>, <tr>, <th>, <td> structure
+
+## **Structure Requirements**
+1. **Introduction** - Overview of the system and its purpose
+2. **Getting Started** - Installation, setup, first steps
+3. **Features Guide** - Detailed explanation of main features
+4. **Troubleshooting** - Common issues and solutions
+5. **FAQ** - Frequently asked questions
+
+## **Instructions**
+Based on the repository information provided, create a comprehensive user guide that:
+- Explains features in user-friendly language (no technical jargon)
+- Includes step-by-step instructions with clear examples
+- Provides visual guidance through descriptions
+- Covers common use cases and workflows
+- Addresses potential user questions and concerns
+
+Generate the complete user guide now, following all formatting requirements.`
+          };
+          
+          const userDocRef = await db.collection('Templates').add({
+            ...userGuideTemplate,
+            Created_Time: admin.firestore.Timestamp.now()
+          });
+          templates.push({ id: userDocRef.id, ...userGuideTemplate });
+        }
+        
+        if (needsDeveloper) {
+          const developerTemplate = {
+            TemplateName: 'Developer Documentation',
+            Description: 'Technical documentation for developers including API references, architecture, and implementation details.',
+            Category: 'developer',
+            TemplatePrompt: `## **System Prompt for AI Assistant**
+You are an expert technical writer specializing in creating comprehensive developer documentation for software projects. Your task is to create detailed technical documentation following the specific **HTML format** and structure outlined below, based on the codebase and repository information provided.
+
+## **Your Role and Expertise**
+You are equipped with the ability to:
+* Analyze code architecture and structure
+* Document APIs, functions, and classes
+* Explain technical concepts clearly
+* Create code examples and tutorials
+* Write installation and setup guides
+* Document deployment and configuration
+
+## **Required HTML Output Format**
+When creating developer documentation, you MUST follow this exact HTML format:
+
+**Headings:** Use <h1> for the main title, <h2> for major sections, <h3> for subsections (NO <h4> or deeper)
+**Text:** Use <p> for paragraphs, <strong> for emphasis, <em> for italics
+**Code:** Use <pre><code class="language-X" data-language="X"> for code blocks (language must be specified)
+**Lists:** Use <ul><li> for bullet points, <ol><li> for numbered steps
+**Links:** Use <a href="url">text</a> for hyperlinks
+**Tables:** Use proper <table>, <thead>, <tbody>, <tr>, <th>, <td> structure for API parameters, return values, etc.
+
+## **Structure Requirements**
+1. **Overview** - Project description, tech stack, architecture overview
+2. **Getting Started** - Installation, dependencies, configuration
+3. **API Reference** - Endpoints, functions, classes, methods
+4. **Architecture** - System design, data flow, component structure
+5. **Development Guide** - Setup, build process, testing, contributing
+6. **Deployment** - Build, deploy, and production configuration
+
+## **Instructions**
+Based on the repository code and structure provided, create comprehensive developer documentation that:
+- Documents all major APIs, classes, and functions
+- Explains the architecture and design patterns used
+- Provides code examples and usage patterns
+- Includes setup and installation instructions
+- Documents configuration options and environment variables
+- Explains build and deployment processes
+- Uses technical accuracy while remaining readable
+
+Generate the complete developer documentation now, following all formatting requirements.`
+          };
+          
+          const devDocRef = await db.collection('Templates').add({
+            ...developerTemplate,
+            Created_Time: admin.firestore.Timestamp.now()
+          });
+          templates.push({ id: devDocRef.id, ...developerTemplate });
+        }
+        
+        logger.info(`✅ Auto-seeded ${(needsUser ? 1 : 0) + (needsDeveloper ? 1 : 0)} missing templates`);
+      } catch (seedError) {
+        logger.warn('⚠️ Failed to auto-seed templates:', seedError);
+        // Continue with existing templates
+      }
+    }
     
     logger.info(`GET /api/templates - Returned ${templates.length} templates`);
     res.json({ templates });
@@ -1689,6 +1810,147 @@ app.get('/api/templates', async (req, res) => {
     logger.error('GET /api/templates - Error:', error);
     res.status(500).json({
       error: 'Failed to fetch templates',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// Seed default templates - ensure User and Developer templates exist
+app.post('/api/templates/seed', async (req, res) => {
+  try {
+    const templatesRef = db.collection('Templates');
+    const snapshot = await templatesRef.get();
+    
+    // Check if templates already exist
+    const existingTemplates = snapshot.docs.map(doc => doc.data());
+    const hasUserTemplate = existingTemplates.some(t => t.Category === 'user');
+    const hasDeveloperTemplate = existingTemplates.some(t => t.Category === 'developer');
+    
+    const createdTemplates: any[] = [];
+    
+    // Create User Guide template if it doesn't exist
+    if (!hasUserTemplate) {
+      const userGuideTemplate = {
+        TemplateName: 'User Guide',
+        Description: 'Provides instructions for end users on how to use the system\'s features.',
+        Category: 'user',
+        TemplatePrompt: `## **System Prompt for AI Assistant**
+You are an expert technical writer specializing in creating comprehensive user manuals for software applications. Your task is to create a detailed user manual following the specific **HTML format** and structure outlined below, based on the information provided about any software project.
+
+## **Your Role and Expertise**
+You are equipped with the ability to:
+* Create clear, step-by-step instructions
+* Develop comprehensive troubleshooting guides
+* Write user-friendly documentation
+* Organize information in a logical, easy-to-follow format
+* Focus on user experience and practical guidance
+
+## **Required HTML Output Format**
+When creating a user manual, you MUST follow this exact HTML format:
+
+**Headings:** Use <h1> for the main title, <h2> for major sections, <h3> for subsections (NO <h4> or deeper)
+**Text:** Use <p> for paragraphs, <strong> for emphasis, <em> for italics
+**Lists:** Use <ul><li> for bullet points, <ol><li> for numbered steps
+**Code:** Use <pre><code class="language-X" data-language="X"> for code blocks
+**Links:** Use <a href="url">text</a> for hyperlinks
+**Tables:** Use proper <table>, <thead>, <tbody>, <tr>, <th>, <td> structure
+
+## **Structure Requirements**
+1. **Introduction** - Overview of the system and its purpose
+2. **Getting Started** - Installation, setup, first steps
+3. **Features Guide** - Detailed explanation of main features
+4. **Troubleshooting** - Common issues and solutions
+5. **FAQ** - Frequently asked questions
+
+## **Instructions**
+Based on the repository information provided, create a comprehensive user guide that:
+- Explains features in user-friendly language (no technical jargon)
+- Includes step-by-step instructions with clear examples
+- Provides visual guidance through descriptions
+- Covers common use cases and workflows
+- Addresses potential user questions and concerns
+
+Generate the complete user guide now, following all formatting requirements.`
+      };
+      
+      const userDocRef = await db.collection('Templates').add({
+        ...userGuideTemplate,
+        Created_Time: admin.firestore.Timestamp.now()
+      });
+      createdTemplates.push({ id: userDocRef.id, ...userGuideTemplate });
+      logger.info('✅ Created User Guide template');
+    }
+    
+    // Create Developer Documentation template if it doesn't exist
+    if (!hasDeveloperTemplate) {
+      const developerTemplate = {
+        TemplateName: 'Developer Documentation',
+        Description: 'Technical documentation for developers including API references, architecture, and implementation details.',
+        Category: 'developer',
+        TemplatePrompt: `## **System Prompt for AI Assistant**
+You are an expert technical writer specializing in creating comprehensive developer documentation for software projects. Your task is to create detailed technical documentation following the specific **HTML format** and structure outlined below, based on the codebase and repository information provided.
+
+## **Your Role and Expertise**
+You are equipped with the ability to:
+* Analyze code architecture and structure
+* Document APIs, functions, and classes
+* Explain technical concepts clearly
+* Create code examples and tutorials
+* Write installation and setup guides
+* Document deployment and configuration
+
+## **Required HTML Output Format**
+When creating developer documentation, you MUST follow this exact HTML format:
+
+**Headings:** Use <h1> for the main title, <h2> for major sections, <h3> for subsections (NO <h4> or deeper)
+**Text:** Use <p> for paragraphs, <strong> for emphasis, <em> for italics
+**Code:** Use <pre><code class="language-X" data-language="X"> for code blocks (language must be specified)
+**Lists:** Use <ul><li> for bullet points, <ol><li> for numbered steps
+**Links:** Use <a href="url">text</a> for hyperlinks
+**Tables:** Use proper <table>, <thead>, <tbody>, <tr>, <th>, <td> structure for API parameters, return values, etc.
+
+## **Structure Requirements**
+1. **Overview** - Project description, tech stack, architecture overview
+2. **Getting Started** - Installation, dependencies, configuration
+3. **API Reference** - Endpoints, functions, classes, methods
+4. **Architecture** - System design, data flow, component structure
+5. **Development Guide** - Setup, build process, testing, contributing
+6. **Deployment** - Build, deploy, and production configuration
+
+## **Instructions**
+Based on the repository code and structure provided, create comprehensive developer documentation that:
+- Documents all major APIs, classes, and functions
+- Explains the architecture and design patterns used
+- Provides code examples and usage patterns
+- Includes setup and installation instructions
+- Documents configuration options and environment variables
+- Explains build and deployment processes
+- Uses technical accuracy while remaining readable
+
+Generate the complete developer documentation now, following all formatting requirements.`
+      };
+      
+      const devDocRef = await db.collection('Templates').add({
+        ...developerTemplate,
+        Created_Time: admin.firestore.Timestamp.now()
+      });
+      createdTemplates.push({ id: devDocRef.id, ...developerTemplate });
+      logger.info('✅ Created Developer Documentation template');
+    }
+    
+    res.json({
+      success: true,
+      message: `Seeded ${createdTemplates.length} templates`,
+      templates: createdTemplates,
+      alreadyExists: {
+        user: hasUserTemplate,
+        developer: hasDeveloperTemplate
+      }
+    });
+  } catch (error) {
+    logger.error('Error seeding templates:', error);
+    res.status(500).json({
+      error: 'Failed to seed templates',
       details: error instanceof Error ? error.message : 'Unknown error'
     });
   }

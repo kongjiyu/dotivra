@@ -499,11 +499,11 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
             const resp = await fetch(GENERATE_API, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt: fullPrompt,
-                    model: this.defaultModel,
-                    generationConfig: { maxOutputTokens: 2048 },
-                }),
+                    body: JSON.stringify({
+                        prompt: fullPrompt,
+                        model: this.defaultModel,
+                        generationConfig: { maxOutputTokens: 2048 },
+                    }),
             });
             // Try to get response body for better error details
             const responseText = await resp.text();
