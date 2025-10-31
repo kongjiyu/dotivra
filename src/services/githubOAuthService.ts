@@ -1,6 +1,7 @@
 // GitHub OAuth Service for user-specific authentication
 import { auth, db } from '@/config/firebase';
 import { doc, setDoc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
+import { unlink, GithubAuthProvider } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 
 interface GitHubToken {
@@ -169,14 +170,48 @@ class GitHubOAuthService {
 
   /**
    * Disconnect user's GitHub account
+   * This removes both OAuth tokens and Firebase Auth provider linking
    */
   async disconnectGitHub(user: User): Promise<void> {
-    const userRef = doc(db, 'Users', user.uid);
-    
-    // Delete the entire github field to ensure clean disconnect
-    await updateDoc(userRef, {
-      github: deleteField()
-    });
+    try {
+      // Step 1: Check if GitHub is the only auth provider
+      const providerIds = user.providerData.map(provider => provider.providerId);
+      const hasGitHubProvider = providerIds.includes('github.com');
+      
+      // If GitHub is the ONLY provider, warn but allow disconnecting OAuth data
+      // (they can still sign in with GitHub, just without repo access)
+      if (hasGitHubProvider && providerIds.length === 1) {
+        console.warn('⚠️ GitHub is the only authentication provider. Keeping provider linked but removing OAuth tokens.');
+        // Only clear OAuth data, don't unlink the provider
+      } else if (hasGitHubProvider) {
+        // Safe to unlink - user has other authentication methods
+        try {
+          await unlink(user, GithubAuthProvider.PROVIDER_ID);
+          console.log('✅ GitHub provider unlinked from Firebase Auth');
+        } catch (unlinkError) {
+          console.warn('⚠️ Could not unlink GitHub provider:', unlinkError);
+          // Continue with Firestore cleanup even if unlink fails
+        }
+      }
+
+      // Step 2: Clear all GitHub-related data from Firestore
+      const userRef = doc(db, 'Users', user.uid);
+      
+      await updateDoc(userRef, {
+        // Remove GitHub OAuth data (from githubOAuthService)
+        github: deleteField(),
+        // Remove GitHub Auth data (from authService)
+        githubUsername: deleteField(),
+        githubAccessToken: deleteField(),
+        githubTokenExpiry: deleteField(),
+        githubScopes: deleteField()
+      });
+      
+      console.log('✅ GitHub data cleared from Firestore');
+    } catch (error) {
+      console.error('❌ Error disconnecting GitHub:', error);
+      throw error;
+    }
   }
 
   /**

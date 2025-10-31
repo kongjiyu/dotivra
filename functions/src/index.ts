@@ -1752,12 +1752,29 @@ app.post('/api/documents', async (req, res) => {
       EditedBy: userIdValue,
       Created_Time: admin.firestore.Timestamp.now(),
       Updated_Time: admin.firestore.Timestamp.now(),
-      Hash: null
+      Hash: null,
+      version: 1 // Initialize version to 1
     };
     
     
     const docRef = await db.collection('Documents').add(docData);
     
+    
+    // ✅ Save initial version (version 1) to DocumentHistory
+    try {
+      await db.collection('DocumentHistory').add({
+        Document_Id: docRef.id,
+        Content: contentValue,
+        Version: 1,
+        Edited_Time: admin.firestore.Timestamp.now(),
+        EditedBy: userIdValue,
+        Channel: 'content',
+      });
+      logger.info(`📚 Initial version (1) saved to DocumentHistory for document ${docRef.id}`);
+    } catch (historyError) {
+      logger.error('❌ Failed to save initial version history:', historyError);
+      // Don't fail document creation if history save fails
+    }
     
     const responseData = {
       id: docRef.id,

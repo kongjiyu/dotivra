@@ -151,6 +151,10 @@ const Profile: React.FC = () => {
           confirmButtonText: 'Log Out Now',
           cancelButtonText: 'Cancel',
           confirmButtonColor: '#DC2626',
+          customClass: {
+            confirmButton: '!text-white',
+            cancelButton: '!text-white'
+          }
         }).then((result) => {
           if (result.isConfirmed) {
             // Log out the user

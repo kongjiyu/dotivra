@@ -115,16 +115,32 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
   const handleDisconnect = async () => {
     if (!firebaseUser) return;
 
+    // Check if GitHub is the only authentication method
+    const providerIds = firebaseUser.providerData.map(provider => provider.providerId);
+    const hasGitHubProvider = providerIds.includes('github.com');
+    const isOnlyProvider = hasGitHubProvider && providerIds.length === 1;
+
+    // Prepare confirmation message based on authentication status
+    let confirmText = 'Are you sure you want to disconnect your GitHub account? This will remove access to your repositories.';
+    
+    if (isOnlyProvider) {
+      confirmText = 'GitHub is your only sign-in method. Disconnecting will remove repository access but you can still sign in with GitHub. Consider adding another sign-in method (like email/password) first.';
+    }
+
     // Show confirmation dialog with SweetAlert2
     const result = await Swal.fire({
       title: 'Disconnect GitHub?',
-      text: 'Are you sure you want to disconnect your GitHub account?',
+      text: confirmText,
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Yes, Disconnect',
       cancelButtonText: 'Cancel',
       confirmButtonColor: '#DC2626',
       cancelButtonColor: '#6B7280',
+      customClass: {
+        confirmButton: '!text-white',
+        cancelButton: '!text-white'
+      }
     });
 
     if (!result.isConfirmed) {
@@ -135,7 +151,7 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
       setLoading(true);
       setError(null);
 
-      // Actually disconnect from Firestore
+      // Disconnect from Firebase Auth and Firestore
       await githubOAuthService.disconnectGitHub(firebaseUser);
 
       // Update local state
@@ -146,7 +162,11 @@ const GitHubConnectionCard: React.FC<GitHubConnectionCardProps> = ({ onConnectio
       // Refresh user profile to reflect changes
       await refreshUserProfile();
       
-      showSuccess('Disconnected', 'GitHub account has been disconnected successfully.');
+      const successMessage = isOnlyProvider 
+        ? 'GitHub repository access has been removed. You can still sign in with GitHub.'
+        : 'GitHub account has been disconnected successfully.';
+      
+      showSuccess('Disconnected', successMessage);
       
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to disconnect GitHub');
