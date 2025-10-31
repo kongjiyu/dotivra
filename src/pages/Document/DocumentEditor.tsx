@@ -64,7 +64,7 @@ export default function DocumentEditor() {
     // Loading state for document
     const [isLoadingDocument, setIsLoadingDocument] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    
+
     // Version history state
     const [versionCount, setVersionCount] = useState<number>(0);
 
@@ -105,7 +105,7 @@ export default function DocumentEditor() {
     const fetchVersionCount = async (docId: string) => {
         try {
             const response = await fetch(API_ENDPOINTS.documentHistory(docId));
-            
+
             if (!response.ok) {
                 setVersionCount(0);
                 return;
@@ -180,7 +180,7 @@ export default function DocumentEditor() {
 
             if (navigationState?.documentData) {
                 const documentData = navigationState.documentData;
-               
+
 
                 setDocumentId(documentId);
                 setDocumentTitle(documentData.Title || documentData.DocumentName || "Untitled Document");

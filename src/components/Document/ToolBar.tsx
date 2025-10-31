@@ -1564,7 +1564,7 @@ D --> E`;
                                                 title: 'Insert Link',
                                                 html:
                                                     '<input id="swal-link-url" class="swal2-input" placeholder="https://example.com" style="margin-bottom: 10px;" />' +
-                                                    (hasSelection 
+                                                    (hasSelection
                                                         ? `<div style="margin: 10px 0; padding: 10px; background: #f3f4f6; border-radius: 6px; text-align: left;"><strong>Selected text:</strong> ${selectedText}</div>`
                                                         : '<input id="swal-link-text" class="swal2-input" placeholder="Link text (optional)" />'),
                                                 focusConfirm: false,

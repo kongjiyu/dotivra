@@ -1267,12 +1267,12 @@ export default function DocumentMenu({
 								<X className="w-5 h-5" />
 							</button>
 						</div>
-						
+
 						<div className="space-y-4 text-gray-700">
 							<div>
 								<h3 className="font-semibold text-lg mb-2 text-gray-900">🤖 Your Intelligent Document Assistant</h3>
 								<p className="leading-relaxed">
-									The AI Assistant in the chat sidebar is your powerful companion for document creation and editing. 
+									The AI Assistant in the chat sidebar is your powerful companion for document creation and editing.
 									It understands your documents, your project repository, and can help you work more efficiently.
 								</p>
 							</div>
@@ -1319,7 +1319,7 @@ export default function DocumentMenu({
 
 							<div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
 								<p className="text-sm">
-									<strong>💡 Pro Tip:</strong> The AI Assistant works best when you provide clear, specific instructions. 
+									<strong>💡 Pro Tip:</strong> The AI Assistant works best when you provide clear, specific instructions.
 									It will automatically check your repository for context and recent changes to give you the most relevant help.
 								</p>
 							</div>

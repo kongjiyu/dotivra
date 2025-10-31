@@ -27,8 +27,8 @@ export class AIAgent {
 
         // Filter out repo tools if no repo link is provided
         if (!repoLink) {
-            tools = tools.filter(tool => 
-                tool.name !== 'get_repo_structure' && 
+            tools = tools.filter(tool =>
+                tool.name !== 'get_repo_structure' &&
                 tool.name !== 'get_repo_commits'
             );
         }

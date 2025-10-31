@@ -62,7 +62,7 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
         setLoadingTemplates(false);
       }
     };
-    
+
     if (isOpen) {
       fetchTemplates();
     }
@@ -236,11 +236,10 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                         setUseTemplate(true);
                         setValidationError('');
                       }}
-                      className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border-2 transition-all ${
-                        useTemplate
+                      className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border-2 transition-all ${useTemplate
                           ? 'border-blue-500 bg-blue-50 text-blue-700'
                           : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
-                      }`}
+                        }`}
                     >
                       Use Template
                     </button>
@@ -251,18 +250,17 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                         setSelectedTemplateId(null);
                         setValidationError('');
                       }}
-                      className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border-2 transition-all ${
-                        !useTemplate
+                      className={`flex-1 px-3 py-2 text-sm font-medium rounded-lg border-2 transition-all ${!useTemplate
                           ? 'border-blue-500 bg-blue-50 text-blue-700'
                           : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
-                      }`}
+                        }`}
                     >
                       No Template
                     </button>
                   </div>
                   <p className="text-xs text-gray-500">
-                    {useTemplate 
-                      ? 'Select a template below to start with pre-defined content' 
+                    {useTemplate
+                      ? 'Select a template below to start with pre-defined content'
                       : 'Start with a blank document and write from scratch'}
                   </p>
                 </div>
@@ -271,131 +269,123 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
               {useTemplate && (
                 <div className="flex flex-col min-w-0">
                   <h4 className="text-sm font-semibold text-gray-700 mb-3">Document Template</h4>
-                  
+
                   {/* Tab Bar */}
-                <div className="flex space-x-1 mb-4 border-b border-gray-200">
-                  <button
-                    onClick={() => setActiveTab('user')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors relative ${
-                      activeTab === 'user'
-                        ? 'text-blue-600 border-b-2 border-blue-600'
-                        : 'text-gray-600 hover:text-gray-900 hover:border-b-2 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      User
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('developer')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors relative ${
-                      activeTab === 'developer'
-                        ? 'text-purple-600 border-b-2 border-purple-600'
-                        : 'text-gray-600 hover:text-gray-900 hover:border-b-2 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      Developer
-                    </div>
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('general')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors relative ${
-                      activeTab === 'general'
-                        ? 'text-gray-700 border-b-2 border-gray-700'
-                        : 'text-gray-600 hover:text-gray-900 hover:border-b-2 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      General
-                    </div>
-                  </button>
-                </div>
-
-                {/* Fixed height scrollable container */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-[400px] overflow-y-auto pr-2 border border-gray-200 rounded-lg p-4 bg-gray-50/50">
-                  {loadingTemplates ? (
-                    <div className="col-span-2 flex items-center justify-center h-full">
-                      <div className="text-center">
-                        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600">Loading templates...</p>
-                      </div>
-                    </div>
-                  ) : relevantTemplates.length === 0 ? (
-                    <div className="col-span-2 flex items-center justify-center h-full">
-                      <p className="text-sm text-gray-500">No templates available for this category</p>
-                    </div>
-                  ) : (
-                    relevantTemplates.map((template) => {
-                    const Icon = FileText; // Default icon for all templates
-                    const isSelected = selectedTemplateId === template.id;
-                    return (
-                      <div
-                        key={template.id}
-                        onClick={() => handleTemplateClick(template)}
-                        className={`relative rounded-lg p-3 transition-all duration-200 cursor-pointer group border-2 overflow-hidden h-[140px] flex flex-col ${
-                          isSelected
-                            ? 'border-blue-500 bg-blue-50/50 shadow-lg shadow-blue-100/50 ring-1 ring-blue-200/30'
-                            : 'border-gray-200 hover:border-blue-300 hover:shadow-md hover:shadow-gray-100/50 bg-white hover:bg-gray-50/30'
+                  <div className="flex space-x-1 mb-4 border-b border-gray-200">
+                    <button
+                      onClick={() => setActiveTab('user')}
+                      className={`px-4 py-2 text-sm font-medium transition-colors relative ${activeTab === 'user'
+                          ? 'text-blue-600 border-b-2 border-blue-600'
+                          : 'text-gray-600 hover:text-gray-900 hover:border-b-2 hover:border-gray-300'
                         }`}
-                      >
-                        {/* Selection indicator */}
-                        {isSelected && (
-                          <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
-                            <span className="text-white text-xs font-bold">✓</span>
-                          </div>
-                        )}
-
-                        {/* Icon and Title Section */}
-                        <div className="flex items-start space-x-3 flex-1">
-                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-200 shadow-sm ${
-                            isSelected
-                              ? 'bg-blue-500 text-white shadow-blue-200'
-                              : 'bg-gray-100 text-gray-600 group-hover:bg-blue-500 group-hover:text-white group-hover:shadow-blue-200'
-                          }`}>
-                            <Icon className="h-5 w-5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h4 className={`font-semibold text-sm mb-1 transition-colors ${
-                              isSelected ? 'text-blue-900' : 'text-gray-900 group-hover:text-blue-900'
-                            }`}>
-                              {template.TemplateName}
-                            </h4>
-                            <p className="text-xs text-gray-600 leading-snug line-clamp-3">
-                              {template.Description}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Category Badge */}
-                        <div className="flex items-center justify-start mt-2 pt-2 border-t border-gray-200">
-                          <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                            template.Category === 'user'
-                              ? 'bg-emerald-50 text-emerald-700'
-                              : template.Category === 'developer'
-                              ? 'bg-purple-50 text-purple-700'
-                              : 'bg-gray-100 text-gray-700'
-                          }`}>
-                            {template.Category}
-                          </span>
-                        </div>
-
-                        {/* Hover overlay effect */}
-                        <div className={`absolute inset-0 rounded-lg transition-opacity duration-200 pointer-events-none ${
-                          isSelected 
-                            ? 'opacity-0' 
-                            : 'opacity-0 group-hover:opacity-100 bg-gradient-to-br from-blue-500/5 to-blue-600/10'
-                        }`} />
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        User
                       </div>
-                    );
-                  })
-                  )}
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('developer')}
+                      className={`px-4 py-2 text-sm font-medium transition-colors relative ${activeTab === 'developer'
+                          ? 'text-purple-600 border-b-2 border-purple-600'
+                          : 'text-gray-600 hover:text-gray-900 hover:border-b-2 hover:border-gray-300'
+                        }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        Developer
+                      </div>
+                    </button>
+                    <button
+                      onClick={() => setActiveTab('general')}
+                      className={`px-4 py-2 text-sm font-medium transition-colors relative ${activeTab === 'general'
+                          ? 'text-gray-700 border-b-2 border-gray-700'
+                          : 'text-gray-600 hover:text-gray-900 hover:border-b-2 hover:border-gray-300'
+                        }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        General
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Fixed height scrollable container */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 h-[400px] overflow-y-auto pr-2 border border-gray-200 rounded-lg p-4 bg-gray-50/50">
+                    {loadingTemplates ? (
+                      <div className="col-span-2 flex items-center justify-center h-full">
+                        <div className="text-center">
+                          <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-2" />
+                          <p className="text-sm text-gray-600">Loading templates...</p>
+                        </div>
+                      </div>
+                    ) : relevantTemplates.length === 0 ? (
+                      <div className="col-span-2 flex items-center justify-center h-full">
+                        <p className="text-sm text-gray-500">No templates available for this category</p>
+                      </div>
+                    ) : (
+                      relevantTemplates.map((template) => {
+                        const Icon = FileText; // Default icon for all templates
+                        const isSelected = selectedTemplateId === template.id;
+                        return (
+                          <div
+                            key={template.id}
+                            onClick={() => handleTemplateClick(template)}
+                            className={`relative rounded-lg p-3 transition-all duration-200 cursor-pointer group border-2 overflow-hidden h-[140px] flex flex-col ${isSelected
+                                ? 'border-blue-500 bg-blue-50/50 shadow-lg shadow-blue-100/50 ring-1 ring-blue-200/30'
+                                : 'border-gray-200 hover:border-blue-300 hover:shadow-md hover:shadow-gray-100/50 bg-white hover:bg-gray-50/30'
+                              }`}
+                          >
+                            {/* Selection indicator */}
+                            {isSelected && (
+                              <div className="absolute top-2 right-2 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                                <span className="text-white text-xs font-bold">✓</span>
+                              </div>
+                            )}
+
+                            {/* Icon and Title Section */}
+                            <div className="flex items-start space-x-3 flex-1">
+                              <div className={`w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 transition-all duration-200 shadow-sm ${isSelected
+                                  ? 'bg-blue-500 text-white shadow-blue-200'
+                                  : 'bg-gray-100 text-gray-600 group-hover:bg-blue-500 group-hover:text-white group-hover:shadow-blue-200'
+                                }`}>
+                                <Icon className="h-5 w-5" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <h4 className={`font-semibold text-sm mb-1 transition-colors ${isSelected ? 'text-blue-900' : 'text-gray-900 group-hover:text-blue-900'
+                                  }`}>
+                                  {template.TemplateName}
+                                </h4>
+                                <p className="text-xs text-gray-600 leading-snug line-clamp-3">
+                                  {template.Description}
+                                </p>
+                              </div>
+                            </div>
+
+                            {/* Category Badge */}
+                            <div className="flex items-center justify-start mt-2 pt-2 border-t border-gray-200">
+                              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${template.Category === 'user'
+                                  ? 'bg-emerald-50 text-emerald-700'
+                                  : template.Category === 'developer'
+                                    ? 'bg-purple-50 text-purple-700'
+                                    : 'bg-gray-100 text-gray-700'
+                                }`}>
+                                {template.Category}
+                              </span>
+                            </div>
+
+                            {/* Hover overlay effect */}
+                            <div className={`absolute inset-0 rounded-lg transition-opacity duration-200 pointer-events-none ${isSelected
+                                ? 'opacity-0'
+                                : 'opacity-0 group-hover:opacity-100 bg-gradient-to-br from-blue-500/5 to-blue-600/10'
+                              }`} />
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
             </div>
           </div>
 
@@ -425,11 +415,10 @@ const AddDocumentModal: React.FC<AddDocumentModalProps> = ({
                 <button
                   onClick={handleCreate}
                   disabled={!canCreate}
-                  className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${
-                    canCreate
+                  className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${canCreate
                       ? 'bg-blue-600 hover:bg-blue-700'
                       : 'bg-blue-300 cursor-not-allowed'
-                  }`}
+                    }`}
                   type="button"
                 >
                   Create Document

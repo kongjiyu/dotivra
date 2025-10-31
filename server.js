@@ -256,7 +256,7 @@ app.post('/api/gemini/generate', async (req, res) => {
 			model,
 		});
 	} catch (error) {
-		
+
 		const status = error?.status || 500;
 		res.status(status).json({ ok: false, error: error?.message || 'Failed to generate' });
 	}
@@ -455,16 +455,16 @@ app.post('/api/tools/execute', async (req, res) => {
 						await firestore.collection('ChatHistory').add({
 							DocID: documentId,
 							Role: 'system-error',
-						Message: 'Tool argument error: position.from/to is required',
-						CreatedAt: new Date().toISOString(),
-					});
+							Message: 'Tool argument error: position.from/to is required',
+							CreatedAt: new Date().toISOString(),
+						});
+					}
+				} catch (e) {
+					// Failed to log error
 				}
-			} catch (e) {
-				// Failed to log error
+				return res.status(400).json({ success: false, html: errorHtml, tool });
 			}
-			return res.status(400).json({ success: false, html: errorHtml, tool });
-		}
-	}		// Import setCurrentDocument from toolService
+		}		// Import setCurrentDocument from toolService
 		const { setCurrentDocument } = await import('./server/services/toolService.js');
 
 		// Set document context if documentId provided
@@ -493,17 +493,17 @@ app.post('/api/tools/execute', async (req, res) => {
 						Role: 'system-error',
 						Message: `Tool execution error for ${tool}: ${toolError?.message || toolError}`,
 						CreatedAt: new Date().toISOString(),
-				});
+					});
+				}
+			} catch (e) {
+				// Failed to log error
 			}
-		} catch (e) {
-			// Failed to log error
-		}
-		return res.status(500).json({
-			success: false,
-			html: `<div class="error-message">Sorry, something went wrong while running the tool. Please try again.</div>`,
-			tool: tool
-		});
-	}		// If tool returned an error, store it as system-error
+			return res.status(500).json({
+				success: false,
+				html: `<div class="error-message">Sorry, something went wrong while running the tool. Please try again.</div>`,
+				tool: tool
+			});
+		}		// If tool returned an error, store it as system-error
 		if (!result?.success && documentId) {
 			try {
 				await firestore.collection('ChatHistory').add({
@@ -512,13 +512,14 @@ app.post('/api/tools/execute', async (req, res) => {
 					Message: typeof result?.html === 'string' ? result.html.replace(/<[^>]*>/g, '') : (result?.error || 'Tool returned an error'),
 					CreatedAt: new Date().toISOString(),
 				});
-		} catch (e) {
-			// Failed to log error
+			} catch (e) {
+				// Failed to log error
+			}
 		}
-	}
 
-	// Return the result
-	res.json(result);	} catch (error) {
+		// Return the result
+		res.json(result);
+	} catch (error) {
 
 		res.status(500).json({
 			success: false,
@@ -1090,12 +1091,12 @@ app.post('/api/documents', async (req, res) => {
 		};
 
 
-		
+
 		// Add to Firestore Documents collection
 		const docRef = await addDoc(collection(firestore, 'Documents'), document);
 
 
-		
+
 		const responseDocument = {
 			...document,
 			id: docRef.id, // Add Firestore document ID
@@ -1104,7 +1105,7 @@ app.post('/api/documents', async (req, res) => {
 		};
 
 
-		
+
 		res.status(201).json({
 			success: true,
 			document: responseDocument
@@ -1123,7 +1124,7 @@ app.get('/api/documents/project/:projectId', async (req, res) => {
 	try {
 		const projectId = req.params.projectId;
 
-		
+
 		const q = query(
 			collection(firestore, 'Documents'),
 			where('Project_Id', '==', projectId)
@@ -1155,7 +1156,7 @@ app.get('/api/documents/:documentId', async (req, res) => {
 	try {
 		const documentId = req.params.documentId;
 
-		
+
 		const docRef = doc(firestore, 'Documents', documentId);
 		const docSnap = await getDoc(docRef);
 
@@ -1174,7 +1175,7 @@ app.get('/api/documents/:documentId', async (req, res) => {
 		};
 
 
-		
+
 		res.json({
 			success: true,
 			document
@@ -1585,7 +1586,7 @@ app.get("/api/document/editor/history/:docId", async (req, res) => {
 		const allSnapshot = await getDocs(historyRef);
 		allSnapshot.docs.forEach(doc => {
 			const data = doc.data();
-			
+
 		});
 
 		// Now try the filtered query
