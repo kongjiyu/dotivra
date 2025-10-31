@@ -367,14 +367,32 @@ const AllTemplate: React.FC = () => {
       }
 
       const docData = await createDocRes.json();
+      console.log('📄 Full API response:', docData);
+      
       const createdDocument = docData.document || docData;
+      console.log('📄 Created document object:', createdDocument);
 
       setIsGenerating(false);
 
       // Navigate to document editor, passing the full document data including content
       // This allows the editor to display content immediately without waiting for Firestore
-      const createdDocumentId = createdDocument.id || docData.documentId;
+      // Try multiple possible field names for the document ID
+      const createdDocumentId = 
+        createdDocument.id || 
+        createdDocument.Document_Id || 
+        createdDocument.DocumentId ||
+        docData.documentId || 
+        docData.Document_Id ||
+        docData.DocumentId;
+      
+      console.log('📄 Extracted document ID:', createdDocumentId);
+      
       if (!createdDocumentId) {
+        console.error('❌ Could not find document ID in response. Response structure:', {
+          docData,
+          createdDocument,
+          availableKeys: Object.keys(createdDocument || {}),
+        });
         throw new Error('Document created but response did not include an id');
       }
 
