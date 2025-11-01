@@ -1,7 +1,8 @@
 // src/services/geminiBalance.ts - client service for dashboard/test
 import axios from 'axios';
+import { buildApiUrl } from '@/lib/apiConfig';
 
-const API_BASE = '/api/gemini';
+const API_BASE = buildApiUrl('api/gemini');
 
 // Session storage
 const SESSION_KEY = 'gemini_dashboard_session';
