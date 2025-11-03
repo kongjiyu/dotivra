@@ -250,20 +250,20 @@ class GeminiBalancer {
     return "ok";
   }
 
-  private pickKey(estimatedTokens: number): { key: KeyState } | null {
+  private pickKey(estimatedTokens: number, exclude: Set<string> = new Set()): KeyState | null {
     const n = this.state.keys.length;
     for (let i = 0; i < n; i++) {
       const idx = (this.state.rrIndex + i) % n;
       const k = this.state.keys[idx];
+      if (exclude.has(k.id)) continue;
       this.resetWindowsIfNeeded(k);
       const status = this.keyStatus(k);
-      console.log(k, status);
       if (status !== "ok") continue;
       if (k.rpmUsed + 1 > this.limits.RPM) continue;
       if (k.rpdUsed + 1 > this.limits.RPD) continue;
       if (k.tpmUsed + estimatedTokens > this.limits.TPM) continue;
       this.state.rrIndex = (idx + 1) % n;
-      return { key: k };
+      return k;
     }
     return null;
   }
@@ -304,32 +304,22 @@ class GeminiBalancer {
     await this.loadPromise;
     
     const estimatedTokens = this.estimateTokens(options.contents);
-    const maxAttempts = this.state.keys.length;
+    const totalKeys = this.state.keys.length;
     let lastError: any;
     const triedKeys = new Set<string>(); // Track which keys we've already tried
     
-    logger.info(`🔑 Starting generate with ${this.state.keys.length} keys available, estimated tokens: ${estimatedTokens}`);
+    logger.info(`🔑 Starting generate with ${totalKeys} keys available, estimated tokens: ${estimatedTokens}`);
     
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      const picked = this.pickKey(estimatedTokens);
-      if (!picked) {
+    while (triedKeys.size < totalKeys) {
+      const keyState = this.pickKey(estimatedTokens, triedKeys);
+      if (!keyState) {
         logger.warn("⚠️  No available keys found - all are rate-limited or exhausted");
-        const err: any = new Error("All API keys are rate-limited or exhausted.");
-        err.status = 429;
-        throw err;
+        break;
       }
-      
-      const keyState = picked.key;
-      const keyIdShort = keyState.id.slice(0, 12);
-      
-      // Skip if we've already tried this key
-      if (triedKeys.has(keyState.id)) {
-        logger.info(`⏭️  Skipping already-tried key ${keyIdShort}`);
-        continue;
-      }
-      
+
       triedKeys.add(keyState.id);
-      logger.info(`🔑 Attempt ${attempt + 1}/${maxAttempts}: Trying key ${keyIdShort}`);
+      const keyIdShort = keyState.id.slice(0, 12);
+      logger.info(`🔑 Attempt ${triedKeys.size}/${totalKeys}: Trying key ${keyIdShort}`);
       
       try {
         const client = new GoogleGenAI({apiKey: keyState.key});
@@ -394,7 +384,7 @@ class GeminiBalancer {
           
           this.debouncedSave();
           
-          logger.info(`🔄 Trying next key... (${attempt + 1}/${maxAttempts} attempts)`);
+          logger.info(`🔄 Trying next key... (${triedKeys.size}/${totalKeys} attempts)`);
           await new Promise((r) => setTimeout(r, 100));
           continue;
         } else {
@@ -406,9 +396,16 @@ class GeminiBalancer {
       }
     }
     
-    logger.error(`❌ All ${maxAttempts} keys failed or exhausted`);
-    const err: any = new Error(lastError?.message || "Gemini request failed for all keys");
-    err.status = lastError?.status || 500;
+    logger.error(`❌ All ${totalKeys} keys failed or exhausted`);
+
+    if (!lastError || lastError.status === 429 || lastError.status === 403) {
+      const exhaustedErr: any = new Error("All API keys are rate-limited or exhausted.");
+      exhaustedErr.status = 429;
+      throw exhaustedErr;
+    }
+
+    const err: any = new Error(lastError.message || "Gemini request failed for all keys");
+    err.status = lastError.status || 500;
     throw err;
   }
 
