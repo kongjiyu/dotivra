@@ -1,0 +1,53 @@
+name: Preview Pull Request
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  preview:
+    name: Deploy Preview
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build application
+        run: npm run build
+
+      - name: Install Firebase Tools
+        run: npm install -g firebase-tools
+
+      - name: Deploy to Preview Channel
+        id: deploy_preview
+        run: |
+          CHANNEL_ID="pr-${{ github.event.pull_request.number }}"
+          firebase hosting:channel:deploy $CHANNEL_ID --expires 7d --only hosting
+          echo "channel_id=$CHANNEL_ID" >> $GITHUB_OUTPUT
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      - name: Comment PR with Preview URL
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const channelId = '${{ steps.deploy_preview.outputs.channel_id }}';
+            const previewUrl = `https://dotivra--${channelId}-<YOUR_PROJECT_ID>.web.app`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `🔍 **Preview deployed!**\n\n🌐 Preview URL: ${previewUrl}\n\n⏰ Expires in 7 days`
+            });
