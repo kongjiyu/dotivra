@@ -131,6 +131,8 @@ let cachedGeminiKeySignature = "";
 
 function resolveGeminiApiKey(): string | null {
   const raw = process.env.VITE_GEMINI_API_KEY;
+  console.log("DISPLAY ALL ENV VARIABLES:");
+  console.log(process.env);
   if (!raw) {
     return null;
   }
