@@ -21,6 +21,7 @@ import AllTemplate from "./pages/AllTemplate";
 import FeedbackForm from "./pages/FeedbackForm";
 import GeminiDashboard from "./pages/gemini/geminiDashboard";
 import GeminiTestBalancer from "./pages/gemini/geminiTestBalancer";
+import ToolsTest from "./pages/Tools/ToolsTest";
 
 // Check if feedback is enabled via environment variable
 const isFeedbackEnabled = import.meta.env.VITE_ENABLE_FEEDBACK === 'true';
@@ -141,6 +142,10 @@ const router = createBrowserRouter([
       {
         path: "/gemini/test-balancer",
         element: <ProtectedRoute><GeminiTestBalancer /></ProtectedRoute>,
+      },
+      {
+        path: "/tools/test",
+        element: <ProtectedRoute><ToolsTest /></ProtectedRoute>,
       },
       // Catch-all route for 404s
       {

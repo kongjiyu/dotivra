@@ -255,13 +255,28 @@ class GeminiBalancer {
     for (let i = 0; i < n; i++) {
       const idx = (this.state.rrIndex + i) % n;
       const k = this.state.keys[idx];
-      if (exclude.has(k.id)) continue;
+      if (exclude.has(k.id)) {
+        logger.debug(`🔁 Skipping key ${k.id.slice(0,12)} because it's in exclude set`);
+        continue;
+      }
       this.resetWindowsIfNeeded(k);
       const status = this.keyStatus(k);
-      if (status !== "ok") continue;
-      if (k.rpmUsed + 1 > this.limits.RPM) continue;
-      if (k.rpdUsed + 1 > this.limits.RPD) continue;
-      if (k.tpmUsed + estimatedTokens > this.limits.TPM) continue;
+      if (status !== "ok") {
+        logger.info(`⛔ Key ${k.id.slice(0,12)} status=${status} (rpm=${k.rpmUsed}, rpd=${k.rpdUsed}, tpm=${k.tpmUsed}, cooldownUntil=${k.cooldownUntil})`);
+        continue;
+      }
+      if (k.rpmUsed + 1 > this.limits.RPM) {
+        logger.info(`⛔ Key ${k.id.slice(0,12)} would exceed RPM: ${k.rpmUsed + 1} > ${this.limits.RPM}`);
+        continue;
+      }
+      if (k.rpdUsed + 1 > this.limits.RPD) {
+        logger.info(`⛔ Key ${k.id.slice(0,12)} would exceed RPD: ${k.rpdUsed + 1} > ${this.limits.RPD}`);
+        continue;
+      }
+      if (k.tpmUsed + estimatedTokens > this.limits.TPM) {
+        logger.info(`⛔ Key ${k.id.slice(0,12)} would exceed TPM: ${k.tpmUsed + estimatedTokens} > ${this.limits.TPM} (est ${estimatedTokens})`);
+        continue;
+      }
       this.state.rrIndex = (idx + 1) % n;
       return k;
     }
@@ -563,6 +578,18 @@ const getGitHubAuth = () => {
 // Health check endpoint
 app.get("/api/health", (req, res) => {
   res.json({status: "ok", timestamp: new Date().toISOString()});
+});
+
+// Tools registry endpoint - returns list of available server-side tools
+app.get('/api/tools/registry', async (req, res) => {
+  try {
+    const toolService = await import('./services/toolService.js');
+    const tools = toolService.getAvailableTools ? toolService.getAvailableTools() : [];
+    res.json({ success: true, tools });
+  } catch (error: any) {
+    logger.error('❌ Failed to load tool registry:', error);
+    res.status(500).json({ success: false, error: error?.message || 'Failed to load tools' });
+  }
 });
 
 // ============================================================================
