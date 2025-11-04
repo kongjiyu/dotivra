@@ -43,7 +43,7 @@ jobs:
         with:
           script: |
             const channelId = '${{ steps.deploy_preview.outputs.channel_id }}';
-            const previewUrl = `https://dotivra--${channelId}-<YOUR_PROJECT_ID>.web.app`;
+            const previewUrl = `https://dotivra--${channelId}-dotivra.web.app`;
             
             github.rest.issues.createComment({
               issue_number: context.issue.number,
