@@ -8,7 +8,6 @@ import helmet from "helmet";
 import {createAppAuth} from "@octokit/auth-app";
 import {Octokit} from "@octokit/rest";
 import crypto from "crypto";
-import * as functions from "firebase-functions";
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -23,7 +22,6 @@ toolService.initFirestore(db);
 setGlobalOptions({
   maxInstances: 10,
   secrets: [
-    'GEMINI_API_KEYS',
     'GEMINI_DASHBOARD_PASS',
     'VITE_GEMINI_API_KEY',
   ],
@@ -91,7 +89,6 @@ function verifySession(sessionId: string | undefined) {
 
 // Environment visibility (safe) configuration
 const ALLOWED_ENV_KEYS = new Set<string>([
-  "GEMINI_API_KEYS",
   "GEMINI_DASHBOARD_PASS",
   "GEMINI_LIMIT_RPM",
   "GEMINI_LIMIT_RPD",
@@ -127,466 +124,118 @@ const countKeyList = (value: unknown): number | null => {
   return cleaned.split(",").filter(Boolean).length;
 };
 
-// Gemini Balancer for Firebase Functions (Admin SDK compatible)
-interface KeyState {
-  key: string;
-  id: string;
-  cooldownUntil: number;
-  minuteWindowStart: number;
-  dayWindowStart: number;
-  rpmUsed: number;
-  rpdUsed: number;
-  tpmUsed: number;
-  lastUsedAt: number;
-  totalRequests: number;
-  totalTokens: number;
-}
+// Gemini single-key helper utilities
+// Uses a single Gemini API key provided via Vite configuration.
+const GEMINI_KEY_ENV_SOURCES = [
+  "VITE_GEMINI_API_KEY",
+];
 
-class GeminiBalancer {
-  private limits: { RPM: number; RPD: number; TPM: number };
-  private db: FirebaseFirestore.Firestore;
-  private state: { keys: KeyState[]; rrIndex: number; lastPersistAt: number };
-  private loadPromise: Promise<void>;
-  private saveTimeout: NodeJS.Timeout | null = null;
+let cachedGeminiClient: GoogleGenAI | null = null;
+let cachedGeminiKeySignature = "";
 
-  constructor(apiKeys: string[], firestore: FirebaseFirestore.Firestore) {
-    if (!apiKeys || !apiKeys.length) throw new Error("No GEMINI API keys configured");
-    
-    const config = functions.config();
-    this.limits = {
-      RPM: Number(config.gemini.limit_rpm || process.env.GEMINI_LIMIT_RPM || 5),
-      RPD: Number(config.gemini.limit_rpd || process.env.GEMINI_LIMIT_RPD || 100),
-      TPM: Number(config.gemini.limit_tpm || process.env.GEMINI_LIMIT_TPM || 125000),
-    };
-    
-    this.db = firestore;
-    this.state = {
-      keys: apiKeys.map((key) => ({
-        key,
-        id: crypto.createHash("sha256").update(String(key)).digest("hex"),
-        cooldownUntil: 0,
-        minuteWindowStart: 0,
-        dayWindowStart: 0,
-        rpmUsed: 0,
-        rpdUsed: 0,
-        tpmUsed: 0,
-        lastUsedAt: 0,
-        totalRequests: 0,
-        totalTokens: 0,
-      })),
-      rrIndex: 0,
-      lastPersistAt: 0,
-    };
-    
-    this.loadPromise = this.load();
-  }
-
-  private async load() {
-    try {
-      logger.info("📦 Loading Gemini usage data from Firebase...");
-      
-      for (const keyState of this.state.keys) {
-        const docRef = this.db.collection("gemini-metrics").doc(keyState.id);
-        const doc = await docRef.get();
-        
-        if (doc.exists) {
-          const data = doc.data();
-          if (data) {
-            Object.assign(keyState, {
-              cooldownUntil: data.cooldownTime?.toMillis?.() || 0,
-              minuteWindowStart: data.lastUsed?.toMillis?.() || 0,
-              dayWindowStart: data.lastUsed?.toMillis?.() || 0,
-              rpmUsed: data.RPM || 0,
-              rpdUsed: data.RPD || 0,
-              tpmUsed: data.TPM || 0,
-              lastUsedAt: data.lastUsed?.toMillis?.() || 0,
-              totalRequests: data.totalRequest || 0,
-              totalTokens: data.totalTokens || 0,
-            });
-            logger.info(`  ✅ Loaded key ${keyState.id.substring(0, 12)}: ${keyState.totalRequests} requests`);
-          }
-        } else {
-          await this.initializeKey(keyState);
-          logger.info(`  🆕 Initialized new key ${keyState.id.substring(0, 12)} in Firebase`);
-        }
-      }
-      
-      logger.info("✅ Gemini usage data loaded from Firebase");
-    } catch (error) {
-      logger.error("❌ Error loading Gemini data from Firebase:", error);
-    }
-  }
-
-  private async initializeKey(keyState: KeyState) {
-    try {
-      const docRef = this.db.collection("gemini-metrics").doc(keyState.id);
-      await docRef.set({
-        RPD: 0,
-        RPM: 0,
-        TPM: 0,
-        cooldownTime: admin.firestore.Timestamp.fromMillis(0),
-        lastUsed: admin.firestore.Timestamp.now(),
-        totalRequest: 0,
-        totalTokens: 0,
-        createdAt: admin.firestore.Timestamp.now(),
-        updatedAt: admin.firestore.Timestamp.now(),
-      });
-    } catch (error) {
-      logger.error(`❌ Error initializing key ${keyState.id.substring(0, 12)} in Firebase:`, error);
-    }
-  }
-
-  private async save() {
-    try {
-      logger.info("💾 Saving to Firebase...");
-      this.state.lastPersistAt = Date.now();
-      
-      const batch = this.db.batch();
-      
-      for (const k of this.state.keys) {
-        const docRef = this.db.collection("gemini-metrics").doc(k.id);
-        batch.set(docRef, {
-          RPD: k.rpdUsed,
-          RPM: k.rpmUsed,
-          TPM: k.tpmUsed,
-          cooldownTime: admin.firestore.Timestamp.fromMillis(k.cooldownUntil),
-          lastUsed: admin.firestore.Timestamp.fromMillis(k.lastUsedAt || Date.now()),
-          totalRequest: k.totalRequests,
-          totalTokens: k.totalTokens,
-          updatedAt: admin.firestore.Timestamp.now(),
-        }, { merge: true });
-      }
-      
-      await batch.commit();
-      logger.info("✅ All keys saved to Firebase");
-    } catch (error) {
-      logger.error("❌ GeminiBalancer persist error:", error);
-    }
-  }
-
-  private debouncedSave() {
-    if (this.saveTimeout) clearTimeout(this.saveTimeout);
-    this.saveTimeout = setTimeout(() => this.save(), 500);
-  }
-
-  private resetWindowsIfNeeded(k: KeyState) {
-    const now = Date.now();
-    const minuteStart = Math.floor(now / 60000) * 60000;
-    const dayStart = new Date();
-    dayStart.setHours(0, 0, 0, 0);
-    const dayStartMs = dayStart.getTime();
-    
-    if (k.minuteWindowStart !== minuteStart) {
-      k.minuteWindowStart = minuteStart;
-      k.rpmUsed = 0;
-      k.tpmUsed = 0;
-    }
-    if (k.dayWindowStart !== dayStartMs) {
-      k.dayWindowStart = dayStartMs;
-      k.rpdUsed = 0;
-    }
-  }
-
-  private keyStatus(k: KeyState): string {
-    this.resetWindowsIfNeeded(k);
-    const now = Date.now();
-    if (k.cooldownUntil && now < k.cooldownUntil) return "cooldown";
-    if (k.rpmUsed >= this.limits.RPM) return "rpm-exhausted";
-    if (k.rpdUsed >= this.limits.RPD) return "rpd-exhausted";
-    if (k.tpmUsed >= this.limits.TPM) return "tpm-exhausted";
-    return "ok";
-  }
-
-  private pickKey(estimatedTokens: number, exclude: Set<string> = new Set()): KeyState | null {
-    const n = this.state.keys.length;
-    for (let i = 0; i < n; i++) {
-      const idx = (this.state.rrIndex + i) % n;
-      const k = this.state.keys[idx];
-      if (exclude.has(k.id)) {
-        logger.debug(`🔁 Skipping key ${k.id.slice(0,12)} because it's in exclude set`);
-        continue;
-      }
-      this.resetWindowsIfNeeded(k);
-      const status = this.keyStatus(k);
-      if (status !== "ok") {
-        logger.info(`⛔ Key ${k.id.slice(0,12)} status=${status} (rpm=${k.rpmUsed}, rpd=${k.rpdUsed}, tpm=${k.tpmUsed}, cooldownUntil=${k.cooldownUntil})`);
-        continue;
-      }
-      if (k.rpmUsed + 1 > this.limits.RPM) {
-        logger.info(`⛔ Key ${k.id.slice(0,12)} would exceed RPM: ${k.rpmUsed + 1} > ${this.limits.RPM}`);
-        continue;
-      }
-      if (k.rpdUsed + 1 > this.limits.RPD) {
-        logger.info(`⛔ Key ${k.id.slice(0,12)} would exceed RPD: ${k.rpdUsed + 1} > ${this.limits.RPD}`);
-        continue;
-      }
-      if (k.tpmUsed + estimatedTokens > this.limits.TPM) {
-        logger.info(`⛔ Key ${k.id.slice(0,12)} would exceed TPM: ${k.tpmUsed + estimatedTokens} > ${this.limits.TPM} (est ${estimatedTokens})`);
-        continue;
-      }
-      this.state.rrIndex = (idx + 1) % n;
-      return k;
-    }
+function extractFirstGeminiKey(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
     return null;
   }
 
-  private markUsage(k: KeyState, usedTokens: number) {
-    logger.info(`📊 Marking usage for key ${k.id.substring(0, 12)}: ${usedTokens} tokens`);
-    this.resetWindowsIfNeeded(k);
-    k.rpmUsed += 1;
-    k.rpdUsed += 1;
-    k.tpmUsed += usedTokens;
-    k.totalRequests += 1;
-    k.totalTokens += usedTokens;
-    k.lastUsedAt = Date.now();
-    logger.info(`  📊 New totals: RPM=${k.rpmUsed}, RPD=${k.rpdUsed}, TPM=${k.tpmUsed}`);
-    this.debouncedSave();
-  }
-
-  private estimateTokens(contents: any[]): number {
+  if (trimmed.startsWith("[")) {
     try {
-      const text = (contents || [])
-        .map((c) => (typeof c === "string" ? c : JSON.stringify(c)))
-        .join(" ");
-      return Math.ceil((text || "").length / 4);
-    } catch {
-      return 100;
-    }
-  }
-
-  async generate(options: {
-    model: string;
-    contents: any[];
-    tools?: any;
-    systemInstruction?: any;
-    generationConfig?: any;
-    safetySettings?: any;
-    toolConfig?: any;
-  }): Promise<any> {
-    await this.loadPromise;
-    
-    const estimatedTokens = this.estimateTokens(options.contents);
-    const totalKeys = this.state.keys.length;
-    let lastError: any;
-    const triedKeys = new Set<string>(); // Track which keys we've already tried
-    
-    logger.info(`🔑 Starting generate with ${totalKeys} keys available, estimated tokens: ${estimatedTokens}`);
-    
-    while (triedKeys.size < totalKeys) {
-      const keyState = this.pickKey(estimatedTokens, triedKeys);
-      if (!keyState) {
-        logger.warn("⚠️  No available keys found - all are rate-limited or exhausted");
-        break;
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        const first = parsed.map((value) => String(value).trim()).find(Boolean);
+        if (first) return first;
       }
-
-      triedKeys.add(keyState.id);
-      const keyIdShort = keyState.id.slice(0, 12);
-      logger.info(`🔑 Attempt ${triedKeys.size}/${totalKeys}: Trying key ${keyIdShort}`);
-      
-      try {
-        const client = new GoogleGenAI({apiKey: keyState.key});
-        
-        // Use client.models.generateContent with robust field mapping
-        const generateParams: any = {
-          model: options.model,
-          contents: options.contents,
-          generationConfig: options.generationConfig,
-          tools: options.tools,
-          toolConfig: options.toolConfig,
-          safetySettings: options.safetySettings,
-        };
-
-        // Add systemInstruction if provided
-        if (options.systemInstruction) {
-          generateParams.systemInstruction = options.systemInstruction;
-        }
-
-        const resp = await client.models.generateContent(generateParams);
-
-        const metaSrc: any = (resp as any)?.usageMetadata || {};
-        const usedTokens = Number(metaSrc.totalTokenCount || metaSrc.candidatesTokenCount || 0) + Number(metaSrc.promptTokenCount || 0) || estimatedTokens;
-        
-        logger.info(`✅ Key ${keyIdShort} succeeded, used ${usedTokens} tokens`);
-        this.markUsage(keyState, usedTokens);
-        
-        // Extract text from response (handle multiple SDK shapes)
-        const responseObj: any = (resp as any)?.response ?? resp;
-        let text: string | null = null;
-        try {
-          if (typeof responseObj?.text === 'function') {
-            text = responseObj.text();
-          }
-        } catch {}
-        if (!text) {
-          const cands = responseObj?.candidates || [];
-          const parts = cands?.[0]?.content?.parts || [];
-          text = (parts.map((p: any) => p?.text).filter(Boolean).join(' ')) || null;
-        }
-        
-        return {
-          text,
-          usage: metaSrc,
-          keyId: keyState.id,
-          keyIdShort: keyState.id.slice(0, 12),
-        };
-      } catch (e: any) {
-        lastError = e;
-        const msg = (e && (e.message || String(e))) || "";
-        const isRateLimit = e?.status === 429 || e?.status === 403 || /rate/i.test(msg) || /quota/i.test(msg);
-        
-        if (isRateLimit) {
-          logger.warn(`⚠️  Key ${keyIdShort} hit rate limit: ${msg}`);
-          const now = Date.now();
-          const minuteEnd = Math.floor(now / 60000) * 60000 + 60000;
-          keyState.cooldownUntil = minuteEnd;
-          
-          // Mark the key as exhausted in the current session
-          keyState.rpmUsed = this.limits.RPM;
-          keyState.rpdUsed = this.limits.RPD;
-          
-          this.debouncedSave();
-          
-          logger.info(`🔄 Trying next key... (${triedKeys.size}/${totalKeys} attempts)`);
-          await new Promise((r) => setTimeout(r, 100));
-          continue;
-        } else {
-          // Non-rate-limit error - log and try next key
-          logger.error(`❌ Key ${keyIdShort} failed with non-rate-limit error: ${msg}`);
-          await new Promise((r) => setTimeout(r, 100));
-          continue;
-        }
-      }
-    }
-    
-    logger.error(`❌ All ${totalKeys} keys failed or exhausted`);
-
-    if (!lastError || lastError.status === 429 || lastError.status === 403) {
-      const exhaustedErr: any = new Error("All API keys are rate-limited or exhausted.");
-      exhaustedErr.status = 429;
-      throw exhaustedErr;
-    }
-
-    const err: any = new Error(lastError.message || "Gemini request failed for all keys");
-    err.status = lastError.status || 500;
-    throw err;
-  }
-
-  async getUsageFromFirebase() {
-    try {
-      logger.info("📖 Reading from Firebase collection: gemini-metrics");
-      const snapshot = await this.db.collection("gemini-metrics").get();
-      
-      logger.info(`📖 Found ${snapshot.size} documents in Firebase`);
-      
-      const keys: any[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        
-        const rpmUsed = data.RPM || 0;
-        const rpdUsed = data.RPD || 0;
-        const tpmUsed = data.TPM || 0;
-        
-        let status = "available";
-        if (rpmUsed >= this.limits.RPM) {
-          status = "rpm-limit-reached";
-        } else if (rpdUsed >= this.limits.RPD) {
-          status = "rpd-limit-reached";
-        } else if (tpmUsed >= this.limits.TPM) {
-          status = "tpm-limit-reached";
-        }
-        
-        keys.push({
-          id: doc.id,
-          idShort: doc.id.slice(0, 12),
-          RPD: rpdUsed,
-          RPM: rpmUsed,
-          TPM: tpmUsed,
-          status: status,
-          totalRequest: data.totalRequest || 0,
-          totalTokens: data.totalTokens || 0,
-          updatedAt: data.updatedAt || null,
-        });
-      });
-
-      logger.info(`✅ Retrieved ${keys.length} keys from Firebase`);
-      
-      return {
-        keys,
-        limits: this.limits,
-        lastSyncedAt: new Date().toISOString(),
-      };
     } catch (error) {
-      logger.error("❌ Error reading from Firebase:", error);
-      throw error;
+      logger.debug("Failed to parse GEMINI key array, falling back to manual parsing", error);
     }
   }
 
-  getConfig() {
-    return { limits: this.limits, keyCount: this.state.keys.length };
+  const cleaned = trimmed.replace(/[\[\]\s"']/g, "");
+  const parts = cleaned.split(",").map((segment) => segment.trim()).filter(Boolean);
+  if (parts.length > 0) {
+    return parts[0];
   }
+
+  return trimmed;
 }
 
-// Initialize Gemini balancer
-let geminiBalancer: GeminiBalancer | null = null;
+function resolveGeminiApiKey(): string | null {
+  for (const envName of GEMINI_KEY_ENV_SOURCES) {
+    const raw = process.env[envName];
+    if (!raw) continue;
+    const firstKey = extractFirstGeminiKey(raw);
+    if (firstKey) {
+      return firstKey;
+    }
+  }
+  return null;
+}
 
-function initializeGeminiBalancer() {
+function ensureGeminiClient(): GoogleGenAI | null {
+  const apiKey = resolveGeminiApiKey();
+  if (!apiKey) {
+    logger.error("⚠️ No Gemini API key configured");
+    return null;
+  }
+
+  if (!cachedGeminiClient || cachedGeminiKeySignature !== apiKey) {
+    cachedGeminiClient = new GoogleGenAI({apiKey});
+    cachedGeminiKeySignature = apiKey;
+  }
+
+  return cachedGeminiClient;
+}
+
+async function generateWithGemini(options: {
+  model: string;
+  contents: any[];
+  tools?: any;
+  systemInstruction?: any;
+  generationConfig?: any;
+  safetySettings?: any;
+  toolConfig?: any;
+}) {
+  const client = ensureGeminiClient();
+  if (!client) {
+    const error: any = new Error("Gemini API key not configured");
+    error.status = 503;
+    throw error;
+  }
+
+  const generateParams = {
+    model: options.model,
+    contents: options.contents,
+    generationConfig: options.generationConfig,
+    tools: options.tools,
+    toolConfig: options.toolConfig,
+    safetySettings: options.safetySettings,
+    systemInstruction: options.systemInstruction,
+  };
+
+  const resp = await client.models.generateContent(generateParams as any);
+  const usageMetadata = (resp as any)?.usageMetadata || {};
+  const responseObj: any = (resp as any)?.response ?? resp;
+
+  let text: string | null = null;
   try {
-    const config = functions.config();
-    const raw = (config.gemini.api_key || process.env.GEMINI_API_KEYS || "").trim();
-    let keys: string[] = [];
-    
-    if (raw) {
-      if (raw.startsWith("[")) {
-        try {
-          const arr = JSON.parse(raw);
-          keys = Array.isArray(arr) ? arr.map((s) => String(s).trim()).filter(Boolean) : [];
-        } catch {
-          keys = raw.replace(/[\[\]\s"\']/g, "").split(",").map((s) => s.trim()).filter(Boolean);
-        }
-      } else {
-        const cleaned = raw.replace(/[\[\]\s"\']/g, "");
-        keys = cleaned.split(",").map((s) => s.trim()).filter(Boolean);
-      }
+    if (typeof responseObj?.text === "function") {
+      text = responseObj.text();
     }
-    
-    // Fallback to single key if array parsing fails
-    if (keys.length === 0 && (config.gemini.vite.api_key || process.env.VITE_GEMINI_API_KEY)) {
-      keys = [config.gemini.vite.api_key || process.env.VITE_GEMINI_API_KEY];
-    }
-    
-    if (keys.length === 0) {
-      logger.warn("⚠️ No Gemini API keys configured");
-      return null;
-    }
-    
-    geminiBalancer = new GeminiBalancer(keys, db);
-    logger.info(`✅ Gemini balancer initialized with ${keys.length} keys`);
-    return geminiBalancer;
-  } catch (e) {
-    logger.warn("⚠️ Gemini balancer not initialized:", e);
-    return null;
+  } catch (error) {
+    logger.debug("Gemini response text() extraction failed", error);
   }
-}
 
-// Lazy initialization - don't block startup
-// geminiBalancer = initializeGeminiBalancer();
-
-// Initialize MCP integration if balancer is available
-// if (geminiBalancer) {
-//   try {
-//     geminiWithMcp = createGeminiWithMcp(geminiBalancer, db);
-//     logger.info("✅ MCP integration initialized with 7 document tools");
-//   } catch (error) {
-//     logger.error("❌ Failed to initialize MCP integration:", error);
-//   }
-// }
-
-// Helper to ensure balancer is initialized
-function ensureBalancerInitialized() {
-  if (!geminiBalancer) {
-    geminiBalancer = initializeGeminiBalancer();
+  if (!text) {
+    const candidates = responseObj?.candidates || [];
+    const parts = candidates?.[0]?.content?.parts || [];
+    text = (parts.map((part: any) => part?.text).filter(Boolean).join(" ")) || null;
   }
-  return geminiBalancer;
+
+  return {
+    text,
+    usage: usageMetadata,
+  };
 }
 
 // Create Express app
@@ -701,10 +350,9 @@ app.post('/api/gemini/reasoning', async (req, res) => {
       toolConfig,
     } = req.body || {};
 
-    const balancer = ensureBalancerInitialized();
-    if (!balancer) {
-      logger.error("❌ geminiBalancer not initialized");
-      return res.status(503).json({ error: "Balancer not configured" });
+    if (!ensureGeminiClient()) {
+      logger.error("❌ Gemini client not configured");
+      return res.status(503).json({ error: "Gemini API key not configured" });
     }
 
     let effectiveContents = contents;
@@ -744,12 +392,6 @@ app.post('/api/gemini/generate', async (req, res) => {
     logger.info('🔵 Gemini API Request received');
     logger.info('  Request body keys:', Object.keys(req.body || {}));
     
-    const balancer = ensureBalancerInitialized();
-    if (!balancer) {
-      logger.error('❌ Balancer not configured!');
-      return res.status(503).json({ error: 'Balancer not configured' });
-    }
-    
     const {
       prompt,
       contents,
@@ -771,8 +413,14 @@ app.post('/api/gemini/generate', async (req, res) => {
       return res.status(400).json({ error: 'Missing prompt or contents' });
     }
 
-    logger.info('  Calling geminiBalancer.generate with model:', model);
-    const result = await balancer.generate({
+    const client = ensureGeminiClient();
+    if (!client) {
+      logger.error('❌ Gemini client not configured');
+      return res.status(503).json({ error: 'Gemini API key not configured' });
+    }
+
+    logger.info('  Calling Gemini generate with model:', model);
+    const result = await generateWithGemini({
       model,
       contents: effectiveContents,
       tools,
@@ -787,7 +435,7 @@ app.post('/api/gemini/generate', async (req, res) => {
       ok: true,
       text: result.text,
       usage: result.usage,
-      key: { idShort: result.keyIdShort },
+      key: { idShort: 'single-key' },
       model,
     });
   } catch (error) {
@@ -815,11 +463,6 @@ app.post('/api/gemini/recommendations', async (req, res) => {
 
     logger.info('🎯 Generating recommendations for document:', documentId);
 
-    const balancer = ensureBalancerInitialized();
-    if (!balancer) {
-      return res.status(503).json({ error: 'Gemini balancer not initialized' });
-    }
-
     // Generate recommendations using Gemini
     const prompt = `Analyze this document and provide exactly 3 actionable recommendations for the chat agent.
 
@@ -841,7 +484,13 @@ Format your response as JSON:
   ]
 }`;
 
-    const result = await balancer.generate({
+    const client = ensureGeminiClient();
+    if (!client) {
+      logger.error('❌ Gemini client not configured');
+      return res.status(503).json({ error: 'Gemini API key not configured' });
+    }
+
+    const result = await generateWithGemini({
       model: 'gemini-2.5-pro',
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: {
@@ -889,13 +538,14 @@ app.post('/api/gemini/generate-with-tools', async (req, res) => {
       return res.status(400).json({ error: 'Missing prompt' });
     }
 
-    const balancer = ensureBalancerInitialized();
-    if (!balancer) {
-      return res.status(503).json({ error: 'Gemini balancer not initialized' });
+    // Fallback to regular generation (MCP removed)
+    const client = ensureGeminiClient();
+    if (!client) {
+      logger.error('❌ Gemini client not configured');
+      return res.status(503).json({ error: 'Gemini API key not configured' });
     }
 
-    // Fallback to regular generation (MCP removed)
-    const result = await balancer.generate({
+    const result = await generateWithGemini({
       model,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig
@@ -943,9 +593,8 @@ app.post('/api/ai-agent/execute', async (req, res) => {
 // Authenticate with passkey
 app.post('/api/gemini/auth', (req, res) => {
   try {
-    const { passkey } = req.body;
-    const config = functions.config();
-    const expectedPasskey = config.gemini.dashboard_pass || process.env.GEMINI_DASHBOARD_PASS;
+  const { passkey } = req.body;
+  const expectedPasskey = process.env.GEMINI_DASHBOARD_PASS;
 
     if (!expectedPasskey) {
       return res.status(500).json({ error: 'Dashboard passkey not configured' });
@@ -992,16 +641,30 @@ app.get('/api/gemini/dashboard', async (req, res) => {
       return res.status(401).json({ error: 'Unauthorized. Please authenticate.' });
     }
 
-    const balancer = ensureBalancerInitialized();
-    if (!balancer) {
-      return res.status(503).json({ error: 'Balancer not configured' });
+    const client = ensureGeminiClient();
+    if (!client) {
+      return res.status(503).json({ error: 'Gemini API key not configured' });
     }
 
-    // Read directly from Firebase
-    logger.info('📊 Dashboard requested, reading from Firebase...');
-    const usage = await balancer.getUsageFromFirebase();
-    logger.info('📊 Dashboard data retrieved:', JSON.stringify(usage, null, 2));
-    res.json(usage);
+    logger.info('📊 Dashboard requested in single-key mode');
+
+    res.json({
+      mode: 'single-key',
+      keys: [
+        {
+          id: 'single-key',
+          idShort: 'single-key',
+          status: 'untracked',
+          note: 'Usage metrics are unavailable when the balancer is disabled.',
+        },
+      ],
+      limits: {
+        RPM: Number(process.env.GEMINI_LIMIT_RPM ?? 5),
+        RPD: Number(process.env.GEMINI_LIMIT_RPD ?? 100),
+        TPM: Number(process.env.GEMINI_LIMIT_TPM ?? 125000),
+      },
+      lastSyncedAt: new Date().toISOString(),
+    });
   } catch (error) {
     logger.error('Gemini dashboard error:', error);
     res.status(500).json({ error: 'Failed to get dashboard' });
