@@ -8,7 +8,7 @@ import helmet from "helmet";
 import {createAppAuth} from "@octokit/auth-app";
 import {Octokit} from "@octokit/rest";
 import crypto from "crypto";
-import * as functions from 'firebase-functions';
+import * as functions from "firebase-functions";
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -154,11 +154,10 @@ class GeminiBalancer {
   constructor(apiKeys: string[], firestore: FirebaseFirestore.Firestore) {
     if (!apiKeys || !apiKeys.length) throw new Error("No GEMINI API keys configured");
     
-    const config = functions.config();
     this.limits = {
-      RPM: Number(config.gemini?.limit_rpm || process.env.GEMINI_LIMIT_RPM || 5),
-      RPD: Number(config.gemini?.limit_rpd || process.env.GEMINI_LIMIT_RPD || 100),
-      TPM: Number(config.gemini?.limit_tpm || process.env.GEMINI_LIMIT_TPM || 125000),
+      RPM: Number(process.env.GEMINI_LIMIT_RPM || 5),
+      RPD: Number(process.env.GEMINI_LIMIT_RPD || 100),
+      TPM: Number(process.env.GEMINI_LIMIT_TPM || 125000),
     };
     
     this.db = firestore;
