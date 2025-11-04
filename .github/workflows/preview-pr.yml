@@ -52,10 +52,11 @@ jobs:
           CHANNEL_ID="pr-${{ github.event.pull_request.number }}"
           npx firebase-tools hosting:channel:deploy $CHANNEL_ID \
             --expires 7d \
-            --only hosting \
             --project dotivra \
             --token "${{ secrets.FIREBASE_TOKEN }}"
           echo "channel_id=$CHANNEL_ID" >> $GITHUB_OUTPUT
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
       - name: Comment PR with Preview URL
         uses: actions/github-script@v7
