@@ -977,7 +977,7 @@ app.get("/api/github/repository/:owner/:repo/file", async (req, res) => {
 app.post("/api/projects", async (req, res) => {
   try {
     logger.info("POST /api/projects received:", req.body);
-    const {name, description, githubLink, selectedRepo, installationId, userId} = req.body;
+  const {name, description, githubLink, selectedRepo, installationId, userId} = req.body;
 
     // Validate required fields
     if (!name || !description || !userId) {
@@ -990,18 +990,30 @@ app.post("/api/projects", async (req, res) => {
     // Generate Project ID matching FirestoreService format
     const projectId = generateProjectId();
 
+    // Normalize GitHub repository link
+    let resolvedGitHubRepo = '';
+    if (typeof githubLink === 'string' && githubLink.trim().length) {
+      resolvedGitHubRepo = githubLink.trim();
+    } else if (typeof selectedRepo === 'string' && selectedRepo.trim().length) {
+      const trimmedRepo = selectedRepo.trim();
+      resolvedGitHubRepo = trimmedRepo.startsWith('http://') || trimmedRepo.startsWith('https://')
+        ? trimmedRepo
+        : `https://github.com/${trimmedRepo.replace(/^\/+/, '')}`;
+    }
+
     // Create the project object matching FirestoreService interface
     const project = {
       Project_Id: projectId,
       ProjectName: name.trim(),
       User_Id: userId,
       Description: description.trim(),
-      GitHubRepo: githubLink || "",
+      GitHubRepo: resolvedGitHubRepo,
       Created_Time: admin.firestore.Timestamp.now(),
     };
 
-    // Add to Firestore Projects collection
-    const docRef = await db.collection("Projects").add(project);
+    // Add to Firestore Projects collection using deterministic ID for compatibility
+    const docRef = db.collection("Projects").doc(projectId);
+    await docRef.set(project);
 
     logger.info("Project created with ID:", projectId);
 
@@ -1009,6 +1021,7 @@ app.post("/api/projects", async (req, res) => {
       success: true,
       project: {
         ...project,
+        id: projectId,
         Created_Time: project.Created_Time.toDate().toISOString(),
       },
     });
