@@ -92,15 +92,6 @@ const ALLOWED_ENV_KEYS = new Set<string>([
   "VITE_GEMINI_API_KEY",
 ]);
 
-const CONFIG_LOOKUP: Record<string, {namespace: string; key: string}> = {
-  GEMINI_API_KEYS: {namespace: "gemini", key: "api_keys"},
-  GEMINI_DASHBOARD_PASS: {namespace: "gemini", key: "dashboard_pass"},
-  GEMINI_LIMIT_RPM: {namespace: "gemini", key: "limit_rpm"},
-  GEMINI_LIMIT_RPD: {namespace: "gemini", key: "limit_rpd"},
-  GEMINI_LIMIT_TPM: {namespace: "gemini", key: "limit_tpm"},
-  VITE_GEMINI_API_KEY: {namespace: "gemini", key: "vite_api_key"},
-};
-
 const summarizeValue = (value: unknown) => {
   if (value === undefined || value === null) {
     return {defined: false, preview: null as string | null, length: 0, type: "undefined"};
@@ -650,37 +641,18 @@ app.get('/api/env/check', (req, res) => {
       });
     }
 
-    const runtimeConfig = functions.config?.() ?? {};
-    const mapping = CONFIG_LOOKUP[normalizedKey];
-
     const processValue = process.env[normalizedKey];
 
-    let configValue: unknown = undefined;
-    let configPath: string | null = null;
-    if (mapping) {
-      const namespaceData = (runtimeConfig as Record<string, any>)[mapping.namespace];
-      if (namespaceData && Object.prototype.hasOwnProperty.call(namespaceData, mapping.key)) {
-        configValue = namespaceData[mapping.key];
-        configPath = `${mapping.namespace}.${mapping.key}`;
-      }
-    }
-
     const processSummary = summarizeValue(processValue);
-    const configSummary = summarizeValue(configValue);
 
     const response: Record<string, any> = {
       success: true,
       key: normalizedKey,
       processEnv: processSummary,
-      functionsConfig: {
-        ...configSummary,
-        path: configPath,
-      },
     };
 
     if (normalizedKey === 'GEMINI_API_KEYS') {
       response.processEnv.keyCount = countKeyList(processValue);
-      response.functionsConfig.keyCount = countKeyList(configValue);
     }
 
     res.json(response);
