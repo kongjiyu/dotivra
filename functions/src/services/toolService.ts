@@ -706,7 +706,9 @@ export const get_document_summary = async ({ documentId, reason }: any): Promise
       throw new Error('Firestore not initialized');
     }
 
-    const docRef = firestore.collection('Documents').doc(documentId);
+    const targetDocumentId = documentId || currentDocumentId;
+
+    const docRef = firestore.collection('Documents').doc(targetDocumentId);
     const docSnap = await docRef.get();
 
     if (!docSnap.exists) {
@@ -726,7 +728,7 @@ export const get_document_summary = async ({ documentId, reason }: any): Promise
         success: true,
         reason,
         operation: 'get_summary',
-        documentId,
+        documentId: targetDocumentId,
         summary: '',
         message: 'No summary available for this document'
       };
@@ -736,13 +738,13 @@ export const get_document_summary = async ({ documentId, reason }: any): Promise
       success: true,
       reason,
       operation: 'get_summary',
-      documentId,
+      documentId: targetDocumentId,
       documentName: data.DocumentName || 'Untitled',
       summary,
       summaryLength: summary.length
     };
 
-    logToolUsage('get_document_summary', { documentId, reason }, result, currentDocumentId);
+    logToolUsage('get_document_summary', { documentId: targetDocumentId, reason }, result, currentDocumentId);
     return result;
 
   } catch (error: any) {
