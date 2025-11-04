@@ -616,8 +616,8 @@ function generateUserId(): string {
 // GitHub App configuration
 const getGitHubAuth = () => {
   return createAppAuth({
-    appId: process.env.GITHUB_APP_ID || "",
-    privateKey: (process.env.GITHUB_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+    appId: process.env.APP_ID || "",
+    privateKey: (process.env.PRIVATE_KEY || "").replace(/\\n/g, "\n"),
   });
 };
 
