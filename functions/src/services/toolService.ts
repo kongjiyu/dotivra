@@ -182,6 +182,29 @@ export const setCurrentDocument = async (documentId: string): Promise<any> => {
   }
 };
 
+const refreshCurrentDocument = async (): Promise<void> => {
+  if (!currentDocumentId || !firestore) {
+    return;
+  }
+
+  try {
+    const docRef = firestore.collection('Documents').doc(currentDocumentId);
+    const docSnap = await docRef.get();
+
+    if (!docSnap.exists) {
+      return;
+    }
+
+    const latestContent = docSnap.data()?.Content || '';
+    if (latestContent !== currentDocumentContent) {
+      currentDocumentContent = latestContent;
+      logger.info(`♻️ Refreshed document cache for ${currentDocumentId} (${currentDocumentContent.length} chars)`);
+    }
+  } catch (error) {
+    logger.error('❌ Error refreshing document content:', error);
+  }
+};
+
 // Sync document content back to Firebase
 const syncToFirebase = async (): Promise<any> => {
   if (!currentDocumentId || !firestore) {
@@ -211,6 +234,8 @@ export const get_document_content = async ({ documentId, reason }: any): Promise
 
     if (documentId && documentId !== currentDocumentId) {
       await setCurrentDocument(documentId);
+    } else {
+      await refreshCurrentDocument();
     }
 
     const result = {
@@ -236,6 +261,8 @@ export const get_document_content = async ({ documentId, reason }: any): Promise
 };
 
 export const scan_document_content = async ({ reason }: any): Promise<any> => {
+  await refreshCurrentDocument();
+
   const lines = currentDocumentContent.split('\n');
   const words = currentDocumentContent.split(/\s+/).filter(w => w.length > 0);
   const characters = currentDocumentContent.length;
@@ -268,6 +295,8 @@ export const scan_document_content = async ({ reason }: any): Promise<any> => {
 
 export const search_document_content = async ({ query, reason }: any): Promise<any> => {
   logger.info(`🔍 Searching document for query: "${query}"`);
+  await refreshCurrentDocument();
+
   const matches = [];
   const lowerQuery = (query || '').toLowerCase();
   const lowerContent = currentDocumentContent.toLowerCase();
@@ -324,6 +353,8 @@ export const append_document_content = async ({ content, reason }: any): Promise
     };
   }
 
+  await refreshCurrentDocument();
+
   currentDocumentContent = currentDocumentContent + normalizedContent;
   const appendedLength = normalizedContent.length;
   const result = {
@@ -337,7 +368,7 @@ export const append_document_content = async ({ content, reason }: any): Promise
 };
 
 export const insert_document_content = async ({ position, content, reason }: any): Promise<any> => {
-  if (typeof position !== 'number' || position < 0 || position > currentDocumentContent.length) {
+  if (typeof position !== 'number' || position < 0) {
     return {
       success: false,
       html: `<div class="error-message">Sorry, we couldn't find the right place to insert your text. Please try again with a different request.</div>`
@@ -354,6 +385,15 @@ export const insert_document_content = async ({ position, content, reason }: any
     return {
       success: false,
       html: `<div class="error-message">Sorry, the provided content could not be converted to a valid format.</div>`
+    };
+  }
+
+  await refreshCurrentDocument();
+
+  if (position > currentDocumentContent.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, that insert position falls outside the current document. Please try again.</div>`
     };
   }
 
@@ -397,6 +437,8 @@ export const insert_document_content_at_location = async ({ target, position, co
       html: `<div class="error-message">Position must be either 'before' or 'after'.</div>`
     };
   }
+
+  await refreshCurrentDocument();
 
   // Find the target in the document
   const targetIndex = currentDocumentContent.indexOf(target);
@@ -482,6 +524,7 @@ export const replace_document_content = async ({ position, content, reason }: an
       html: `<div class="error-message">Sorry, the provided content could not be converted to a valid format.</div>`
     };
   }
+  await refreshCurrentDocument();
   const { from, to } = position;
   currentDocumentContent = currentDocumentContent.slice(0, from) + normalizedContent + currentDocumentContent.slice(to);
   const removedLength = to - from;
@@ -504,6 +547,7 @@ export const remove_document_content = async ({ position, reason }: any): Promis
       html: `<div class="error-message">Sorry, we couldn't find the part of your document to remove. Please try again with a different request.</div>`
     };
   }
+  await refreshCurrentDocument();
   const { from, to } = position;
   currentDocumentContent = currentDocumentContent.slice(0, from) + currentDocumentContent.slice(to);
   const result = {
@@ -851,6 +895,7 @@ const GITHUB_HEADERS = {
   'Accept': 'application/vnd.github.v3+json',
   'User-Agent': 'Dotivra-Document-App'
 };
+
 
 type BranchResolutionSource = 'requested' | 'main' | 'master' | 'default';
 

@@ -24,9 +24,20 @@ setGlobalOptions({
   secrets: [
     'GEMINI_DASHBOARD_PASS',
     'VITE_GEMINI_API_KEY',
+    'VITE_GITHUB_REDIRECT_URI',
+    'VITE_GITHUB_CLIENT_ID',
+    'VITE_GITHUB_CLIENT_SECRET',
+    'VITE_API_URL'
   ],
 });
 
+const GITHUB_OAUTH_CLIENT_ID = process.env.VITE_GITHUB_CLIENT_ID || '';
+
+const GITHUB_OAUTH_CLIENT_SECRET = process.env.VITE_GITHUB_CLIENT_SECRET || '';
+
+const GITHUB_OAUTH_REDIRECT_URI = process.env.VITE_GITHUB_REDIRECT_URI || '';
+
+const VITE_API_URL = process.env.VITE_API_URL || '';
 // Gemini balancer initialization with Firebase Admin
 // Session storage for dashboard authentication
 const dashboardSessions = new Map(); // sessionId -> { createdAt, expiresAt }
@@ -3124,7 +3135,11 @@ export const api = onRequest(
       'GEMINI_DASHBOARD_PASS',
       'GEMINI_LIMIT_RPM',
       'GEMINI_LIMIT_RPD',
-      'GEMINI_LIMIT_TPM'
+      'GEMINI_LIMIT_TPM',
+      'VITE_GITHUB_REDIRECT_URI',
+      'VITE_GITHUB_CLIENT_ID',
+      'VITE_GITHUB_CLIENT_SECRET',
+      'VITE_API_URL'
     ],
     memory: '2GiB',
     timeoutSeconds: 540,
