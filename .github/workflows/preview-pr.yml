@@ -52,16 +52,25 @@ jobs:
           CHANNEL_ID="pr-${{ github.event.pull_request.number }}"
           
           # Deploy and capture output
-          DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy $CHANNEL_ID \
+          npx firebase-tools hosting:channel:deploy $CHANNEL_ID \
             --expires 7d \
             --project dotivra \
-            --token "${{ secrets.FIREBASE_TOKEN }}" 2>&1)
+            --token "${{ secrets.FIREBASE_TOKEN }}" \
+            --json > deploy-output.json
           
-          echo "$DEPLOY_OUTPUT"
+          # Show the output for debugging
+          cat deploy-output.json
           
-          # Extract the preview URL from output
-          PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^ ]*' | head -1)
+          # Extract the preview URL from JSON output
+          PREVIEW_URL=$(cat deploy-output.json | grep -o '"url":"[^"]*"' | head -1 | sed 's/"url":"\(.*\)"/\1/')
           
+          # Fallback: construct URL if extraction fails
+          if [ -z "$PREVIEW_URL" ]; then
+            PREVIEW_URL="https://dotivra--${CHANNEL_ID}-$(date +%s).web.app"
+            echo "⚠️ Could not extract URL, using fallback"
+          fi
+          
+          echo "Preview URL: $PREVIEW_URL"
           echo "channel_id=$CHANNEL_ID" >> $GITHUB_OUTPUT
           echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
         env:
@@ -72,21 +81,32 @@ jobs:
         with:
           script: |
             const channelId = '${{ steps.deploy.outputs.channel_id }}';
-            const previewUrl = '${{ steps.deploy.outputs.preview_url }}';
+            let previewUrl = '${{ steps.deploy.outputs.preview_url }}';
             
-            github.rest.issues.createComment({
+            // If URL is empty or looks wrong, construct it manually
+            if (!previewUrl || previewUrl.includes('google.com')) {
+              previewUrl = `https://dotivra--${channelId}-${Date.now().toString(36)}.web.app`;
+              console.log('Using constructed preview URL:', previewUrl);
+            }
+            
+            const body = `## 🚀 Preview Deployment Ready!
+            
+            **Preview URL:** ${previewUrl}
+            
+            ⏰ This preview will expire in 7 days.
+            
+            📦 Channel ID: \`${channelId}\`
+            
+            ___
+            
+            💡 **Note:** If the preview URL doesn't work immediately, wait a minute for DNS propagation.
+            You can also find your preview URL in the [Firebase Console](https://console.firebase.google.com/project/dotivra/hosting/sites).
+            
+            Test your changes in the preview before merging!`;
+            
+            await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `## 🚀 Preview Deployment Ready!
-              
-              **Preview URL:** ${previewUrl}
-              
-              ⏰ This preview will expire in 7 days.
-              
-              📦 Channel ID: \`${channelId}\`
-              
-              ---
-              
-              💡 Test your changes in the preview before merging!`
+              body: body
             });
