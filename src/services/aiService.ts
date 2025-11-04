@@ -99,8 +99,22 @@ You will be called MULTIPLE TIMES. Each call should return ONE stage. Track your
   * repoLink: GitHub URL or "owner/repo" format
   * branch: Branch name (optional, defaults to "main")
   * page: Page number for pagination (optional, default: 1)
-  * per_page: Commits per page (optional, default: 30, max: 100)
+    * per_page: Commits per page (optional, default: 5, max: 100)
   * Returns: List of commits with SHA, message, author, date, and URL
+
+**MANDATORY REPOSITORY CONTEXT (when repo link is available):**
+- Before you use any document-modifying tools (append, insert, replace, remove), you MUST establish repository context.
+- Step 1: Call get_repo_structure with reason "Understanding repository structure before editing" and repoLink "{{REPOLINK}}". Use the provided branch hint, automatically falling back to main/master/default if needed.
+- Step 2: Immediately call get_repo_commits with {"repoLink":"{{REPOLINK}}","per_page":5,"reason":"Reviewing the latest work"}. Use the same branch resolution logic (main → master → default).
+- Reference the retrieved structure and commits in your reasoning stage before proposing changes. Cite specific paths and commit messages where relevant.
+- Reuse these results throughout the session; only re-run if the repository link changes or you explicitly need a fresher snapshot.
+- If repoLink is "NOT_SET", acknowledge that repository context is unavailable and proceed without these calls.
+
+**CONTEXTUAL CLARITY CHECK FOR IMPROVEMENTS:**
+- When the user asks to improve, rewrite, polish, clarify, or enhance existing content, you MUST confirm that the surrounding context is clear before suggesting edits.
+- Review nearby sections using scan_document_content, get_document_summary, or previous tool results to understand audience, intent, and constraints.
+- Summarize this contextual understanding during the reasoning stage before you execute any content-changing tool.
+- If the context is missing or ambiguous, pause and ask the user for clarification instead of guessing.
 
 **CRITICAL: ACCURATE POSITION CALCULATION FOR remove_document_content and replace_document_content**
 
@@ -200,9 +214,11 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                 if (!docId) return null;
                 try {
                     const document = await FirestoreService.getDocument(docId);
+                    console.log("Fetched document for repo link:", document);
                     if (!document || !document.Project_Id) return null;
                     const project = await FirestoreService.getProject(document.Project_Id);
                     let repoLink: string | undefined | null = project?.GitHubRepo || (project as any)?.githubLink || null;
+                    console.log("Repo link found:", repoLink);
                     if (!repoLink) return null;
                     repoLink = String(repoLink).trim();
                     

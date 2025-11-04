@@ -28,6 +28,14 @@ import {
 } from "@/components/ui/alert-dialog";
 import "./ChatSidebar.css";
 
+const escapeHtml = (value: string): string =>
+    value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
 export type ChatMessage = {
     id: string;
     role: "user" | "assistant" | "system-error";
@@ -109,6 +117,45 @@ export default function ChatSidebar({
         version: number;
         toolExecutions: ToolExecution[];
     } | null>(null);
+
+    const clearAiPreviewHighlights = () => {
+        if (!editor) {
+            return;
+        }
+
+        const { from, to } = editor.state.selection;
+
+        if (aiWriter) {
+            aiWriter.clearAllOverlays();
+        }
+
+        const docSize = editor.state.doc.content.size;
+        editor.chain()
+            .focus()
+            .setTextSelection({ from: 0, to: docSize })
+            .unsetMark('highlight')
+            .run();
+
+        const boundedFrom = Math.min(from, editor.state.doc.content.size);
+        const boundedTo = Math.min(to, editor.state.doc.content.size);
+        editor.commands.setTextSelection({ from: boundedFrom, to: boundedTo });
+
+        if (typeof document !== 'undefined') {
+            const highlightClasses = [
+                'ai-addition-highlight',
+                'ai-removal-highlight',
+                'ai-replacement-highlight',
+                'ai-editing-highlight',
+                'ai-highlight'
+            ];
+
+            highlightClasses.forEach(className => {
+                document.querySelectorAll(`.${className}`).forEach(node => {
+                    node.classList.remove(className);
+                });
+            });
+        }
+    };
 
     // Get document ID from context for MCP operations
     const { documentId } = useDocument();
@@ -306,14 +353,16 @@ export default function ChatSidebar({
             // Handle code blocks with language tags
             html = html.replace(
                 /<pre><code(?:\s+class="language-([^"]*)")?>([\s\S]*?)<\/code><\/pre>/g,
-                (match, language, code) => {
-                    if (language && language.trim()) {
-                        return `<div class="code-block-with-topic">
-                            <div class="code-topic-header">${language}</div>
-                            <pre class="code-block-pre"><code>${code}</code></pre>
+                (_match, language, code) => {
+                    const normalizedLanguage = typeof language === "string" && language.trim().length ? language.trim() : "plaintext";
+                    const safeLanguage = escapeHtml(normalizedLanguage);
+                    const normalizedClass = normalizedLanguage.toLowerCase().replace(/[^a-z0-9+.#-]/gi, "-") || "plaintext";
+                    const safeClass = escapeHtml(normalizedClass);
+
+                    return `<div class="code-block-wrapper code-block-with-topic ai-preview-code-block" data-language="${safeLanguage}">
+                            <div class="code-block-header code-topic-header">${safeLanguage}</div>
+                            <pre class="code-block-pre"><code class="language-${safeClass}">${code}</code></pre>
                         </div>`;
-                    }
-                    return match;
                 }
             );
 
@@ -545,15 +594,11 @@ From structure improvements to real-time content updates, I ensure your work rem
 
         setShowPreviewModal(false);
 
+        clearAiPreviewHighlights();
+
         // Save the current editor content to Firebase
         if (editor && documentId) {
             try {
-                // Clear highlights before saving
-                editor.chain()
-                    .focus()
-                    .unsetHighlight()
-                    .run();
-
                 const currentContent = editor.getHTML();
 
                 // Update Firebase with current editor content
@@ -563,16 +608,15 @@ From structure improvements to real-time content updates, I ensure your work rem
                     body: JSON.stringify({ Content: currentContent })
                 });
 
-
-
                 // Reload to ensure sync
                 const doc = await fetchDocument(documentId);
                 if (doc.Content) {
                     editor.commands.setContent(doc.Content);
-
                 }
             } catch (err) {
                 console.error('Failed to update document:', err);
+            } finally {
+                setDocumentSnapshot(null);
             }
         }
     };
@@ -581,16 +625,12 @@ From structure improvements to real-time content updates, I ensure your work rem
 
         setShowPreviewModal(false);
 
+        clearAiPreviewHighlights();
+
         // Restore original content before AI changes (prioritize documentSnapshot)
         const originalContent = documentSnapshot?.content || aiBeforeContent;
 
         if (editor && originalContent) {
-            // Clear all highlights first
-            editor.chain()
-                .focus()
-                .unsetHighlight()
-                .run();
-
             // Restore original content (before any tool executions)
             editor.commands.setContent(originalContent);
 
@@ -617,6 +657,8 @@ From structure improvements to real-time content updates, I ensure your work rem
     const handleRegenerateChanges = () => {
 
         setShowPreviewModal(false);
+
+        clearAiPreviewHighlights();
 
         // Restore original content first
         if (editor && aiBeforeContent) {

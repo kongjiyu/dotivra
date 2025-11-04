@@ -1531,7 +1531,7 @@ kbd {
   word-break: break-word !important;
 }
 
-/* ChatSidebar code inside pre blocks should not have these styles */
+/* ChatSidebar code inside pre blocks should not have inline code styling */
 .chat-markdown-content pre code {
   background-color: transparent !important;
   color: inherit !important;
@@ -1540,27 +1540,34 @@ kbd {
   box-shadow: none !important;
 }
 
-/* ChatSidebar code blocks with topics - Dark styling matching code content */
-.code-block-with-topic {
-  margin: 0.5rem 0;
-  border-radius: 6px;
+/* AI preview & chat code blocks share editor styling */
+.chat-markdown-content .code-block-wrapper,
+.chat-markdown-content .code-block-with-topic,
+.ai-preview-code-block {
+  margin: 1rem 0;
+  border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #2d2d2d;
+  border: 1px solid #1f2533;
+  background: #1e1e1e;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
-.code-topic-header {
-  background-color: #1e1e1e; /* Dark background matching code block */
-  color: #9cdcfe; /* Light blue text for better contrast */
+.ai-preview-code-block .code-block-header,
+.chat-markdown-content .code-topic-header {
+  background-color: #111827;
+  color: #9cdcfe;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
-  padding: 0.5rem 1rem;
-  border-bottom: 1px solid #2d2d2d;
+  letter-spacing: 0.05em;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid #1f2533;
   text-transform: lowercase;
-  letter-spacing: 0.5px;
 }
 
-.code-block-pre {
+.ai-preview-code-block pre,
+.chat-markdown-content .code-block-pre,
+.chat-markdown-content .code-block-wrapper pre {
   background-color: #1e1e1e !important;
   color: #d4d4d4 !important;
   padding: 1rem !important;
@@ -1571,7 +1578,8 @@ kbd {
   line-height: 1.5;
 }
 
-.code-block-pre code {
+.ai-preview-code-block pre code,
+.chat-markdown-content .code-block-pre code {
   background: transparent !important;
   color: inherit !important;
   padding: 0 !important;

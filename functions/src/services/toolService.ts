@@ -847,38 +847,109 @@ const parseGitHubRepo = (repoLink: string): { owner: string; repo: string } => {
   throw new Error('Invalid GitHub repository link format. Use "owner/repo" or full GitHub URL');
 };
 
+const GITHUB_HEADERS = {
+  'Accept': 'application/vnd.github.v3+json',
+  'User-Agent': 'Dotivra-Document-App'
+};
+
+type BranchResolutionSource = 'requested' | 'main' | 'master' | 'default';
+
+interface BranchResolution {
+  branch: string;
+  branchData: any;
+  source: BranchResolutionSource;
+}
+
+const fetchRepoMetadata = async (owner: string, repo: string): Promise<any> => {
+  const repoUrl = `https://api.github.com/repos/${owner}/${repo}`;
+  const response = await fetch(repoUrl, { headers: GITHUB_HEADERS });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    throw new Error((error as any).message || `Failed to fetch repository metadata: ${response.statusText}`);
+  }
+
+  return response.json();
+};
+
+const attemptBranchFetch = async (owner: string, repo: string, branch: string): Promise<any | null> => {
+  const branchUrl = `https://api.github.com/repos/${owner}/${repo}/branches/${encodeURIComponent(branch)}`;
+  const response = await fetch(branchUrl, { headers: GITHUB_HEADERS });
+
+  if (response.ok) {
+    return response.json();
+  }
+
+  if (response.status === 404) {
+    logger.info(`⚠️ Branch ${branch} not found for ${owner}/${repo}`);
+    return null;
+  }
+
+  const error = await response.json().catch(() => ({}));
+  throw new Error((error as any).message || `Failed to fetch branch ${branch}: ${response.statusText}`);
+};
+
+const resolveRepositoryBranch = async (owner: string, repo: string, branchHint?: string): Promise<BranchResolution> => {
+  const attempted = new Set<string>();
+  const attempts: Array<{ name: string; source: BranchResolutionSource }> = [];
+
+  if (branchHint && branchHint.trim()) {
+    attempts.push({ name: branchHint.trim(), source: 'requested' });
+  }
+
+  attempts.push({ name: 'main', source: 'main' });
+  attempts.push({ name: 'master', source: 'master' });
+
+  for (const { name, source } of attempts) {
+    if (attempted.has(name)) {
+      continue;
+    }
+
+    const branchData = await attemptBranchFetch(owner, repo, name);
+    attempted.add(name);
+
+    if (branchData) {
+      if (source !== 'requested') {
+        logger.info(`🔁 Using ${source} branch fallback for ${owner}/${repo}`);
+      }
+
+      return { branch: name, branchData, source };
+    }
+  }
+
+  const repoMetadata = await fetchRepoMetadata(owner, repo);
+  const defaultBranch = repoMetadata?.default_branch;
+
+  if (defaultBranch && !attempted.has(defaultBranch)) {
+    const branchData = await attemptBranchFetch(owner, repo, defaultBranch);
+    attempted.add(defaultBranch);
+
+    if (branchData) {
+      logger.info(`ℹ️ Falling back to default branch "${defaultBranch}" for ${owner}/${repo}`);
+      return { branch: defaultBranch, branchData, source: 'default' };
+    }
+  }
+
+  throw new Error(`Unable to resolve branch for ${owner}/${repo}. Tried: ${Array.from(attempted).join(', ') || 'none'}`);
+};
+
 // Tool: Get repository structure
 export const get_repo_structure = async ({ repoLink, branch = 'main', reason }: any): Promise<any> => {
-  logger.info(`📂 get_repo_structure called: ${repoLink} (branch: ${branch})`);
+  logger.info(`📂 get_repo_structure called: ${repoLink} (branch hint: ${branch || 'default'})`);
 
   try {
     const { owner, repo } = parseGitHubRepo(repoLink);
 
-    // Get branch to find tree SHA
-    const branchUrl = `https://api.github.com/repos/${owner}/${repo}/branches/${branch}`;
-    const branchResponse = await fetch(branchUrl, {
-      headers: {
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'Dotivra-Document-App'
-      }
-    });
+    const { branch: resolvedBranch, branchData, source: branchResolution } = await resolveRepositoryBranch(owner, repo, branch);
+    const treeSha = (branchData as any)?.commit?.commit?.tree?.sha;
 
-    if (!branchResponse.ok) {
-      const error = await branchResponse.json().catch(() => ({}));
-      throw new Error((error as any).message || `Failed to fetch branch: ${branchResponse.statusText}`);
+    if (!treeSha) {
+      throw new Error(`Unable to locate tree SHA for branch ${resolvedBranch}`);
     }
-
-    const branchData = await branchResponse.json();
-    const treeSha = (branchData as any).commit.commit.tree.sha;
 
     // Get tree recursively
     const treeUrl = `https://api.github.com/repos/${owner}/${repo}/git/trees/${treeSha}?recursive=1`;
-    const treeResponse = await fetch(treeUrl, {
-      headers: {
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'Dotivra-Document-App'
-      }
-    });
+    const treeResponse = await fetch(treeUrl, { headers: GITHUB_HEADERS });
 
     if (!treeResponse.ok) {
       const error = await treeResponse.json().catch(() => ({}));
@@ -900,13 +971,14 @@ export const get_repo_structure = async ({ repoLink, branch = 'main', reason }: 
       operation: 'get_repo_structure',
       owner,
       repo,
-      branch,
+      branch: resolvedBranch,
+      branchResolution,
       totalItems: formattedTree.length,
       tree: formattedTree,
       truncated: (treeData as any).truncated
     };
 
-    logToolUsage('get_repo_structure', { repoLink, branch, reason }, result);
+    logToolUsage('get_repo_structure', { repoLink, branch: resolvedBranch, reason }, result);
     return result;
 
   } catch (error: any) {
@@ -921,23 +993,20 @@ export const get_repo_structure = async ({ repoLink, branch = 'main', reason }: 
 };
 
 // Tool: Get repository commits
-export const get_repo_commits = async ({ repoLink, branch = 'main', page = 1, per_page = 30, reason }: any): Promise<any> => {
-  logger.info(`📜 get_repo_commits called: ${repoLink} (branch: ${branch}, page: ${page})`);
+export const get_repo_commits = async ({ repoLink, branch = 'main', page = 1, per_page = 5, reason }: any): Promise<any> => {
+  logger.info(`📜 get_repo_commits called: ${repoLink} (branch hint: ${branch || 'default'}, page: ${page})`);
 
   try {
     const { owner, repo } = parseGitHubRepo(repoLink);
 
     // Validate pagination parameters
     const validPage = Math.max(1, parseInt(page) || 1);
-    const validPerPage = Math.min(100, Math.max(1, parseInt(per_page) || 30));
+    const validPerPage = Math.min(100, Math.max(1, parseInt(per_page) || 5));
 
-    const commitsUrl = `https://api.github.com/repos/${owner}/${repo}/commits?sha=${branch}&page=${validPage}&per_page=${validPerPage}`;
-    const response = await fetch(commitsUrl, {
-      headers: {
-        'Accept': 'application/vnd.github.v3+json',
-        'User-Agent': 'Dotivra-Document-App'
-      }
-    });
+    const { branch: resolvedBranch, source: branchResolution } = await resolveRepositoryBranch(owner, repo, branch);
+
+    const commitsUrl = `https://api.github.com/repos/${owner}/${repo}/commits?sha=${encodeURIComponent(resolvedBranch)}&page=${validPage}&per_page=${validPerPage}`;
+    const response = await fetch(commitsUrl, { headers: GITHUB_HEADERS });
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
@@ -962,14 +1031,15 @@ export const get_repo_commits = async ({ repoLink, branch = 'main', page = 1, pe
       operation: 'get_repo_commits',
       owner,
       repo,
-      branch,
+      branch: resolvedBranch,
+      branchResolution,
       page: validPage,
       per_page: validPerPage,
       commitsCount: formattedCommits.length,
       commits: formattedCommits
     };
 
-    logToolUsage('get_repo_commits', { repoLink, branch, page, per_page, reason }, result);
+    logToolUsage('get_repo_commits', { repoLink, branch: resolvedBranch, page: validPage, per_page: validPerPage, reason }, result);
     return result;
 
   } catch (error: any) {
