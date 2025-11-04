@@ -82,6 +82,53 @@ function verifySession(sessionId: string | undefined) {
   return true;
 }
 
+// Environment visibility (safe) configuration
+const ALLOWED_ENV_KEYS = new Set<string>([
+  "GEMINI_API_KEYS",
+  "GEMINI_DASHBOARD_PASS",
+  "GEMINI_LIMIT_RPM",
+  "GEMINI_LIMIT_RPD",
+  "GEMINI_LIMIT_TPM",
+  "VITE_GEMINI_API_KEY",
+]);
+
+const CONFIG_LOOKUP: Record<string, {namespace: string; key: string}> = {
+  GEMINI_API_KEYS: {namespace: "gemini", key: "api_keys"},
+  GEMINI_DASHBOARD_PASS: {namespace: "gemini", key: "dashboard_pass"},
+  GEMINI_LIMIT_RPM: {namespace: "gemini", key: "limit_rpm"},
+  GEMINI_LIMIT_RPD: {namespace: "gemini", key: "limit_rpd"},
+  GEMINI_LIMIT_TPM: {namespace: "gemini", key: "limit_tpm"},
+  VITE_GEMINI_API_KEY: {namespace: "gemini", key: "vite_api_key"},
+};
+
+const summarizeValue = (value: unknown) => {
+  if (value === undefined || value === null) {
+    return {defined: false, preview: null as string | null, length: 0, type: "undefined"};
+  }
+
+  const detectedType = Array.isArray(value) ? "array" : typeof value;
+  const str = typeof value === "string" ? value : JSON.stringify(value);
+  const trimmed = str.trim();
+  const preview = trimmed.length <= 4 ? trimmed : `${trimmed.slice(0, 4)}…`;
+
+  return {
+    defined: true,
+    preview,
+    length: trimmed.length,
+    type: detectedType,
+  };
+};
+
+const countKeyList = (value: unknown): number | null => {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const str = typeof value === "string" ? value : JSON.stringify(value);
+  const cleaned = str.replace(/[\[\]\s'"`]/g, "");
+  if (!cleaned.length) return 0;
+  return cleaned.split(",").filter(Boolean).length;
+};
+
 // Gemini Balancer for Firebase Functions (Admin SDK compatible)
 interface KeyState {
   key: string;
@@ -580,6 +627,68 @@ const getGitHubAuth = () => {
 // Health check endpoint
 app.get("/api/health", (req, res) => {
   res.json({status: "ok", timestamp: new Date().toISOString()});
+});
+
+// Lightweight endpoint to verify environment variable availability without exposing secrets
+app.get('/api/env/check', (req, res) => {
+  try {
+    const keyParam = Array.isArray(req.query.key) ? req.query.key[0] : req.query.key;
+    const normalizedKey = (keyParam ?? '').toString().trim().toUpperCase();
+
+    if (!normalizedKey) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required query parameter "key"',
+        allowedKeys: Array.from(ALLOWED_ENV_KEYS),
+      });
+    }
+
+    if (!ALLOWED_ENV_KEYS.has(normalizedKey)) {
+      return res.status(400).json({
+        success: false,
+        error: `Key "${normalizedKey}" is not allowed for inspection`,
+        allowedKeys: Array.from(ALLOWED_ENV_KEYS),
+      });
+    }
+
+    const runtimeConfig = functions.config?.() ?? {};
+    const mapping = CONFIG_LOOKUP[normalizedKey];
+
+    const processValue = process.env[normalizedKey];
+
+    let configValue: unknown = undefined;
+    let configPath: string | null = null;
+    if (mapping) {
+      const namespaceData = (runtimeConfig as Record<string, any>)[mapping.namespace];
+      if (namespaceData && Object.prototype.hasOwnProperty.call(namespaceData, mapping.key)) {
+        configValue = namespaceData[mapping.key];
+        configPath = `${mapping.namespace}.${mapping.key}`;
+      }
+    }
+
+    const processSummary = summarizeValue(processValue);
+    const configSummary = summarizeValue(configValue);
+
+    const response: Record<string, any> = {
+      success: true,
+      key: normalizedKey,
+      processEnv: processSummary,
+      functionsConfig: {
+        ...configSummary,
+        path: configPath,
+      },
+    };
+
+    if (normalizedKey === 'GEMINI_API_KEYS') {
+      response.processEnv.keyCount = countKeyList(processValue);
+      response.functionsConfig.keyCount = countKeyList(configValue);
+    }
+
+    res.json(response);
+  } catch (error) {
+    logger.error('❌ Env check error:', error);
+    res.status(500).json({ success: false, error: 'Failed to inspect environment variable' });
+  }
 });
 
 // Tools registry endpoint - returns list of available server-side tools
