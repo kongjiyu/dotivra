@@ -20,7 +20,14 @@ toolService.initFirestore(db);
 
 // MCP integration removed
 
-setGlobalOptions({maxInstances: 10});
+setGlobalOptions({
+  maxInstances: 10,
+  secrets: [
+    'GEMINI_API_KEYS',
+    'GEMINI_DASHBOARD_PASS',
+    'VITE_GEMINI_API_KEY',
+  ],
+});
 
 // Gemini balancer initialization with Firebase Admin
 // Session storage for dashboard authentication
