@@ -175,9 +175,36 @@ export class FirestoreService {
                     ...docSnap.data()
                 } as Project;
             }
+            // Fallback: allow lookup by Project_Id field when Firestore doc ID is different
+            const projectByExternalId = await FirestoreService.getProjectByExternalId(projectId);
+            if (projectByExternalId) {
+                return projectByExternalId;
+            }
             return null;
         } catch (error) {
             console.error('Error fetching project:', error);
+            throw error;
+        }
+    }
+
+    static async getProjectByExternalId(projectExternalId: string): Promise<Project | null> {
+        try {
+            const q = query(
+                collection(db, PROJECTS_COLLECTION),
+                where('Project_Id', '==', projectExternalId)
+            );
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                const docSnap = querySnapshot.docs[0];
+                return {
+                    id: docSnap.id,
+                    ...docSnap.data()
+                } as Project;
+            }
+            return null;
+        } catch (error) {
+            console.error('Error fetching project by Project_Id:', error);
             throw error;
         }
     }
