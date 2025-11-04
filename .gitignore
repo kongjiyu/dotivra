@@ -23,7 +23,6 @@ dist-ssr
 .firebase/
 firebase-debug.log
 firebase-debug.*.log
-.firebaserc
 
 # Sensitive configuration files
 **/firebase-adminsdk-*.json

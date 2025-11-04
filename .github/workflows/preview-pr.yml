@@ -1,14 +1,18 @@
-name: Preview Pull Request
+name: Deploy Preview
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
+    types: [opened, synchronize, reopened]
 
 jobs:
-  preview:
-    name: Deploy Preview
+  build-and-preview:
     runs-on: ubuntu-latest
+    
+    permissions:
+      contents: read
+      pull-requests: write
+      checks: write
     
     steps:
       - name: Checkout code
@@ -23,31 +27,52 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build application
+      - name: Create env file
+        run: |
+          cat > .env << EOF
+          VITE_FIREBASE_API_KEY=${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_FIREBASE_AUTH_DOMAIN=${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
+          VITE_FIREBASE_PROJECT_ID=${{ secrets.VITE_FIREBASE_PROJECT_ID }}
+          VITE_FIREBASE_STORAGE_BUCKET=${{ secrets.VITE_FIREBASE_STORAGE_BUCKET }}
+          VITE_FIREBASE_MESSAGING_SENDER_ID=${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
+          VITE_FIREBASE_APP_ID=${{ secrets.VITE_FIREBASE_APP_ID }}
+          VITE_FIREBASE_MEASUREMENT_ID=${{ secrets.VITE_FIREBASE_MEASUREMENT_ID }}
+          VITE_GEMINI_API_KEY=${{ secrets.VITE_GEMINI_API_KEY }}
+          VITE_API_URL=${{ secrets.VITE_API_URL }}
+          VITE_GITHUB_CLIENT_ID=${{ secrets.VITE_GITHUB_CLIENT_ID }}
+          VITE_GITHUB_REDIRECT_URI=${{ secrets.VITE_GITHUB_REDIRECT_URI }}
+          EOF
+
+      - name: Build project
         run: npm run build
 
-      - name: Install Firebase Tools
-        run: npm install -g firebase-tools
-
-      - name: Deploy to Preview Channel
-        id: deploy_preview
+      - name: Deploy to Firebase Preview Channel
+        id: deploy
         run: |
           CHANNEL_ID="pr-${{ github.event.pull_request.number }}"
-          firebase hosting:channel:deploy $CHANNEL_ID --expires 7d --only hosting
+          npx firebase-tools hosting:channel:deploy $CHANNEL_ID \
+            --expires 7d \
+            --only hosting \
+            --project dotivra \
+            --token "${{ secrets.FIREBASE_TOKEN }}"
           echo "channel_id=$CHANNEL_ID" >> $GITHUB_OUTPUT
-        env:
-          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
       - name: Comment PR with Preview URL
         uses: actions/github-script@v7
         with:
           script: |
-            const channelId = '${{ steps.deploy_preview.outputs.channel_id }}';
-            const previewUrl = `https://dotivra--${channelId}-dotivra.web.app`;
+            const channelId = '${{ steps.deploy.outputs.channel_id }}';
+            const previewUrl = `https://dotivra--${channelId}-<RANDOM_HASH>.web.app`;
             
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `🔍 **Preview deployed!**\n\n🌐 Preview URL: ${previewUrl}\n\n⏰ Expires in 7 days`
+              body: `## 🚀 Preview Deployment Ready!
+              
+              Preview URL: ${previewUrl}
+              
+              This preview will expire in 7 days.
+              
+              Channel ID: \`${channelId}\``
             });
