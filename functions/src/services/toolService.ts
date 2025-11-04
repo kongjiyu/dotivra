@@ -5,6 +5,7 @@
 
 import * as admin from 'firebase-admin';
 import * as logger from 'firebase-functions/logger';
+import { marked } from 'marked';
 
 // Firestore instance (Firebase Admin SDK)
 let firestore: admin.firestore.Firestore | null = null;
@@ -84,6 +85,29 @@ export const getToolUsageLog = (): ToolLogEntry[] => {
 // Export tool usage log clearer
 export const clearToolUsageLog = (): void => {
   toolUsageLog.length = 0;
+};
+
+const htmlTagRegex = /<\/?([a-z][\w:-]*)\b[^>]*>/i;
+const headingDividerRegex = /(<h[1-2][^>]*>[\s\S]*?<\/h[1-2]>)(\s*<hr\s*\/?>(?:\s*<br\s*\/?\s*>?)?)/gi;
+
+const normalizeContentToHtml = (input: string): string => {
+  const raw = typeof input === 'string' ? input : '';
+  const trimmed = raw.trim();
+  if (!trimmed.length) {
+    return '';
+  }
+
+  let html = trimmed;
+  if (!htmlTagRegex.test(trimmed)) {
+    const parsed = marked.parse(trimmed, { async: false });
+    html = typeof parsed === 'string' ? parsed.trim() : '';
+  }
+
+  if (!html.length) {
+    return '';
+  }
+
+  return html.replace(headingDividerRegex, '$1');
 };
 
 // Execute tool by name (toolMap will be assigned at the end of this file
@@ -286,16 +310,26 @@ export const search_document_content = async ({ query, reason }: any): Promise<a
 };
 
 export const append_document_content = async ({ content, reason }: any): Promise<any> => {
-  if (typeof content !== 'string' || !content.length) {
+  if (typeof content !== 'string' || !content.trim().length) {
     return {
       success: false,
       html: `<div class="error-message">Sorry, no content was provided to append. Please try again.</div>`
     };
   }
-  currentDocumentContent = currentDocumentContent + content;
+  const normalizedContent = normalizeContentToHtml(content);
+  if (!normalizedContent.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, the provided content could not be converted to a valid format.</div>`
+    };
+  }
+
+  currentDocumentContent = currentDocumentContent + normalizedContent;
+  const appendedLength = normalizedContent.length;
   const result = {
     success: true,
-    html: `<div class="tool-success">Added <b>${content.length}</b> characters to your document.</div>`
+    appended_length: appendedLength,
+    html: `<div class="tool-success">Added <b>${appendedLength}</b> characters to your document.</div>`
   };
   logToolUsage('append_document_content', { content, reason }, result, currentDocumentId);
   await syncToFirebase();
@@ -309,17 +343,27 @@ export const insert_document_content = async ({ position, content, reason }: any
       html: `<div class="error-message">Sorry, we couldn't find the right place to insert your text. Please try again with a different request.</div>`
     };
   }
-  if (typeof content !== 'string' || !content.length) {
+  if (typeof content !== 'string' || !content.trim().length) {
     return {
       success: false,
       html: `<div class="error-message">Sorry, no content was provided to insert. Please try again.</div>`
     };
   }
-  currentDocumentContent = currentDocumentContent.slice(0, position) + content + currentDocumentContent.slice(position);
+  const normalizedContent = normalizeContentToHtml(content);
+  if (!normalizedContent.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, the provided content could not be converted to a valid format.</div>`
+    };
+  }
+
+  currentDocumentContent = currentDocumentContent.slice(0, position) + normalizedContent + currentDocumentContent.slice(position);
+  const insertedLength = normalizedContent.length;
   const result = {
     success: true,
-    html: `<div class="tool-success">Inserted <b>${content.length}</b> characters at position <b>${position}</b>.</div>`,
-    position: { from: position, to: position + content.length },
+    inserted_length: insertedLength,
+    html: `<div class="tool-success">Inserted <b>${insertedLength}</b> characters at position <b>${position}</b>.</div>`,
+    position: { from: position, to: position + insertedLength },
     insertedAt: position
   };
   logToolUsage('insert_document_content', { position, content, reason }, result, currentDocumentId);
@@ -334,10 +378,17 @@ export const insert_document_content_at_location = async ({ target, position, co
       html: `<div class="error-message">Sorry, no target location was provided. Please specify where to insert the content.</div>`
     };
   }
-  if (typeof content !== 'string' || !content.length) {
+  if (typeof content !== 'string' || !content.trim().length) {
     return {
       success: false,
       html: `<div class="error-message">Sorry, no content was provided to insert. Please try again.</div>`
+    };
+  }
+  const normalizedContent = normalizeContentToHtml(content);
+  if (!normalizedContent.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, the provided content could not be converted to a valid format.</div>`
     };
   }
   if (position !== 'before' && position !== 'after') {
@@ -395,12 +446,14 @@ export const insert_document_content_at_location = async ({ target, position, co
   }
 
   // Insert the content
-  currentDocumentContent = currentDocumentContent.slice(0, insertPosition) + content + currentDocumentContent.slice(insertPosition);
+  currentDocumentContent = currentDocumentContent.slice(0, insertPosition) + normalizedContent + currentDocumentContent.slice(insertPosition);
+  const insertedLength = normalizedContent.length;
 
   const result = {
     success: true,
-    html: `<div class="tool-success">Inserted <b>${content.length}</b> characters ${position} "${target.substring(0, 30)}${target.length > 30 ? '...' : ''}".</div>`,
-    position: { from: insertPosition, to: insertPosition + content.length },
+    inserted_length: insertedLength,
+    html: `<div class="tool-success">Inserted <b>${insertedLength}</b> characters ${position} "${target.substring(0, 30)}${target.length > 30 ? '...' : ''}".</div>`,
+    position: { from: insertPosition, to: insertPosition + insertedLength },
     targetFound: target.substring(0, 100),
     insertedAt: insertPosition
   };
@@ -416,17 +469,28 @@ export const replace_document_content = async ({ position, content, reason }: an
       html: `<div class="error-message">Sorry, we couldn't find the part of your document to replace. Please try again with a different request.</div>`
     };
   }
-  if (typeof content !== 'string') {
+  if (typeof content !== 'string' || !content.trim().length) {
     return {
       success: false,
       html: `<div class="error-message">Sorry, no content was provided to replace. Please try again.</div>`
     };
   }
+  const normalizedContent = normalizeContentToHtml(content);
+  if (!normalizedContent.length) {
+    return {
+      success: false,
+      html: `<div class="error-message">Sorry, the provided content could not be converted to a valid format.</div>`
+    };
+  }
   const { from, to } = position;
-  currentDocumentContent = currentDocumentContent.slice(0, from) + content + currentDocumentContent.slice(to);
+  currentDocumentContent = currentDocumentContent.slice(0, from) + normalizedContent + currentDocumentContent.slice(to);
+  const removedLength = to - from;
+  const insertedLength = normalizedContent.length;
   const result = {
     success: true,
-    html: `<div class="tool-success">Replaced <b>${to - from}</b> characters with <b>${content.length}</b> new characters.</div>`
+    removed_length: removedLength,
+    inserted_length: insertedLength,
+    html: `<div class="tool-success">Replaced <b>${removedLength}</b> characters with <b>${insertedLength}</b> new characters.</div>`
   };
   logToolUsage('replace_document_content', { position, content, reason }, result, currentDocumentId);
   await syncToFirebase();
