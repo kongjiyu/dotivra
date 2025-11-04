@@ -282,7 +282,7 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         prompt: iterationPrompt,
-                        model: 'gemini-2.0-flash-exp',
+                        model: 'gemini-2.5-pro',
                         generationConfig: {
                             temperature: 0.3,
                             maxOutputTokens: maxTokens

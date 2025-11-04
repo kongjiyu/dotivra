@@ -55,7 +55,7 @@ class GitHubService {
     const response = await fetch(`${this.baseURL}${endpoint}`, {
       ...options,
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `token ${token}`,
         'Accept': 'application/vnd.github.v3+json',
         'Content-Type': 'application/json',
         ...options.headers,

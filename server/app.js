@@ -228,7 +228,7 @@ Format your response as JSON:
 }`;
 
       const result = await geminiBalancer.generate({
-        model: 'gemini-2.0-flash-exp',
+        model: 'gemini-2.5-pro',
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         generationConfig: {
           temperature: 0.7,
