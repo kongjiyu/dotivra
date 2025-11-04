@@ -86,28 +86,16 @@ export const clearToolUsageLog = (): void => {
   toolUsageLog.length = 0;
 };
 
-// Execute tool by name
-export const executeTool = async (toolName: string, parameters: Record<string, any>): Promise<any> => {
-  const toolMap: Record<string, Function> = {
-    'get_document_content': get_document_content,
-    'scan_document_content': scan_document_content,
-    'search_document_content': search_document_content,
-    'append_document_content': append_document_content,
-    'insert_document_content': insert_document_content,
-    'insert_document_content_at_location': insert_document_content_at_location,
-    'replace_document_content': replace_document_content,
-    'remove_document_content': remove_document_content,
-    'append_document_summary': append_document_summary,
-    'insert_document_summary': insert_document_summary,
-    'replace_doument_summary': replace_doument_summary,
-    'remove_document_summary': remove_document_summary,
-    'search_document_summary': search_document_summary,
-    'get_all_documents_metadata_within_project': get_all_documents_metadata_within_project,
-    'get_document_summary': get_document_summary,
-    'get_repo_structure': get_repo_structure,
-    'get_repo_commits': get_repo_commits,
-  };
+// Execute tool by name (toolMap will be assigned at the end of this file
+// after all functions are declared to avoid temporal dead zone issues)
+let toolMap: Record<string, Function> = {} as any;
 
+// Export a simple registry for listing available tools
+export const getAvailableTools = (): string[] => {
+  return Object.keys(toolMap || {}).sort();
+};
+
+export const executeTool = async (toolName: string, parameters: Record<string, any>): Promise<any> => {
   const tool = toolMap[toolName];
   if (!tool) {
     return {
@@ -927,4 +915,25 @@ export const get_repo_commits = async ({ repoLink, branch = 'main', page = 1, pe
       commits: []
     };
   }
+};
+
+// Assign the toolMap now that all functions are declared
+toolMap = {
+  'get_document_content': get_document_content,
+  'scan_document_content': scan_document_content,
+  'search_document_content': search_document_content,
+  'append_document_content': append_document_content,
+  'insert_document_content': insert_document_content,
+  'insert_document_content_at_location': insert_document_content_at_location,
+  'replace_document_content': replace_document_content,
+  'remove_document_content': remove_document_content,
+  'append_document_summary': append_document_summary,
+  'insert_document_summary': insert_document_summary,
+  'replace_doument_summary': replace_doument_summary,
+  'remove_document_summary': remove_document_summary,
+  'search_document_summary': search_document_summary,
+  'get_all_documents_metadata_within_project': get_all_documents_metadata_within_project,
+  'get_document_summary': get_document_summary,
+  'get_repo_structure': get_repo_structure,
+  'get_repo_commits': get_repo_commits,
 };

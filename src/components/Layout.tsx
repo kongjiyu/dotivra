@@ -24,7 +24,9 @@ import {
   User,
   Plus,
   Github,
-  LogOut
+  LogOut,
+  BarChart3,
+  TestTube
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
