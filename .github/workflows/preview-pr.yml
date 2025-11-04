@@ -50,11 +50,20 @@ jobs:
         id: deploy
         run: |
           CHANNEL_ID="pr-${{ github.event.pull_request.number }}"
-          npx firebase-tools hosting:channel:deploy $CHANNEL_ID \
+          
+          # Deploy and capture output
+          DEPLOY_OUTPUT=$(npx firebase-tools hosting:channel:deploy $CHANNEL_ID \
             --expires 7d \
             --project dotivra \
-            --token "${{ secrets.FIREBASE_TOKEN }}"
+            --token "${{ secrets.FIREBASE_TOKEN }}" 2>&1)
+          
+          echo "$DEPLOY_OUTPUT"
+          
+          # Extract the preview URL from output
+          PREVIEW_URL=$(echo "$DEPLOY_OUTPUT" | grep -o 'https://[^ ]*' | head -1)
+          
           echo "channel_id=$CHANNEL_ID" >> $GITHUB_OUTPUT
+          echo "preview_url=$PREVIEW_URL" >> $GITHUB_OUTPUT
         env:
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
 
@@ -63,7 +72,7 @@ jobs:
         with:
           script: |
             const channelId = '${{ steps.deploy.outputs.channel_id }}';
-            const previewUrl = `https://dotivra--${channelId}-<RANDOM_HASH>.web.app`;
+            const previewUrl = '${{ steps.deploy.outputs.preview_url }}';
             
             github.rest.issues.createComment({
               issue_number: context.issue.number,
@@ -71,9 +80,13 @@ jobs:
               repo: context.repo.repo,
               body: `## 🚀 Preview Deployment Ready!
               
-              Preview URL: ${previewUrl}
+              **Preview URL:** ${previewUrl}
               
-              This preview will expire in 7 days.
+              ⏰ This preview will expire in 7 days.
               
-              Channel ID: \`${channelId}\``
+              📦 Channel ID: \`${channelId}\`
+              
+              ---
+              
+              💡 Test your changes in the preview before merging!`
             });
