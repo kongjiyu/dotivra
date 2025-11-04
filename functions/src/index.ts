@@ -152,10 +152,11 @@ class GeminiBalancer {
   constructor(apiKeys: string[], firestore: FirebaseFirestore.Firestore) {
     if (!apiKeys || !apiKeys.length) throw new Error("No GEMINI API keys configured");
     
+    const config = functions.config();
     this.limits = {
-      RPM: Number(process.env.GEMINI_LIMIT_RPM || 5),
-      RPD: Number(process.env.GEMINI_LIMIT_RPD || 100),
-      TPM: Number(process.env.GEMINI_LIMIT_TPM || 125000),
+      RPM: Number(config.gemini.limit_rpm || process.env.GEMINI_LIMIT_RPM || 5),
+      RPD: Number(config.gemini.limit_rpd || process.env.GEMINI_LIMIT_RPD || 100),
+      TPM: Number(config.gemini.limit_tpm || process.env.GEMINI_LIMIT_TPM || 125000),
     };
     
     this.db = firestore;
@@ -530,7 +531,8 @@ let geminiBalancer: GeminiBalancer | null = null;
 
 function initializeGeminiBalancer() {
   try {
-    const raw = (process.env.GEMINI_API_KEYS || "").trim();
+    const config = functions.config();
+    const raw = (config.gemini.api_key || process.env.GEMINI_API_KEYS || "").trim();
     let keys: string[] = [];
     
     if (raw) {
@@ -548,8 +550,8 @@ function initializeGeminiBalancer() {
     }
     
     // Fallback to single key if array parsing fails
-    if (keys.length === 0 && process.env.VITE_GEMINI_API_KEY) {
-      keys = [process.env.VITE_GEMINI_API_KEY];
+    if (keys.length === 0 && (config.gemini.vite.api_key || process.env.VITE_GEMINI_API_KEY)) {
+      keys = [config.gemini.vite.api_key || process.env.VITE_GEMINI_API_KEY];
     }
     
     if (keys.length === 0) {
@@ -942,7 +944,8 @@ app.post('/api/ai-agent/execute', async (req, res) => {
 app.post('/api/gemini/auth', (req, res) => {
   try {
     const { passkey } = req.body;
-    const expectedPasskey = process.env.GEMINI_DASHBOARD_PASS;
+    const config = functions.config();
+    const expectedPasskey = config.gemini.dashboard_pass || process.env.GEMINI_DASHBOARD_PASS;
 
     if (!expectedPasskey) {
       return res.status(500).json({ error: 'Dashboard passkey not configured' });
