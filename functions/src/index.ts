@@ -126,50 +126,17 @@ const countKeyList = (value: unknown): number | null => {
 
 // Gemini single-key helper utilities
 // Uses a single Gemini API key provided via Vite configuration.
-const GEMINI_KEY_ENV_SOURCES = [
-  "VITE_GEMINI_API_KEY",
-];
-
 let cachedGeminiClient: GoogleGenAI | null = null;
 let cachedGeminiKeySignature = "";
 
-function extractFirstGeminiKey(raw: string): string | null {
-  const trimmed = raw.trim();
-  if (!trimmed) {
+function resolveGeminiApiKey(): string | null {
+  const raw = process.env.VITE_GEMINI_API_KEY;
+  if (!raw) {
     return null;
   }
 
-  if (trimmed.startsWith("[")) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      if (Array.isArray(parsed)) {
-        const first = parsed.map((value) => String(value).trim()).find(Boolean);
-        if (first) return first;
-      }
-    } catch (error) {
-      logger.debug("Failed to parse GEMINI key array, falling back to manual parsing", error);
-    }
-  }
-
-  const cleaned = trimmed.replace(/[\[\]\s"']/g, "");
-  const parts = cleaned.split(",").map((segment) => segment.trim()).filter(Boolean);
-  if (parts.length > 0) {
-    return parts[0];
-  }
-
-  return trimmed;
-}
-
-function resolveGeminiApiKey(): string | null {
-  for (const envName of GEMINI_KEY_ENV_SOURCES) {
-    const raw = process.env[envName];
-    if (!raw) continue;
-    const firstKey = extractFirstGeminiKey(raw);
-    if (firstKey) {
-      return firstKey;
-    }
-  }
-  return null;
+  const trimmed = raw.trim();
+  return trimmed.length ? trimmed : null;
 }
 
 function ensureGeminiClient(): GoogleGenAI | null {
