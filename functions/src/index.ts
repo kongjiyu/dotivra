@@ -3107,7 +3107,14 @@ app.post('/api/document/save-version/:documentId', async (req, res) => {
 
 export const api = onRequest(
   {
-    secrets: [],
+    secrets: [
+      'VITE_GEMINI_API_KEY',
+      'GEMINI_API_KEYS',
+      'GEMINI_DASHBOARD_PASS',
+      'GEMINI_LIMIT_RPM',
+      'GEMINI_LIMIT_RPD',
+      'GEMINI_LIMIT_TPM'
+    ],
     memory: '2GiB',
     timeoutSeconds: 540,
     maxInstances: 10,
