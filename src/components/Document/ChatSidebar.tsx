@@ -146,7 +146,9 @@ export default function ChatSidebar({
                 'ai-removal-highlight',
                 'ai-replacement-highlight',
                 'ai-editing-highlight',
-                'ai-highlight'
+                'ai-highlight',
+                'addition-highlight',
+                'deletion-highlight'
             ];
 
             highlightClasses.forEach(className => {
