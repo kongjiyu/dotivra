@@ -355,12 +355,20 @@ export const append_document_content = async ({ content, reason }: any): Promise
 
   await refreshCurrentDocument();
 
+  const startPosition = currentDocumentContent.length;
   currentDocumentContent = currentDocumentContent + normalizedContent;
   const appendedLength = normalizedContent.length;
   const result = {
     success: true,
     appended_length: appendedLength,
-    html: `<div class="tool-success">Added <b>${appendedLength}</b> characters to your document.</div>`
+    html: `<div class="tool-success">Added <b>${appendedLength}</b> characters to your document.</div>`,
+    position: { from: startPosition, to: startPosition + appendedLength },
+    range: {
+      before: { from: startPosition, to: startPosition },
+      after: { from: startPosition, to: startPosition + appendedLength }
+    },
+    insertedContent: normalizedContent,
+    operation: 'append_document_content'
   };
   logToolUsage('append_document_content', { content, reason }, result, currentDocumentId);
   await syncToFirebase();
@@ -397,14 +405,21 @@ export const insert_document_content = async ({ position, content, reason }: any
     };
   }
 
-  currentDocumentContent = currentDocumentContent.slice(0, position) + normalizedContent + currentDocumentContent.slice(position);
+  const safePosition = Math.max(0, Math.min(position, currentDocumentContent.length));
   const insertedLength = normalizedContent.length;
+  currentDocumentContent = currentDocumentContent.slice(0, safePosition) + normalizedContent + currentDocumentContent.slice(safePosition);
   const result = {
     success: true,
     inserted_length: insertedLength,
     html: `<div class="tool-success">Inserted <b>${insertedLength}</b> characters at position <b>${position}</b>.</div>`,
-    position: { from: position, to: position + insertedLength },
-    insertedAt: position
+    position: { from: safePosition, to: safePosition + insertedLength },
+    range: {
+      before: { from: safePosition, to: safePosition },
+      after: { from: safePosition, to: safePosition + insertedLength }
+    },
+    insertedAt: safePosition,
+    insertedContent: normalizedContent,
+    operation: 'insert_document_content'
   };
   logToolUsage('insert_document_content', { position, content, reason }, result, currentDocumentId);
   await syncToFirebase();
@@ -488,16 +503,23 @@ export const insert_document_content_at_location = async ({ target, position, co
   }
 
   // Insert the content
-  currentDocumentContent = currentDocumentContent.slice(0, insertPosition) + normalizedContent + currentDocumentContent.slice(insertPosition);
+  const safeInsertPosition = Math.max(0, Math.min(insertPosition, currentDocumentContent.length));
   const insertedLength = normalizedContent.length;
+  currentDocumentContent = currentDocumentContent.slice(0, safeInsertPosition) + normalizedContent + currentDocumentContent.slice(safeInsertPosition);
 
   const result = {
     success: true,
     inserted_length: insertedLength,
     html: `<div class="tool-success">Inserted <b>${insertedLength}</b> characters ${position} "${target.substring(0, 30)}${target.length > 30 ? '...' : ''}".</div>`,
-    position: { from: insertPosition, to: insertPosition + insertedLength },
+    position: { from: safeInsertPosition, to: safeInsertPosition + insertedLength },
+    range: {
+      before: { from: safeInsertPosition, to: safeInsertPosition },
+      after: { from: safeInsertPosition, to: safeInsertPosition + insertedLength }
+    },
     targetFound: target.substring(0, 100),
-    insertedAt: insertPosition
+    insertedAt: safeInsertPosition,
+    insertedContent: normalizedContent,
+    operation: 'insert_document_content_at_location'
   };
   logToolUsage('insert_document_content_at_location', { target, position, content, reason }, result, currentDocumentId);
   await syncToFirebase();
@@ -525,15 +547,25 @@ export const replace_document_content = async ({ position, content, reason }: an
     };
   }
   await refreshCurrentDocument();
-  const { from, to } = position;
-  currentDocumentContent = currentDocumentContent.slice(0, from) + normalizedContent + currentDocumentContent.slice(to);
-  const removedLength = to - from;
+  const safeFrom = Math.max(0, Math.min(position.from, currentDocumentContent.length));
+  const safeTo = Math.max(safeFrom, Math.min(position.to, currentDocumentContent.length));
+  const removedSegment = currentDocumentContent.slice(safeFrom, safeTo);
+  currentDocumentContent = currentDocumentContent.slice(0, safeFrom) + normalizedContent + currentDocumentContent.slice(safeTo);
+  const removedLength = safeTo - safeFrom;
   const insertedLength = normalizedContent.length;
   const result = {
     success: true,
     removed_length: removedLength,
     inserted_length: insertedLength,
-    html: `<div class="tool-success">Replaced <b>${removedLength}</b> characters with <b>${insertedLength}</b> new characters.</div>`
+    html: `<div class="tool-success">Replaced <b>${removedLength}</b> characters with <b>${insertedLength}</b> new characters.</div>`,
+    position: { from: safeFrom, to: safeFrom + insertedLength },
+    range: {
+      before: { from: safeFrom, to: safeTo },
+      after: { from: safeFrom, to: safeFrom + insertedLength }
+    },
+    insertedContent: normalizedContent,
+    removedContent: removedSegment,
+    operation: 'replace_document_content'
   };
   logToolUsage('replace_document_content', { position, content, reason }, result, currentDocumentId);
   await syncToFirebase();
@@ -548,11 +580,20 @@ export const remove_document_content = async ({ position, reason }: any): Promis
     };
   }
   await refreshCurrentDocument();
-  const { from, to } = position;
-  currentDocumentContent = currentDocumentContent.slice(0, from) + currentDocumentContent.slice(to);
+  const safeFrom = Math.max(0, Math.min(position.from, currentDocumentContent.length));
+  const safeTo = Math.max(safeFrom, Math.min(position.to, currentDocumentContent.length));
+  const removedSegment = currentDocumentContent.slice(safeFrom, safeTo);
+  currentDocumentContent = currentDocumentContent.slice(0, safeFrom) + currentDocumentContent.slice(safeTo);
   const result = {
     success: true,
-    html: `<div class="tool-success">Removed <b>${to - from}</b> characters from your document.</div>`
+    html: `<div class="tool-success">Removed <b>${safeTo - safeFrom}</b> characters from your document.</div>`,
+    position: { from: safeFrom, to: safeFrom },
+    range: {
+      before: { from: safeFrom, to: safeTo },
+      after: { from: safeFrom, to: safeFrom }
+    },
+    removedContent: removedSegment,
+    operation: 'remove_document_content'
   };
   logToolUsage('remove_document_content', { position, reason }, result, currentDocumentId);
   await syncToFirebase();
