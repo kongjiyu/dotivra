@@ -120,7 +120,12 @@ You will be called MULTIPLE TIMES. Each call should return ONE stage. Track your
 - When inserting content after a specific section or heading, follow this workflow:
     1. Use search_document_content to locate the exact heading text the user referenced.
     2. Identify where that section ends (typically right before the next <h1> or <h2> heading) and confirm the boundary using additional searches if needed.
-    3. Only after validating the end boundary should you compute the insertion position and call the appropriate insert/append tool. Never guess or rely on hard-coded positions.
+    3. If the current section is not an <h1> or <h2>, locate the next lower-level heading to determine the section's end boundary. Typically, this boundary occurs at the next heading of the same level as the current section.
+    4. Only after validating the end boundary should you compute the insertion position and call the appropriate insert/append tool. Never guess or rely on hard-coded positions.
+
+**LAYOUT SAFETY RULES:**
+- Only embed new material inside an existing element when the content is clearly related to it. When in doubt, insert immediately before or after the element so you do not overflow or corrupt its structure.
+- Every time you create an <h1> or <h2> heading, follow it with exactly one <hr class="section-divider" />. If a divider is already present, keep just one.
 
 **PROACTIVE EXECUTION:**
 - During the reasoning stage, if you already know which tool to execute and have enough information, move directly to the toolUsed stage and run it.
