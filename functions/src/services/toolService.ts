@@ -39,13 +39,13 @@ const getResultSummary = (toolName: string, result: any): string => {
     case 'search_document_content':
       return `Found ${result.matches_count || 0} matches for "${result.query}"`;
     case 'append_document_content':
-      return `Appended ${result.appended_length || 0} characters`;
+      return `Appended ${result.appended_length || 0} characters starting at position ${result.position?.from ?? 'end'}`;
     case 'insert_document_content':
-      return `Inserted ${result.inserted_length || 0} characters at position ${result.position}`;
+      return `Inserted ${result.inserted_length || 0} characters at position ${result.position?.from ?? 'unknown'}`;
     case 'replace_document_content':
-      return `Replaced ${result.removed_length || 0} characters with ${result.inserted_length || 0} characters`;
+      return `Replaced ${result.removed_length || 0} characters with ${result.inserted_length || 0} characters starting at position ${result.range?.before?.from ?? 'unknown'}`;
     case 'remove_document_content':
-      return `Removed ${result.removed_length || 0} characters`;
+      return `Removed ${result.removed_length || 0} characters starting at position ${result.range?.before?.from ?? 'unknown'}`;
     default:
       return 'Operation completed';
   }
@@ -89,6 +89,8 @@ export const clearToolUsageLog = (): void => {
 
 const htmlTagRegex = /<\/?([a-z][\w:-]*)\b[^>]*>/i;
 const headingDividerRegex = /(<h[1-2][^>]*>[\s\S]*?<\/h[1-2]>)(\s*<hr\s*\/?>(?:\s*<br\s*\/?\s*>?)?)/gi;
+const headingDividerInsertRegex = /(<h[1-2][^>]*>[\s\S]*?<\/h[1-2]>)(?!\s*<hr\b)/gi;
+const blockLevelTagRegex = /^<(?:h[1-6]|p|ul|ol|li|div|section|article|aside|nav|table|thead|tbody|tr|td|th|blockquote|pre|hr|figure|figcaption)/i;
 
 const normalizeContentToHtml = (input: string): string => {
   const raw = typeof input === 'string' ? input : '';
@@ -107,7 +109,34 @@ const normalizeContentToHtml = (input: string): string => {
     return '';
   }
 
-  return html.replace(headingDividerRegex, '$1');
+  let withoutDuplicateDividers = html.replace(headingDividerRegex, '$1');
+
+  // Always follow H1/H2 with a single consistent divider
+  withoutDuplicateDividers = withoutDuplicateDividers.replace(
+    headingDividerInsertRegex,
+    (_match, heading) => `${heading}\n<hr class="section-divider" />`
+  );
+
+  return withoutDuplicateDividers;
+};
+
+const applyBlockPadding = (content: string, beforeSnippet: string, afterSnippet: string): string => {
+  const trimmed = content.trimStart();
+  if (!blockLevelTagRegex.test(trimmed)) {
+    return content;
+  }
+
+  let result = content;
+
+  if (beforeSnippet && !/\n\s*$/.test(beforeSnippet)) {
+    result = `\n${result}`;
+  }
+
+  if (afterSnippet && !/^\s*\n/.test(afterSnippet)) {
+    result = `${result}\n`;
+  }
+
+  return result;
 };
 
 // Execute tool by name (toolMap will be assigned at the end of this file
@@ -356,8 +385,9 @@ export const append_document_content = async ({ content, reason }: any): Promise
   await refreshCurrentDocument();
 
   const startPosition = currentDocumentContent.length;
-  currentDocumentContent = currentDocumentContent + normalizedContent;
-  const appendedLength = normalizedContent.length;
+  const paddedContent = applyBlockPadding(normalizedContent, currentDocumentContent.slice(Math.max(0, currentDocumentContent.length - 1)), '');
+  currentDocumentContent = currentDocumentContent + paddedContent;
+  const appendedLength = paddedContent.length;
   const result = {
     success: true,
     appended_length: appendedLength,
@@ -367,7 +397,7 @@ export const append_document_content = async ({ content, reason }: any): Promise
       before: { from: startPosition, to: startPosition },
       after: { from: startPosition, to: startPosition + appendedLength }
     },
-    insertedContent: normalizedContent,
+  insertedContent: paddedContent,
     operation: 'append_document_content'
   };
   logToolUsage('append_document_content', { content, reason }, result, currentDocumentId);
@@ -406,8 +436,11 @@ export const insert_document_content = async ({ position, content, reason }: any
   }
 
   const safePosition = Math.max(0, Math.min(position, currentDocumentContent.length));
-  const insertedLength = normalizedContent.length;
-  currentDocumentContent = currentDocumentContent.slice(0, safePosition) + normalizedContent + currentDocumentContent.slice(safePosition);
+  const beforeSnippet = currentDocumentContent.slice(Math.max(0, safePosition - 1), safePosition);
+  const afterSnippet = currentDocumentContent.slice(safePosition, safePosition + 1);
+  const paddedContent = applyBlockPadding(normalizedContent, beforeSnippet, afterSnippet);
+  const insertedLength = paddedContent.length;
+  currentDocumentContent = currentDocumentContent.slice(0, safePosition) + paddedContent + currentDocumentContent.slice(safePosition);
   const result = {
     success: true,
     inserted_length: insertedLength,
@@ -418,7 +451,7 @@ export const insert_document_content = async ({ position, content, reason }: any
       after: { from: safePosition, to: safePosition + insertedLength }
     },
     insertedAt: safePosition,
-    insertedContent: normalizedContent,
+  insertedContent: paddedContent,
     operation: 'insert_document_content'
   };
   logToolUsage('insert_document_content', { position, content, reason }, result, currentDocumentId);
@@ -504,8 +537,11 @@ export const insert_document_content_at_location = async ({ target, position, co
 
   // Insert the content
   const safeInsertPosition = Math.max(0, Math.min(insertPosition, currentDocumentContent.length));
-  const insertedLength = normalizedContent.length;
-  currentDocumentContent = currentDocumentContent.slice(0, safeInsertPosition) + normalizedContent + currentDocumentContent.slice(safeInsertPosition);
+  const beforeSnippet = currentDocumentContent.slice(Math.max(0, safeInsertPosition - 1), safeInsertPosition);
+  const afterSnippet = currentDocumentContent.slice(safeInsertPosition, safeInsertPosition + 1);
+  const paddedContent = applyBlockPadding(normalizedContent, beforeSnippet, afterSnippet);
+  const insertedLength = paddedContent.length;
+  currentDocumentContent = currentDocumentContent.slice(0, safeInsertPosition) + paddedContent + currentDocumentContent.slice(safeInsertPosition);
 
   const result = {
     success: true,
@@ -518,7 +554,7 @@ export const insert_document_content_at_location = async ({ target, position, co
     },
     targetFound: target.substring(0, 100),
     insertedAt: safeInsertPosition,
-    insertedContent: normalizedContent,
+  insertedContent: paddedContent,
     operation: 'insert_document_content_at_location'
   };
   logToolUsage('insert_document_content_at_location', { target, position, content, reason }, result, currentDocumentId);
@@ -593,6 +629,7 @@ export const remove_document_content = async ({ position, reason }: any): Promis
       after: { from: safeFrom, to: safeFrom }
     },
     removedContent: removedSegment,
+    removed_length: safeTo - safeFrom,
     operation: 'remove_document_content'
   };
   logToolUsage('remove_document_content', { position, reason }, result, currentDocumentId);
