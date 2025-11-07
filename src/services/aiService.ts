@@ -950,6 +950,27 @@ graph TD
     B --> C[End]
 </code></pre>
 
+**CRITICAL: Mermaid Syntax Rules** (Follow these to avoid syntax errors)
+1. **Subgraphs**: NO quotes in titles - Use underscores or camelCase
+   - ✅ CORRECT: subgraph ClientSide or subgraph Client_Side
+   - ❌ WRONG: subgraph "Client-Side" (causes syntax error)
+2. **Node Labels**: Use square brackets for text with spaces/symbols
+   - Example: A[User Input] or B[REST API JSON]
+3. **Arrows**: Use --> for directed edges, --- for undirected
+4. **Special Characters**: Avoid quotes, use underscores or camelCase for IDs
+5. **Indentation**: Use consistent 4-space indentation inside subgraphs
+6. **Example with subgraph**:
+<pre><code class="language-mermaid" data-language="mermaid">
+graph TD
+    subgraph ClientSide
+        User[User] --> Frontend[Frontend Angular]
+    end
+    subgraph ServerSide
+        Backend[Spring Boot] --> DB[H2 Database]
+    end
+    Frontend --> Backend
+</code></pre>
+
 **Tables:**
 <table>
   <thead><tr><th>Header</th></tr></thead>
@@ -1040,6 +1061,7 @@ Use TipTap-compatible HTML:
   <pre><code class="language-python" data-language="python">code here</code></pre>
 - Mermaid diagrams as code blocks:
   <pre><code class="language-mermaid" data-language="mermaid">graph TD...</code></pre>
+- **MERMAID SYNTAX**: NO quotes in subgraphs (use underscores: subgraph Client_Side)
 - Text formatting: <strong>, <em>, <u>, <mark>, <s>
 - Lists: <ul><li>, <ol><li>
 - Tables: <table><thead><tr><th>, <tbody><tr><td>
@@ -1314,6 +1336,14 @@ Generate content using proper TipTap HTML formatting:
 graph TD
     A --> B
 </code></pre>
+
+**CRITICAL Mermaid Rules** (Avoid syntax errors):
+- Subgraphs: NO quotes - use underscores (subgraph Client_Side NOT "Client-Side")
+- Node IDs: No spaces, use camelCase or underscores
+- Labels: Use square brackets [Text with spaces]
+- Example: subgraph Backend
+              Server[Spring Boot] --> DB[Database]
+          end
 
 **Lists:** <ul><li>, <ol><li>, or nested
 **Tables:** <table><thead><tr><th>, <tbody><tr><td>
