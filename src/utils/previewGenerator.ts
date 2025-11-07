@@ -59,6 +59,21 @@ export function generatePreviewWithHighlights(
         .filter(exec => exec.success && isContentModifyingTool(exec.tool))
         .sort((a, b) => a.timestamp - b.timestamp);
 
+    // Deduplicate executions to avoid applying the same operation multiple times
+    const seen = new Set<string>();
+    const uniqueExecutions: ToolExecution[] = [];
+    for (const exec of sortedExecutions) {
+        try {
+            const sig = `${exec.tool}|${exec.timestamp}|${JSON.stringify(exec.args || {})}`;
+            if (seen.has(sig)) continue;
+            seen.add(sig);
+            uniqueExecutions.push(exec);
+        } catch (e) {
+            // Fall back to including the execution if signature generation fails
+            uniqueExecutions.push(exec);
+        }
+    }
+
     let workingContent = originalContent || '';
 
     const segments: PreviewSegment[] = workingContent
@@ -183,7 +198,7 @@ export function generatePreviewWithHighlights(
     let deletionsCount = 0;
     const changeDetails: ChangeDetail[] = [];
 
-    for (const execution of sortedExecutions) {
+    for (const execution of uniqueExecutions) {
         const { tool, args, result } = execution;
         const metadata = result || {};
 
@@ -278,10 +293,12 @@ export function generatePreviewWithHighlights(
             case 'deletion':
                 return renderDeletionHighlight(segment.content);
             default:
-                return segment.content;
+                // Preserve raw HTML for unchanged segments to keep document structure, but ensure it's a string
+                return typeof segment.content === 'string' ? segment.content : '';
         }
     }).join('');
-
+    // Wrap previewHtml in a root container to ensure valid HTML
+    const wrappedPreviewHtml = `<div class="ai-preview-root">${previewHtml}</div>`;
     const finalHtml = segments
         .filter(segment => segment.visible)
         .map(segment => segment.content)
@@ -293,7 +310,7 @@ export function generatePreviewWithHighlights(
         .join('<br /><br />');
 
     return {
-        previewHtml,
+        previewHtml: wrappedPreviewHtml,
         finalHtml,
         removedHtml,
         changes: {
@@ -378,9 +395,18 @@ function buildContentPreview(content: string): { preview: string; textLength: nu
  * Escape HTML special characters to prevent XSS
  */
 function escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+    if (typeof document !== 'undefined' && document.createElement) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    // Fallback for non-browser environments
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
 /**
