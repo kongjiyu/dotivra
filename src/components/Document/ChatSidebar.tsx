@@ -1295,7 +1295,6 @@ From structure improvements to real-time content updates, I ensure your work rem
                                 documentSnapshot.content, // Use snapshot as baseline
                                 allToolExecutions
                             );
-                            console.log('Generated preview from snapshot:', 123);
                             setPreviewHtml(diffHtml); // Use the diff-highlighted HTML
                             setPreviewFinalHtml(updatedHtml);
                             setPreviewRemovedHtml(removedHtml);
@@ -1307,7 +1306,6 @@ From structure improvements to real-time content updates, I ensure your work rem
                                 aiBeforeContent || '',
                                 allToolExecutions
                             );
-                            console.log('Generated preview from snapshot:', 456);
 
                             setPreviewHtml(diffHtml); // Use the diff-highlighted HTML
                             setPreviewFinalHtml(updatedHtml);
