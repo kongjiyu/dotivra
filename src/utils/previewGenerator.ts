@@ -74,10 +74,13 @@ export function generatePreviewWithHighlights(
         }
     }
 
-    let workingContent = originalContent || '';
+    // Ensure we operate on a copy of the original content (pass-by-value semantics)
+    // so callers' strings are never mutated by this function.
+    const workingContentInitial = (typeof originalContent === 'string') ? originalContent.slice(0) : String(originalContent || '');
+    let workingContent = workingContentInitial;
 
     const segments: PreviewSegment[] = workingContent
-        ? [{ content: workingContent, type: 'unchanged', visible: true }]
+        ? [{ content: workingContent.slice(0), type: 'unchanged', visible: true }]
         : [];
 
     const clamp = (value: number, min: number, max: number): number => {
