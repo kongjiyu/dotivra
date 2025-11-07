@@ -114,7 +114,7 @@ const normalizeContentToHtml = (input: string): string => {
   // Always follow H1/H2 with a single consistent divider
   withoutDuplicateDividers = withoutDuplicateDividers.replace(
     headingDividerInsertRegex,
-    (_match, heading) => `${heading}\n<hr class="section-divider" />`
+    (_match, heading) => `${heading}\n<hr class="tiptap-divider" />`
   );
 
   return withoutDuplicateDividers;
@@ -586,9 +586,14 @@ export const replace_document_content = async ({ position, content, reason }: an
   const safeFrom = Math.max(0, Math.min(position.from, currentDocumentContent.length));
   const safeTo = Math.max(safeFrom, Math.min(position.to, currentDocumentContent.length));
   const removedSegment = currentDocumentContent.slice(safeFrom, safeTo);
-  currentDocumentContent = currentDocumentContent.slice(0, safeFrom) + normalizedContent + currentDocumentContent.slice(safeTo);
+  // Preserve surrounding block context when inserting replacement content
+  const beforeSnippet = currentDocumentContent.slice(Math.max(0, safeFrom - 1), safeFrom);
+  const afterSnippet = currentDocumentContent.slice(safeTo, Math.min(currentDocumentContent.length, safeTo + 1));
+  const paddedContent = applyBlockPadding(normalizedContent, beforeSnippet, afterSnippet);
+
+  currentDocumentContent = currentDocumentContent.slice(0, safeFrom) + paddedContent + currentDocumentContent.slice(safeTo);
   const removedLength = safeTo - safeFrom;
-  const insertedLength = normalizedContent.length;
+  const insertedLength = paddedContent.length;
   const result = {
     success: true,
     removed_length: removedLength,
@@ -599,7 +604,7 @@ export const replace_document_content = async ({ position, content, reason }: an
       before: { from: safeFrom, to: safeTo },
       after: { from: safeFrom, to: safeFrom + insertedLength }
     },
-    insertedContent: normalizedContent,
+  insertedContent: paddedContent,
     removedContent: removedSegment,
     operation: 'replace_document_content'
   };

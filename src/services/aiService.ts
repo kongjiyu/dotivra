@@ -23,218 +23,258 @@ class AIService {
         signal?: AbortSignal
     ): AsyncGenerator<{stage: string; content: any; thought?: string; toolExecutions?: any[]}> {
         const toolExecutions: any[] = []; // Track all tool executions with input/output
+
+        type CachedDocument = {
+            id: string;
+            data: Awaited<ReturnType<typeof FirestoreService.getDocument>>;
+        } | null;
+
+        let cachedDocument: CachedDocument = null;
+
+        const loadDocumentData = async (docId?: string) => {
+            if (!docId) {
+                return null;
+            }
+
+            if (cachedDocument && cachedDocument.id === docId) {
+                return cachedDocument.data;
+            }
+
+            try {
+                const documentData = await FirestoreService.getDocument(docId);
+                cachedDocument = { id: docId, data: documentData };
+                return documentData;
+            } catch (err) {
+                console.error('Error loading document data:', err);
+                cachedDocument = null;
+                return null;
+            }
+        };
         
         try {
             // Build system prompt with tool descriptions and stage format
-            const systemPrompt = `You are a helpful AI assistant that helps users work with their documents. You can read, search, modify, organize, analyse, and optimize document content.
+            const systemPrompt = `
+            ## Persona
+You are a helpful, structured, and friendly AI assistant who collaborates with users on documents and repositories. Communicate warmly using everyday language, guiding both technical and non-technical users with clear explanations.
 
-**IMPORTANT: You are assisting non-technical users. Always communicate in clear, natural language without technical jargon.**
+## Goals
+- Understand each request quickly and accurately.
+- Plan and execute document or repository actions through the available tools.
+- Provide concise, human-readable summaries of what you did.
+- Maintain layout integrity, divider rules, and structural safety for all document changes.
 
-**CRITICAL: RESPONSE FORMAT - SINGLE LINE JSON ONLY**
-You MUST respond with EXACTLY ONE JSON object per response. NO NEWLINES, NO MULTIPLE OBJECTS.
-Format: {"stage": "STAGE_NAME", "thought": "your internal analysis", "content": "what you're doing in natural language", "nextStage": "NEXT_STAGE_NAME"}
+## Available Runtime Variables
+- \`{{DOCUMENT_ID}}\`: Active document identifier.
+- \`{{REPOLINK}}\`: Active repository link.
+- \`{{DOCUMENT_LAST_UPDATED}}\`: ISO timestamp (UTC) of the document's most recent update, or \`"UNKNOWN"\` when missing.
+- \`{{TEMPLATE_TITLE}}\`: Current task title or template name.
+Always substitute these placeholders with their runtime values inside tool calls or explanations.
 
-**STAGE PROGRESSION - FOLLOW THIS FLOW:**
-You will be called MULTIPLE TIMES. Each call should return ONE stage. Track your progress and move forward:
+## Response Contract (Critical)
+Return **exactly one JSON object** per turn — no surrounding text, no additional objects. Escape special characters (use \`\n\`, \`\"\`, etc.). The object must follow:
+\`\`\`
+{"stage":"STAGE_NAME","thought":"internal reasoning","content":"user-facing text or tool payload","nextStage":"NEXT_STAGE_NAME"}
+\`\`\`
 
-1. **PLANNING STAGE** (First call - understand request)
-   - Analyze the user's intent, requirements, and constraints
-   - Identify what needs to be done
-   - Content: Explain what you understand from the request in friendly terms
-   - **MUST set nextStage: "reasoning"**
-   - Example: {"stage":"planning","thought":"User wants to add intro","content":"I understand you'd like to add an introduction section.","nextStage":"reasoning"}
+Important: Do NOT wrap the JSON object in markdown code fences (for example, do not return \`\`\`json  MY_JSON_CONTENT \`\`\`). Return the raw JSON object only so it can be parsed directly. When providing tool arguments in the \`content\` field, supply raw JSON objects/strings — never include triple-backtick wrappers.
 
-2. **REASONING STAGE** (Second call - decide approach)
-   - Review the planning stage analysis (look at conversation history)
-   - Think through the best way to accomplish the task
-   - Decide on necessary actions/tools
-   - Select the most appropriate tool to use FIRST
-   - Content: Explain your thinking process in natural language
-   - **If you need to use a tool, set nextStage: "toolUsed"**
-   - **If task is complete after tool execution, set nextStage: "done"** (this will trigger summary)
-   - **If task is simple and needs no tools, set nextStage: "summary"**
-   - Example: {"stage":"reasoning","thought":"Need to get document first","content":"I'll first read your document to see what's there.","nextStage":"toolUsed"}
+## Stage Flow
+You will be invoked multiple times. Progress strictly in this order without repeating stages unless explicitly required:
 
-3. **TOOLUSED STAGE** (Third+ calls - execute actions)
-   - Use this stage when you need to perform an action
-   - Request tool execution with proper format
-   - Content format: {"tool": "tool_name", "args": {...}, "description": "What I'm doing in natural language"}
-   - The "description" should be user-friendly
-   - **After tool execution, you can either:**
-     - Set nextStage: "reasoning" (if you need to think about next action)
-     - Set nextStage: "toolUsed" (if you know the next tool to use)
-     - Set nextStage: "summary" (if task is complete)
-   - Example: {"stage":"toolUsed","thought":"Getting content","content":{"tool":"get_document_content","args":{"documentId":"123"},"description":"Reading your document..."},"nextStage":"reasoning"}
+- Your very first response in every session must use the **Planning** stage. Never begin with a different stage, even if you think you already know the answer.
 
-4. **SUMMARY STAGE** (Final call - wrap up)
-   - Provide a clear summary with a title (use ## for markdown heading)
-   - Explain what was accomplished
-   - Content: Full summary in natural language with formatting
-   - **Set nextStage: "done"**
-   - Example: {"stage":"summary","thought":"Done","content":"I've added the introduction section to your document!","nextStage":"done"}
+1. **Planning**
+	- Interpret the user's latest request and confirm the objective in plain language.
+	- Set \`nextStage\` to \`"reasoning"\`.
 
-**YOUR TOOLS (use exact arg shapes):**
-- get_document_content: Read the entire document (args: {documentId, reason})
-- scan_document_content: Quick scan of document structure (args: {reason})
-- search_document_content: Find specific text (args: {query, reason})
-- append_document_content: Add content at the end (args: {content, reason})
-- insert_document_content: Add content at specific position (args: {position:number, content, reason})
-- replace_document_content: Replace a text range (args: {position:{from:number, to:number}, content, reason})
-- remove_document_content: Delete a text range (args: {position:{from:number, to:number}, reason})
-- verify_document_change: Confirm changes were made (args: {reason})
-- get_all_documents_metadata_within_project: List all documents (args: {documentId, reason})
-- get_document_summary: Get document overview (args: {documentId, reason})
-- append_document_summary: Append to summary (args: {content, reason})
-- insert_document_summary: Insert into summary (args: {position:number, content, reason})
-- replace_doument_summary: Replace summary range (args: {position:{from:number, to:number}, content, reason})
-- remove_document_summary: Remove summary range (args: {position:{from:number, to:number}, reason})
-- search_document_summary: Search within summary (args: {query, reason})
+2. **Reasoning**
+	- Reference the planning insight and decide on your approach.
+	- Determine which tool to use first (or if no tool is needed).
+	- Set \`nextStage\` to:
+	  - \`"toolUsed"\` when a tool call is required.
+	  - \`"summary"\` when the task is trivial and needs no tools.
+	  - \`"done"\` only if work is complete after reacting to a previous tool result.
 
-**GITHUB REPOSITORY TOOLS:**
-- get_repo_structure: Get complete file tree of a GitHub repository (args: {repoLink, branch?, reason})
-  * repoLink: GitHub URL (https://github.com/owner/repo) or "owner/repo" format
-  * branch: Branch name (optional, defaults to "main")
-  * Returns: Complete tree of all files and directories with paths and types
-- get_repo_commits: Get commit history from a GitHub repository (args: {repoLink, branch?, page?, per_page?, reason})
-  * repoLink: GitHub URL or "owner/repo" format
-  * branch: Branch name (optional, defaults to "main")
-  * page: Page number for pagination (optional, default: 1)
-    * per_page: Commits per page (optional, default: 5, max: 100)
-  * Returns: List of commits with SHA, message, author, date, and URL
+3. **ToolUsed**
+	- Issue the tool request.
+	- \`content\` must be an object: \`{"tool":"tool_name","args":{...},"description":"friendly explanation"}\`.
+	- Choose \`nextStage\` based on what remains (\`"reasoning"\`, \`"toolUsed"\`, or \`"summary"\`).
 
-**MANDATORY REPOSITORY CONTEXT (when repo link is available):**
-- Before you use any document-modifying tools (append, insert, replace, remove), you MUST establish repository context.
-- Step 1: Call get_repo_structure with reason "Understanding repository structure before editing" and repoLink "{{REPOLINK}}". Use the provided branch hint, automatically falling back to main/master/default if needed.
-- Step 2: Immediately call get_repo_commits with {"repoLink":"{{REPOLINK}}","per_page":5,"reason":"Reviewing the latest work"}. Use the same branch resolution logic (main → master → default).
-- Reference the retrieved structure and commits in your reasoning stage before proposing changes. Cite specific paths and commit messages where relevant.
-- Reuse these results throughout the session; only re-run if the repository link changes or you explicitly need a fresher snapshot.
-- If repoLink is "NOT_SET", acknowledge that repository context is unavailable and proceed without these calls.
+4. **Summary**
+	- Produce a short markdown summary (start with \`## Title\`).
+	- Recap what changed in natural language.
+	- Set \`nextStage\` to \`"done"\`.
 
-**CONTEXTUAL CLARITY CHECK FOR IMPROVEMENTS:**
-- When the user asks to improve, rewrite, polish, clarify, or enhance existing content, you MUST confirm that the surrounding context is clear before suggesting edits.
-- Review nearby sections using scan_document_content, search_document_content, get_document_summary, or previous tool results to understand audience, intent, and constraints.
-- Summarize this contextual understanding during the reasoning stage before you execute any content-changing tool.
-- If the context is missing or ambiguous, pause and ask the user for clarification instead of guessing.
+5. **Done**
+	- Terminal state. No additional content beyond the JSON object.
 
-**SECTION-BASED INSERTIONS:**
-- When inserting content after a specific section or heading, follow this workflow:
-    1. Use search_document_content to locate the exact heading text the user referenced.
-    2. Identify where that section ends (typically right before the next <h1> or <h2> heading) and confirm the boundary using additional searches if needed.
-    3. If the current section is not an <h1> or <h2>, locate the next lower-level heading to determine the section's end boundary. Typically, this boundary occurs at the next heading of the same level as the current section.
-    4. Only after validating the end boundary should you compute the insertion position and call the appropriate insert/append tool. Never guess or rely on hard-coded positions.
+## Tool Catalogue (Argument Shapes Must Match Exactly)
+- **get_document_content**
+	- Purpose: Load the active document into cache and return its full content with metadata.
+	- Usage: \`{"tool":"get_document_content","args":{"documentId":"{{DOCUMENT_ID}}","reason":"Reviewing the entire document"},"description":"Reading your document..."}\`
+	- Signature: \`{documentId, reason}\` → \`{success, content, length}\`
+- **scan_document_content**
+	- Purpose: Gather quick document metrics (headings, word counts) without mutating content.
+	- Usage: \`{"tool":"scan_document_content","args":{"reason":"Checking structure before edits"},"description":"Scanning the document layout..."}\`
+	- Signature: \`{reason}\` → \`{success, analysis, preview}\`
+- **search_document_content**
+	- Purpose: Retrieve exact positions for specific text to guide precise edits.
+	- Usage: \`{"tool":"search_document_content","args":{"query":"## Introduction","reason":"Locating the introduction heading"},"description":"Looking for the introduction section..."}\`
+	- Signature: \`{query, reason}\` → \`{success, matches, total_matches}\`
+- **append_document_content**
+	- Purpose: Append normalized content to the end of the document with safe spacing.
+    - Usage: \`{"tool":"append_document_content","args":{"content":"<h2>Next Steps</h2><hr class=\"tiptap-divider\" />...","reason":"Adding a closing section"},"description":"Adding your closing section at the end..."}\`
+	- Signature: \`{content, reason}\` → \`{success, appended_length, html}\`
+- **insert_document_content**
+	- Purpose: Insert content at an exact character offset you supply via \`position\`.
+	- Usage: \`{"tool":"insert_document_content","args":{"position":1024,"content":"<p>New paragraph</p>","reason":"Placing content in the overview"},"description":"Inserting the requested paragraph..."}\`
+	- Signature: \`{position, content, reason}\` → \`{success, inserted_length, html}\`
+- **insert_document_content_at_location**
+	- Purpose: Find a target string and insert content before or after it while respecting layout boundaries.
+	- Usage: \`{"tool":"insert_document_content_at_location","args":{"target":"<h2>Features</h2>","position":"after","content":"<p>Updated feature list...</p>","reason":"Extending the features section"},"description":"Adding your updates after the Features heading..."}\`
+	- Signature: \`{target, position, content, reason}\` → \`{success, inserted_length, html}\`
+- **replace_document_content**
+	- Purpose: Swap a character span with new normalized content and return what changed.
+	- Usage: \`{"tool":"replace_document_content","args":{"position":{"from":250,"to":410},"content":"<p>Revised copy...</p>","reason":"Refreshing the introduction paragraph"},"description":"Replacing the introduction paragraph..."}\`
+	- Signature: \`{position:{from,to}, content, reason}\` → \`{success, removed_length, inserted_length, html}\`
+- **remove_document_content**
+	- Purpose: Delete a character range and audit the removed snippet.
+	- Usage: \`{"tool":"remove_document_content","args":{"position":{"from":500,"to":620},"reason":"Removing redundant bullet list"},"description":"Clearing the redundant list..."}\`
+	- Signature: \`{position:{from,to}, reason}\` → \`{success, removed_length, html}\`
+- **append_document_summary**
+	- Purpose: Add text to the Firestore summary associated with the active document.
+	- Usage: \`{"tool":"append_document_summary","args":{"content":"Added deployment checklist.","reason":"Logging updates in the summary"},"description":"Updating the summary with your notes..."}\`
+	- Signature: \`{content, reason}\` → \`{success, html}\`
+- **insert_document_summary**
+	- Purpose: Insert summary text at a specific character offset.
+	- Usage: \`{"tool":"insert_document_summary","args":{"position":120,"content":"Include mission statement.","reason":"Enhancing the summary"},"description":"Adjusting the summary content..."}\`
+	- Signature: \`{position, content, reason}\` → \`{success, html}\`
+- **replace_doument_summary**
+	- Purpose: Replace part of the summary with new wording (tool name retains legacy spelling).
+	- Usage: \`{"tool":"replace_doument_summary","args":{"position":{"from":0,"to":75},"content":"Updated executive overview.","reason":"Refreshing the summary opening"},"description":"Rewriting the start of the summary..."}\`
+	- Signature: \`{position:{from,to}, content, reason}\` → \`{success, html}\`
+- **remove_document_summary**
+	- Purpose: Remove a summary range and return the removed text for confirmation.
+	- Usage: \`{"tool":"remove_document_summary","args":{"position":{"from":200,"to":260},"reason":"Cleaning outdated summary content"},"description":"Trimming the outdated summary details..."}\`
+	- Signature: \`{position:{from,to}, reason}\` → \`{success, html}\`
+- **search_document_summary**
+	- Purpose: Locate terms within the summary to guide targeted revisions.
+	- Usage: \`{"tool":"search_document_summary","args":{"query":"deployment","reason":"Checking summary for deployment notes"},"description":"Searching the summary for deployment references..."}\`
+	- Signature: \`{query, reason}\` → \`{success, matches, total_matches}\`
+- **get_all_documents_metadata_within_project**
+	- Purpose: Retrieve metadata for every document tied to the same project as the active document.
+	- Usage: \`{"tool":"get_all_documents_metadata_within_project","args":{"documentId":"{{DOCUMENT_ID}}","reason":"Reviewing related project documents"},"description":"Gathering related project documents..."}\`
+	- Signature: \`{documentId, reason}\` → \`{success, documentsCount, documents}\`
+- **get_document_summary**
+	- Purpose: Fetch the summary content for the active or specified document.
+	- Usage: \`{"tool":"get_document_summary","args":{"documentId":"{{DOCUMENT_ID}}","reason":"Confirming existing summary"},"description":"Fetching the document summary..."}\`
+	- Signature: \`{documentId, reason}\` → \`{success, summary, summaryLength}\`
+- **verify_document_change**
+	- Purpose: Confirm that previous tool operations generated the expected results.
+	- Usage: \`{"tool":"verify_document_change","args":{"reason":"Ensuring the recent edits persisted"},"description":"Double-checking the recent edits..."}\`
+	- Signature: \`{reason}\` → change verification payload
+- **get_repo_structure**
+	- Purpose: Inspect the repository tree to understand file layout before editing.
+	- Usage: \`{"tool":"get_repo_structure","args":{"repoLink":"{{REPOLINK}}","reason":"Understanding repository structure before editing"},"description":"Reviewing the repository structure..."}\`
+	- Signature: \`{repoLink, branch?, reason}\` → \`{success, tree, totalItems}\`
+- **get_repo_commits**
+	- Purpose: Review recent repository commits for additional context on ongoing work.
+	- Usage: \`{"tool":"get_repo_commits","args":{"repoLink":"{{REPOLINK}}","per_page":5,"reason":"Reviewing the latest work"},"description":"Checking recent repository updates..."}\`
+	- Signature: \`{repoLink, branch?, page?, per_page?, reason}\` → \`{success, commits, commitsCount}\`
 
-**LAYOUT SAFETY RULES:**
-- Only embed new material inside an existing element when the content is clearly related to it. When in doubt, insert immediately before or after the element so you do not overflow or corrupt its structure.
-- Every time you create an <h1> or <h2> heading, follow it with exactly one <hr class="section-divider" />. If a divider is already present, keep just one.
+All tool names and argument keys are case-sensitive — do not invent new ones.
 
-**PROACTIVE EXECUTION:**
-- During the reasoning stage, if you already know which tool to execute and have enough information, move directly to the toolUsed stage and run it.
-- Do not ask the user for their thoughts or confirmation unless you genuinely need additional details to proceed or a tool cannot be executed.
-- Never ask the user for permission before running document-modifying tools (append/insert/replace/remove). If you have the necessary context, execute immediately and inform them afterward.
+## Repository Context Mandate
+When \`{{REPOLINK}}\` is available and you plan to modify a document, first call:
+1. \`get_repo_structure\` with reason “Understanding repository structure before editing”.
+2. \`get_repo_commits\` with reason “Reviewing the latest work”.
+Reference the returned structure/commits in later reasoning unless the repo link changes.
+- If the document already contains a "Repository Structure Overview" section, refresh that existing section instead of creating a new heading when updating repository details.
 
-**CRITICAL: ACCURATE POSITION CALCULATION FOR remove_document_content and replace_document_content**
+## Freshness Validation
+- Treat \`{{DOCUMENT_LAST_UPDATED}}\` as the document's current last-edited timestamp. If it resolves to \`"UNKNOWN"\`, note that the recency is unclear.
+- When commit data is available (for example after \`get_repo_commits\`), compare the newest commit's timestamp with \`{{DOCUMENT_LAST_UPDATED}}\` to detect documentation drift.
+- Surface the result of that comparison in your reasoning and summary: flag if the repository is ahead, or confirm alignment when timestamps match or the document is newer.
+- Use this comparison to justify whether additional documentation updates are required.
+## Fallback Context Handling
+- If \`{{REPOLINK}}\` is missing, explicitly set to \`"NOT_SET"\`, or repository tools return an authorization error, skip the repository context requirement.
+- Note in your reasoning that repository context is unavailable, then proceed directly to document scanning or reading as needed.
+- Resume the repository mandate if a valid repo link becomes available later in the session.
 
-When using remove_document_content or replace_document_content, you MUST:
+## Context Checks for Rewrites or Improvements
+Before improving or rewriting content, ensure you understand the surrounding context. Use scanning/search tools or summaries if needed. If context is missing, ask the user for clarification instead of guessing.
 
-1. **ALWAYS call search_document_content FIRST** to find the EXACT position of the text to remove/replace
-   - Example: If user says "remove the introduction", first search for "introduction" to get its exact location
-   
-2. **Use the search result positions** to calculate accurate from/to values
-   - search_document_content returns: matches array with element_index, character_position, match_length, context
-   - element_index: nth occurrence of the match (0-based)
-   - character_position: absolute position in document where match starts
-   - match_length: length of the matched text
-   - Use character_position as 'from' and (character_position + match_length) as 'to'
-   
-3. **NEVER guess or estimate positions** - always search first, then use character_position
-   
-4. **For multi-line content or sections:**
-   - Search for the starting marker (e.g., "## Introduction")
-   - Search for the ending marker (e.g., "## Conclusion" or end of section)
-   - Use character_position from search results
-   - Calculate range: from = start_position, to = end_position
-   
-5. **Verify your calculation:**
-   - The from position should be the start of the text to remove
-   - The to position should be the end of the text to remove
-   - Double-check: to - from = length of text being removed
+## Section-Based Insertion Workflow
+1. \`search_document_content\` to locate the referenced heading.
+2. Find the section boundary (usually the next heading of equal or higher level).
+3. Compute exact positions from search results.
+4. Only then execute the insert/append call.
 
-**Example workflow for "remove the conclusion section":**
-Step 1: search_document_content with query "## Conclusion"
-Step 2: Get character_position from search result (e.g., 5000)
-Step 3: Search for the next section header or end marker
-Step 4: Calculate range using character positions
-Step 5: Call remove_document_content with {from: 5000, to: 6500}
-Step 6: Never remove text without first searching for its exact location
+## Layout Safety Rules
+- Never overflow unrelated elements. When unsure, insert before or after the element rather than inside.
+- Every \`<h1>\` or \`<h2>\` must be followed by exactly one \`<hr class="tiptap-divider" />\`. If a divider already exists, ensure there is only one.
+- Rely on tool metadata (positions, ranges) to avoid corrupting structure.
 
-**Search Result Example:** matches array contains {element_index: 0, character_position: 145, match_length: 15, context: "...surrounding text..."}
+## Formatting Consistency Checks
+- Before inserting or replacing blocks, scan the surrounding markup to ensure headings stay at their intended hierarchy. If you encounter a heading such as "5. Frontend Setup", make sure it is not nested inside a list item and aligns with sibling headings like "4. Backend Setup".
+- When editing ordered lists, close the list before introducing a new heading and reopen it afterward if needed. Never wrap block-level headings (\`<h1>\`–\`<h3>\`, numbered headings, etc.) inside \`<li>\` elements.
+- Preserve numbering coherence whenever you adjust step-by-step instructions. Confirm that new content does not shift existing numbering or indent levels unintentionally.
+- Ensure subsection numbering (for example, \`8.1\`) matches the nearest parent heading (such as \`8.\`). Update existing numbering rather than creating duplicates or conflicting sequences.
 
-**IMPORTANT - MESSAGE PRIORITY:**
-Always prioritize the user's current message first. Only analyze earlier conversation messages if they are necessary to accomplish the request. Keep references to prior context minimal and relevant.
+## Content Scope Restrictions
+- Keep suggestions, recommendations, and optional follow-up actions inside your chat responses. Do not append guidance such as "Next Steps" or best-practice tips into the document content unless the user explicitly requests that exact section in the document.
+- Before adding a new numbered heading or checklist, search for an existing counterpart. Update or extend the existing section instead of creating duplicate numbering or resetting the sequence.
+- Whenever you add an \`<h1>\` or \`<h2>\`, ensure a single \`<hr class="tiptap-divider" />\` immediately follows it. If that divider already exists, leave it untouched and do not append another.
+- Do not insert dividers after other heading levels unless the user explicitly requests that placement.
 
-**IMPORTANT - DOCUMENT ID:**
-The current document ID is: {{DOCUMENT_ID}}
-When a tool accepts a documentId, ALWAYS use this exact value.
-Example: {"tool":"get_document_content","args":{"documentId":"{{DOCUMENT_ID}}"},"description":"Reading your document..."}
+## Markup Safety Rules
+- Keep new text outside of tag declarations. Never insert user content between a tag name and the closing angle bracket (avoid structures like \`<mark USER TEXT>\`). Place content between the opening and closing tags instead.
+- Avoid creating or editing markup that splits paired tags across instructions. Always preserve balanced opening and closing tags surrounding the content you modify.
 
-**IMPORTANT - REPO LINK:**
-The current repository link is: {{REPOLINK}}
-When a tool accepts a repoLink, ALWAYS use this exact value.
-Example: {"tool":"get_repo_structure","args":{"repoLink":"{{REPOLINK}}","reason":"Getting repository structure..."},"description":"Retrieving the file structure of your repository..."}
+## Precise Range Requirement
+For \`remove_document_content\` and \`replace_document_content\`:
+1. Always run \`search_document_content\` first.
+2. Use \`character_position\` and \`match_length\` to compute \`from\`/\`to\`.
+3. For multi-line regions, search for both start and end markers; use their positions to define the span.
+4. Double-check: \`to - from\` equals the length of text being removed.
 
-**TOOL RESULT VALIDATION:**
-After a toolUsed stage, you will receive a toolResult with this structure:
-- {"success": true/false, "tool": "tool_name", "result": "detailed result or error"}
-- If success is false, you MUST retry with the same tool or try a different approach
-- If success is true, use the result data in your reasoning stage to decide next action
-- ALWAYS review the complete toolResult before proceeding
+## Search Result Interpretation
+- Treat \`search_document_content\` outputs as the source of truth for absolute character offsets. Use \`character_position\` for the start index and add \`match_length\` to derive the end.
+- When inserting adjacent to a match, derive the insertion point from \`character_position\` (start) or \`character_position + match_length\` (end) rather than guessing.
+- If multiple matches exist, rely on \`element_index\` and the provided context snippet to confirm you are acting on the correct occurrence before computing ranges or issuing tool calls.
 
-**COMMUNICATION STYLE:**
-- Be conversational and friendly
-- No technical jargon or tool names in descriptions
-- Use "I'm" and speak naturally
-- Example: "I'm looking for that introduction section you mentioned" NOT "Using search_document_content"
+## Tool Result Handling
+- After each tool execution you will receive a \`toolResult\` payload.
+- If \`success\` is \`false\`, retry or adjust your strategy immediately.
+- If \`success\` is \`true\`, incorporate the returned data into the next reasoning stage.
 
-**CRITICAL RULES:**
-- Response must be EXACTLY ONE JSON object, NO newlines between objects
-- ALWAYS include "nextStage" field in your response
-- Use double quotes for all strings
-- Escape special characters in strings (\\n for newlines, \\" for quotes)
-- "thought" = your internal reasoning (for logging, carry context from previous stages)
-- "content" = what you tell the user OR tool execution object
-- "nextStage" = what stage should execute next (planning → reasoning → toolUsed/summary → done)
-- For toolUsed, content must be an object with "tool", "args", and "description" fields
-- Review conversation history to see what stages you've already completed
-- DO NOT repeat the same stage - always move forward unless reasoning about next action
-- If get_document_summary returns empty, analyze the document, create summary, call append_document_summary, and continue
+## Communication Style
+- Speak conversationally (“I'm checking your document now”).
+- Avoid technical jargon and keep explanations brief but clear.
+- Do not ask for permission before running tools when you already have enough context.
 
-**EXAMPLE FLOW (ONE RESPONSE AT A TIME):**
-Call 1 - Planning: {"stage":"planning","thought":"User wants to add content after intro","content":"I understand you'd like to add some content after the introduction section.","nextStage":"reasoning"}
-Call 2 - Reasoning: {"stage":"reasoning","thought":"Based on planning: need to find intro location","content":"I'll first locate the introduction section in your document.","nextStage":"toolUsed"}
-Call 3 - ToolUsed: {"stage":"toolUsed","thought":"Executing search for intro","content":{"tool":"search_document_content","args":{"documentId":"123","query":"introduction","reason":"Finding intro section"},"description":"Looking for the introduction section..."},"nextStage":"reasoning"}
-Call 4 - Reasoning: {"stage":"reasoning","thought":"Found intro, now insert content","content":"Great! I found the introduction. Now I'll add your content right after it.","nextStage":"toolUsed"}
-Call 5 - ToolUsed: {"stage":"toolUsed","thought":"Inserting content","content":{"tool":"insert_document_content","args":{"documentId":"123","content":"New content here","position":"after-intro","reason":"Adding user content"},"description":"Adding your content after the introduction..."},"nextStage":"summary"}
-Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've added your content right after the introduction section!","nextStage":"done"}`;
+## Proactive Execution
+- During reasoning, if the next tool call is obvious and inputs are ready, move straight to \`toolUsed\` without asking the user.
+- Only ask follow-up questions when information is genuinely missing.
 
-            // Build full prompt with selected text
-            let fullPrompt = prompt;
-            if (selectedText) {
-                fullPrompt = `Selected text from document: "${selectedText}"\n\nUser request: ${prompt}`;
-            }
+## Summary Guidelines
+- Use a heading (\`## ...\`) followed by a short recap of completed actions.
+- Focus on outcomes, not internal reasoning.
+- When citing AI Preview Changes output, list each referenced item separately instead of combining them into a single link or reference.
 
-            // Inject documentId into system prompt
-            const systemPromptWithDocId = systemPrompt.replace(/\{\{DOCUMENT_ID\}\}/g, documentId || 'NOT_SET');
+## Consistency Checks
+- Preserve existing highlights or formatting not introduced by AI preview changes.
+- Maintain divider rules and block padding as enforced by the tool service metadata.
+            
+            `;
 
-            // Inject repoLink into system prompt
             const getRepoLinkForDocument = async (docId?: string): Promise<string | null> => {
                 if (!docId) return null;
                 try {
-                    const document = await FirestoreService.getDocument(docId);
-                    console.log("Fetched document for repo link:", document);
+                    const document = await loadDocumentData(docId);
                     if (!document || !document.Project_Id) return null;
                     const project = await FirestoreService.getProject(document.Project_Id);
                     let repoLink: string | undefined | null = project?.GitHubRepo || (project as any)?.githubLink || null;
-                    console.log("Repo link found:", repoLink);
                     if (!repoLink) return null;
                     repoLink = String(repoLink).trim();
                     
@@ -261,8 +301,167 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                 }
             };
 
+            const getProjectNameForDocument = async (docId?: string, repo?: string | null): Promise<string | null> => {
+                // Prefer repository-derived project name (repo name). If not available, fall back to document title.
+                try {
+                    if (repo && typeof repo === 'string' && repo.includes('/')) {
+                        const parts = repo.split('/');
+                        const repoName = parts[1] || parts[0];
+                        // Convert common repo-name separators to spaces for nicer presentation
+                        const pretty = String(repoName).replace(/[-_]+/g, ' ').trim();
+                        return pretty || repoName;
+                    }
+
+                    if (!docId) return null;
+                    const doc = await loadDocumentData(docId);
+                    if (!doc) return null;
+                    return (doc.DocumentName as string) || (doc.Title as string) || null;
+                } catch (err) {
+                    console.error('Error deriving project name for document:', err);
+                    return null;
+                }
+            };
+
+            const getTemplateTitleForDocument = async (docId?: string): Promise<string | null> => {
+                if (!docId) {
+                    return null;
+                }
+
+                try {
+                    const document = await loadDocumentData(docId);
+                    if (!document) {
+                        return null;
+                    }
+
+                    if (document.Template_Id) {
+                        const template = await FirestoreService.getTemplate(document.Template_Id);
+                        if (template?.TemplateName) {
+                            return template.TemplateName;
+                        }
+                    }
+
+                    return document.DocumentName || document.Title || null;
+                } catch (err) {
+                    console.error('Error fetching template title for document:', err);
+                    return null;
+                }
+            };
+
+            const normalizeTimestampToIso = (value: unknown): string | null => {
+                if (!value) {
+                    return null;
+                }
+
+                if (typeof value === 'string') {
+                    const parsed = Date.parse(value);
+                    if (!Number.isNaN(parsed)) {
+                        return new Date(parsed).toISOString();
+                    }
+                    return value;
+                }
+
+                if (value instanceof Date) {
+                    return value.toISOString();
+                }
+
+                if (typeof value === 'number' && Number.isFinite(value)) {
+                    return new Date(value).toISOString();
+                }
+
+                if (value && typeof value === 'object') {
+                    const maybeTimestamp = value as { toDate?: () => Date; seconds?: number; nanoseconds?: number };
+
+                    if (typeof maybeTimestamp?.toDate === 'function') {
+                        try {
+                            const asDate = maybeTimestamp.toDate();
+                            if (asDate) {
+                                return asDate.toISOString();
+                            }
+                        } catch {
+                            // ignore invalid timestamp conversion attempts
+                        }
+                    }
+
+                    if (typeof maybeTimestamp?.seconds === 'number') {
+                        const seconds = maybeTimestamp.seconds;
+                        const nanos = typeof maybeTimestamp.nanoseconds === 'number' ? maybeTimestamp.nanoseconds : 0;
+                        const millis = seconds * 1000 + Math.floor(nanos / 1e6);
+                        return new Date(millis).toISOString();
+                    }
+                }
+
+                return null;
+            };
+
+            const getDocumentLastUpdated = async (docId?: string): Promise<string | null> => {
+                if (!docId) {
+                    return null;
+                }
+
+                try {
+                    const documentData = await loadDocumentData(docId);
+                    if (!documentData) {
+                        return null;
+                    }
+
+                    const candidateKeys = [
+                        'UpdatedAt',
+                        'updatedAt',
+                        'Updated_At',
+                        'updated_at',
+                        'Updated_Time',
+                        'updated_Time',
+                        'updated_time',
+                        'UpdatedTime',
+                        'updatedTime',
+                        'Edited_Time',
+                        'editedTime',
+                        'lastUpdated',
+                        'LastUpdated'
+                    ];
+
+                    const asRecord = documentData as unknown as Record<string, unknown>;
+                    for (const key of candidateKeys) {
+                        const iso = normalizeTimestampToIso(asRecord?.[key]);
+                        if (iso) {
+                            return iso;
+                        }
+                    }
+
+                    const metadata = (asRecord?.Metadata || asRecord?.metadata) as Record<string, unknown> | undefined;
+                    if (metadata) {
+                        for (const key of candidateKeys) {
+                            const iso = normalizeTimestampToIso(metadata[key]);
+                            if (iso) {
+                                return iso;
+                            }
+                        }
+                    }
+
+                    return null;
+                } catch (err) {
+                    console.error('Error deriving document last updated timestamp:', err);
+                    return null;
+                }
+            };
+
+            // Build full prompt with selected text
+            let fullPrompt = prompt;
+            if (selectedText) {
+                fullPrompt = `Selected text from document: "${selectedText}"\n\nUser request: ${prompt}`;
+            }
+
+            const templateTitle = await getTemplateTitleForDocument(documentId);
             const repoLink = await getRepoLinkForDocument(documentId);
-            const systemPromptWithRepo = systemPromptWithDocId.replace(/\{\{REPOLINK\}\}/g, repoLink || 'NOT_SET');
+            const documentLastUpdated = await getDocumentLastUpdated(documentId);
+            const projectName = await getProjectNameForDocument(documentId, repoLink);
+
+            // Inject runtime metadata into system prompt
+            const systemPromptWithDocId = systemPrompt.replace(/\{\{DOCUMENT_ID\}\}/g, documentId || 'NOT_SET');
+            const systemPromptWithLastUpdated = systemPromptWithDocId.replace(/\{\{DOCUMENT_LAST_UPDATED\}\}/g, documentLastUpdated || 'UNKNOWN');
+            const systemPromptWithTemplate = systemPromptWithLastUpdated.replace(/\{\{TEMPLATE_TITLE\}\}/g, templateTitle || 'NOT_SET');
+            const systemPromptWithProject = systemPromptWithTemplate.replace(/\{\{PROJECT_NAME\}\}/g, projectName || (templateTitle || 'NOT_SET'));
+            const systemPromptResolved = systemPromptWithProject.replace(/\{\{REPOLINK\}\}/g, repoLink || 'NOT_SET');
 
             // Add conversation history (limit and prioritize current message)
             const limitedHistory = (conversationHistory || []).slice(-6);
@@ -272,7 +471,7 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
             let retryCount = 0;
             const maxRetries = 3;
             let toolExecutionCount = 0;
-            const maxToolExecutions = 15;
+            const maxToolExecutions = 50;
             let currentStage = 'planning';
             let stageHistory: string[] = []; // Track stages we've been through
             let lastToolResult: any = null; // Track last tool execution result
@@ -294,7 +493,7 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                 // Prepare prompt for current iteration
                 const iterationPrompt = messages.map(m => 
                     `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`
-                ).join('\n\n') + stageContext + '\n\nSystem: ' + systemPromptWithRepo;
+                ).join('\n\n') + stageContext + '\n\nSystem: ' + systemPromptResolved;
 
                 // Dynamic token allocation based on stage
                 let maxTokens = 2048; // Default
@@ -329,36 +528,55 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
 
                 const data = await response.json();
                 const aiResponse = data.text || '';
-                // Try to parse JSON from response
-                // Handle case where AI returns multiple JSON objects on separate lines
+                // Try to parse JSON from response with robust cleanup
                 let parsed: any;
                 try {
-                    // Split by newlines and try to parse each line as JSON
-                    const lines = aiResponse.trim().split('\n').filter((line: string) => line.trim());
-                    
-                    // Try to find the first valid JSON line
-                    for (const line of lines) {
+                    // Preprocess: if the model returned a fenced block (``` or ```json), prefer inner content
+                    let candidate = aiResponse;
+                    const fenceMatch = aiResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+                    if (fenceMatch) {
+                        candidate = fenceMatch[1];
+                    }
+
+                    // Helper: attempt to parse, with a repair pass that removes trailing commas
+                    const tryParseWithRepairs = (text: string) => {
                         try {
-                            const trimmedLine = line.trim();
-                            if (trimmedLine.startsWith('{') && trimmedLine.endsWith('}')) {
-                                parsed = JSON.parse(trimmedLine);
-                                // If we found a valid JSON, break and use only the first one
-                                break;
+                            return JSON.parse(text);
+                        } catch (e) {
+                            // Remove trailing commas before } or ]
+                            try {
+                                const cleaned = text.replace(/,\s*(?=[}\]])/g, '');
+                                return JSON.parse(cleaned);
+                            } catch (e2) {
+                                return null;
                             }
-                        } catch (lineError) {
-                            // Skip invalid lines and try next
-                            continue;
+                        }
+                    };
+
+                    // First, try to find the first {...} block and parse it
+                    const firstObjectMatch = candidate.match(/\{[\s\S]*\}/);
+                    if (firstObjectMatch) {
+                        parsed = tryParseWithRepairs(firstObjectMatch[0]);
+                    }
+
+                    // If still not parsed, try the whole candidate
+                    if (!parsed) {
+                        parsed = tryParseWithRepairs(candidate);
+                    }
+
+                    // Additional heuristic: split into lines and try single-line JSON entries
+                    if (!parsed) {
+                        const lines: string[] = candidate.trim().split('\n').map((ln: string) => ln.trim()).filter(Boolean);
+                        for (const line of lines) {
+                            if (line.startsWith('{') && line.endsWith('}')) {
+                                parsed = tryParseWithRepairs(line);
+                                if (parsed) break;
+                            }
                         }
                     }
 
-                    // If no valid JSON found in lines, try parsing whole response
                     if (!parsed) {
-                        const jsonMatch = aiResponse.match(/\{[\s\S]*?\}/);
-                        if (jsonMatch) {
-                            parsed = JSON.parse(jsonMatch[0]);
-                        } else {
-                            throw new Error('No JSON found in response');
-                        }
+                        throw new Error('No valid JSON found after cleanup');
                     }
 
                     // Validate required fields
@@ -445,12 +663,70 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                     const toolData = parsed.content;
                     // Execute actual tool via API
                     try {
+                        // Sanitize args to remove triple-backtick wrappers if present (common when AI returns fenced blocks)
+                        const sanitizeArgs = (args: any) => {
+                            if (!args) return args;
+                            const copy = JSON.parse(JSON.stringify(args));
+
+                            const tryParseOrUnwrap = (s: any) => {
+                                if (typeof s !== 'string') return s;
+
+                                const str = String(s);
+                                // If the entire string is a single fenced block, try to parse inner as JSON first
+                                const singleFence = str.trim().match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+                                if (singleFence) {
+                                    const inner = singleFence[1];
+                                    try {
+                                        return JSON.parse(inner);
+                                    } catch {
+                                        return inner;
+                                    }
+                                }
+
+                                // Otherwise unwrap any fenced blocks globally
+                                const unwrapped = str.replace(/```(?:json)?\s*([\s\S]*?)\s*```/gi, (_m, inner) => inner);
+                                const trimmed = unwrapped.trim();
+
+                                // If the unwrapped content looks like JSON, attempt to parse it
+                                if ((trimmed.startsWith('{') && trimmed.endsWith('}')) || (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+                                    try {
+                                        return JSON.parse(trimmed);
+                                    } catch {
+                                        // fall through to return unwrapped string
+                                    }
+                                }
+
+                                return unwrapped;
+                            };
+
+                            // Sanitize top-level content field if present
+                            if (typeof (copy as any).content === 'string') {
+                                (copy as any).content = tryParseOrUnwrap((copy as any).content);
+                            }
+
+                            // Shallow sanitize other string fields and common nested structures
+                            for (const k of Object.keys(copy)) {
+                                if (typeof copy[k] === 'string') {
+                                    copy[k] = tryParseOrUnwrap(copy[k]);
+                                } else if (copy[k] && typeof copy[k] === 'object') {
+                                    // If nested object has a content key, sanitize it
+                                    if (typeof (copy[k] as any).content === 'string') {
+                                        (copy[k] as any).content = tryParseOrUnwrap((copy[k] as any).content);
+                                    }
+                                }
+                            }
+
+                            return copy;
+                        };
+
+                        const sanitizedArgs = sanitizeArgs(toolData.args);
+
                         let toolResponse = await fetch(TOOLS_EXECUTE_API, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
                                 tool: toolData.tool,
-                                args: toolData.args,
+                                args: sanitizedArgs,
                                 documentId: documentId
                             })
                         });
@@ -489,7 +765,7 @@ Call 6 - Summary: {"stage":"summary","thought":"Task complete","content":"I've a
                         // Track this tool execution with input and output
                         toolExecutions.push({
                             tool: toolData.tool,
-                            args: toolData.args,
+                            args: sanitizedArgs,
                             result: toolResult.result,
                             success: toolResult.success,
                             timestamp: Date.now()

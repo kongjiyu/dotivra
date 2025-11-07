@@ -9,16 +9,21 @@ import type { HighlightedChange } from '@/utils/previewGenerator';
 import { getChangeStatistics } from '@/utils/previewGenerator';
 import '@/styles/tiptap.css'; // Import TipTap editor styles
 
+type ChangeSummary = {
+    additions: number;
+    deletions: number;
+    totalChanges?: number;
+    details?: Array<{ type: 'addition' | 'deletion'; tool: string; description: string }>;
+};
+
 interface AIChangesPreviewModalProps {
     isOpen: boolean;
     onClose: () => void;
     previewHtml: string;
+    finalHtml: string;
     originalHtml: string; // Add original content for side-by-side view
-    changes: HighlightedChange[] | {
-        additions: number;
-        deletions: number;
-        totalChanges?: number;
-    };
+    removedHtml?: string;
+    changes: HighlightedChange[] | ChangeSummary;
     onAccept: () => void;
     onReject: () => void;
     onRegenerate: () => void;
@@ -30,7 +35,9 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
     isOpen,
     onClose,
     previewHtml,
+    finalHtml,
     originalHtml,
+    removedHtml,
     changes,
     onAccept,
     onReject,
@@ -38,6 +45,12 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
     onApplyOriginal,
     onCopyModified
 }) => {
+    // TODO: Wire optional handlers when implementing full preview controls
+    void onClose;
+    void originalHtml;
+    void onApplyOriginal;
+    void onCopyModified;
+
     if (!isOpen) return null;
 
     // Handle both array and statistics object format
@@ -48,6 +61,23 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
             deletions: changes.deletions || 0,
             totalChanges: changes.totalChanges || ((changes.additions || 0) + (changes.deletions || 0))
         };
+
+    const changeDetails = Array.isArray(changes) ? [] : (changes.details ?? []);
+
+    const hasRemovedView = Boolean(removedHtml && removedHtml.trim().length > 0);
+    const [activeView, setActiveView] = React.useState<'diff' | 'final' | 'removed'>('diff');
+
+    React.useEffect(() => {
+        if (isOpen) {
+            setActiveView('diff');
+        }
+    }, [isOpen, previewHtml]);
+
+    const tabConfig: Array<{ key: 'diff' | 'final' | 'removed'; label: string; hidden?: boolean }> = [
+        { key: 'diff', label: 'Diff View' },
+        { key: 'final', label: 'Updated Document' },
+        { key: 'removed', label: 'Removed Snippets', hidden: !hasRemovedView }
+    ];
 
     return (
         <div className="fixed inset-0 z-100 mt-[120px] flex items-center justify-center bg-gray-900/50 backdrop-blur-sm">
@@ -61,6 +91,25 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
                         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                             Review the changes before applying them to your document
                         </p>
+                    </div>
+                </div>
+
+                {/* View Toggle */}
+                <div className="px-6 py-3 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700">
+                    <div className="inline-flex items-center rounded-md border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        {tabConfig.filter(tab => !tab.hidden).map(tab => (
+                            <button
+                                key={tab.key}
+                                onClick={() => setActiveView(tab.key)}
+                                className={`px-4 py-2 text-sm font-medium transition-colors ${activeView === tab.key
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800'
+                                    } ${tab.key !== 'diff' ? 'border-l border-gray-200 dark:border-gray-700' : ''}`}
+                                type="button"
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
                     </div>
                 </div>
 
@@ -83,6 +132,20 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
                             Total: {stats.totalChanges} change{stats.totalChanges !== 1 ? 's' : ''}
                         </div>
                     </div>
+
+                    {/* {changeDetails.length > 0 && (
+                        <div className="mt-3 space-y-2 text-xs text-gray-600 dark:text-gray-400">
+                            <div className="font-semibold uppercase tracking-wide">Change Log</div>
+                            <ul className="space-y-1">
+                                {changeDetails.map((detail, index) => (
+                                    <li key={`${detail.tool}-${index}`} className="flex items-start gap-2">
+                                        <span className={`mt-1 h-2.5 w-2.5 rounded-full ${detail.type === 'addition' ? 'bg-green-400' : 'bg-red-400'}`}></span>
+                                        <span>{detail.description}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )} */}
                 </div>
 
                 {/* Preview Content */}
@@ -91,11 +154,18 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
                         <div className="w-full h-full">
                             <div
                                 className="preview-content tiptap custom-scrollbar h-full overflow-auto p-6 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg prose prose-lg dark:prose-invert max-w-none"
-                                dangerouslySetInnerHTML={{ __html: previewHtml }}
                                 style={{
                                     fontFamily: 'system-ui, -apple-system, sans-serif',
                                     lineHeight: '1.75',
                                     fontSize: '16px'
+                                }}
+                                dangerouslySetInnerHTML={{
+                                    __html:
+                                        activeView === 'diff'
+                                            ? previewHtml
+                                            : activeView === 'final'
+                                                ? (finalHtml && finalHtml.trim().length ? finalHtml : '<p>No updated content to display.</p>')
+                                                : (removedHtml && removedHtml.trim().length ? removedHtml : '<p>No content was removed.</p>')
                                 }}
                             />
                         </div>
@@ -146,6 +216,7 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
 
             <style dangerouslySetInnerHTML={{
                 __html: `
+                .preview-content .ai-preview-deletion,
                 .preview-content .deletion-highlight {
                     background-color: #ffcccc;
                     text-decoration: line-through;
@@ -153,6 +224,7 @@ export const AIChangesPreviewModal: React.FC<AIChangesPreviewModalProps> = ({
                     border-radius: 2px;
                 }
                 
+                .preview-content .ai-preview-addition,
                 .preview-content .addition-highlight {
                     background-color: #ccffcc;
                     padding: 2px 4px;
