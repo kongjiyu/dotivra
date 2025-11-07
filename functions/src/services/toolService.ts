@@ -587,57 +587,14 @@ export const replace_document_content = async ({ position, content, reason }: an
   const safeTo = Math.max(safeFrom, Math.min(position.to, currentDocumentContent.length));
   const removedSegment = currentDocumentContent.slice(safeFrom, safeTo);
 
-  // Try element-aware replacement: if the range is fully inside a single block-level element,
-  // replace the inner HTML of that element (preserving the outer tag and attributes) to avoid creating
-  // a new paragraph or sibling block.
-  const tryElementAwareReplace = (): { applied: boolean; newInnerLength?: number } => {
-    // Find opening tag start before safeFrom
-    const openTagStart = currentDocumentContent.lastIndexOf('<', safeFrom);
-    if (openTagStart === -1) return { applied: false };
-    const openTagEnd = currentDocumentContent.indexOf('>', openTagStart);
-    if (openTagEnd === -1 || openTagEnd >= safeFrom) return { applied: false };
-    const openTagContent = currentDocumentContent.slice(openTagStart + 1, openTagEnd).trim();
-    if (!openTagContent || openTagContent.startsWith('/')) return { applied: false };
-    const tagNameMatch = openTagContent.match(/^([a-z0-9]+)/i);
-    if (!tagNameMatch) return { applied: false };
-    const tagName = tagNameMatch[1].toLowerCase();
+  // Preserve surrounding block context when inserting replacement content
+  const beforeSnippet = currentDocumentContent.slice(Math.max(0, safeFrom - 1), safeFrom);
+  const afterSnippet = currentDocumentContent.slice(safeTo, Math.min(currentDocumentContent.length, safeTo + 1));
+  const paddedContent = applyBlockPadding(normalizedContent, beforeSnippet, afterSnippet);
 
-    // Only proceed for block-level tags
-    const blockTags = ['h1','h2','h3','h4','h5','h6','p','div','section','article','li','ul','ol','blockquote','pre','figure'];
-    if (!blockTags.includes(tagName)) return { applied: false };
-
-  // Find corresponding closing tag after the open tag, handling nested same-name tags
-  const innerStart = openTagEnd + 1;
-  const closeTagIndex = findMatchingClosingTag(tagName, innerStart);
-  if (closeTagIndex === -1) return { applied: false };
-  const innerEnd = closeTagIndex;
-    if (!(innerStart <= safeFrom && innerEnd >= safeTo)) return { applied: false };
-
-    // Build replacement by replacing inner HTML only
-    const beforeOuter = currentDocumentContent.slice(0, innerStart);
-    const afterOuter = currentDocumentContent.slice(innerEnd);
-    const newInner = normalizedContent;
-    const newContent = beforeOuter + newInner + afterOuter;
-    currentDocumentContent = newContent;
-    return { applied: true, newInnerLength: newInner.length };
-  };
-
-  const elementReplace = tryElementAwareReplace();
-  let insertedLength: number;
-  let removedLength = safeTo - safeFrom;
-  if (elementReplace.applied) {
-    insertedLength = elementReplace.newInnerLength || normalizedContent.length;
-    var finalInsertedContent = normalizedContent;
-  } else {
-    // Fallback: preserve surrounding block context when inserting replacement content
-    const beforeSnippet = currentDocumentContent.slice(Math.max(0, safeFrom - 1), safeFrom);
-    const afterSnippet = currentDocumentContent.slice(safeTo, Math.min(currentDocumentContent.length, safeTo + 1));
-    const paddedContent = applyBlockPadding(normalizedContent, beforeSnippet, afterSnippet);
-
-    currentDocumentContent = currentDocumentContent.slice(0, safeFrom) + paddedContent + currentDocumentContent.slice(safeTo);
-    insertedLength = paddedContent.length;
-    var finalInsertedContent = paddedContent;
-  }
+  currentDocumentContent = currentDocumentContent.slice(0, safeFrom) + paddedContent + currentDocumentContent.slice(safeTo);
+  const removedLength = safeTo - safeFrom;
+  const insertedLength = paddedContent.length;
   const result = {
     success: true,
     removed_length: removedLength,
@@ -648,7 +605,7 @@ export const replace_document_content = async ({ position, content, reason }: an
       before: { from: safeFrom, to: safeTo },
       after: { from: safeFrom, to: safeFrom + insertedLength }
     },
-  insertedContent: finalInsertedContent,
+    insertedContent: paddedContent,
     removedContent: removedSegment,
     operation: 'replace_document_content'
   };
