@@ -1,10 +1,10 @@
 ﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { X, Sparkles, SendHorizonal, Loader2, Eraser, RotateCcw, CircleX, CircleStop, ClipboardList, Brain, Wrench, ListChecks, Check } from "lucide-react";
+import { X, Sparkles, SendHorizonal, Loader2, Eraser, RotateCcw, CircleX, CircleStop, ClipboardList, Brain, Wrench, ListChecks, Check, Dot } from "lucide-react";
 import type { Editor } from "@tiptap/react";
 import { useDocument } from "@/context/DocumentContext";
-import { EnhancedAIContentWriter } from "@/utils/enhancedAIContentWriter";
+import { EnhancedAIContentWriter, AI_HIGHLIGHT_COLORS } from "@/utils/enhancedAIContentWriter";
 import { aiService } from "@/services/aiService";
 import { useAuth } from "@/context/AuthContext";
 import { marked } from "marked";
@@ -13,7 +13,7 @@ import { fetchDocument } from "@/services/apiService";
 import { buildApiUrl } from "@/lib/apiConfig";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { AIChangesPreviewModal } from "./AIChangesPreviewModal";
-import { generatePreviewWithHighlights, type ToolExecution } from "@/utils/previewGenerator";
+import { generatePreviewWithHighlights, type ToolExecution, type HighlightedChange } from "@/utils/previewGenerator";
 import { type AIInteractionStage } from "@/utils/aiInteractionHtmlBuilder";
 import {
     AlertDialog,
@@ -108,7 +108,18 @@ export default function ChatSidebar({
     // Preview modal state
     const [showPreviewModal, setShowPreviewModal] = useState(false);
     const [previewHtml, setPreviewHtml] = useState<string>("");
-    const [previewChanges, setPreviewChanges] = useState<any[]>([]);
+    const [previewFinalHtml, setPreviewFinalHtml] = useState<string>("");
+    const [previewRemovedHtml, setPreviewRemovedHtml] = useState<string>("");
+    const [previewChanges, setPreviewChanges] = useState<
+        HighlightedChange[] |
+        {
+            additions: number;
+            deletions: number;
+            totalChanges?: number;
+            details?: Array<{ type: 'addition' | 'deletion'; tool: string; description: string }>;
+        }
+        | null
+    >(null);
 
     // Snapshot state for document versioning
     const [documentSnapshot, setDocumentSnapshot] = useState<{
@@ -117,6 +128,71 @@ export default function ChatSidebar({
         version: number;
         toolExecutions: ToolExecution[];
     } | null>(null);
+
+    const removeAiHighlightMarks = () => {
+        if (!editor) {
+            return;
+        }
+
+        const { state, commands } = editor;
+        const { doc } = state;
+        const previousSelection = state.selection;
+
+        doc.descendants((node, pos) => {
+            if (!(node as any)?.isText) {
+                return true;
+            }
+
+            const text = (node as any).text as string | undefined;
+            const textLength = text?.length ?? 0;
+            if (textLength === 0) {
+                return true;
+            }
+
+            const marks = (node as any).marks as Array<{ type: { name: string }; attrs?: Record<string, unknown> }> | undefined;
+            const hasAiHighlight = marks?.some(mark => {
+                if (mark.type.name !== 'highlight') {
+                    return false;
+                }
+                const color = (mark.attrs?.color ?? '').toString();
+                return AI_HIGHLIGHT_COLORS.includes(color);
+            });
+
+            if (hasAiHighlight) {
+                commands.setTextSelection({ from: pos, to: pos + textLength });
+                commands.unsetMark('highlight');
+            }
+
+            return true;
+        });
+
+        commands.setTextSelection({ from: previousSelection.from, to: previousSelection.to });
+    };
+
+    const stripTiptapHighlights = (html: string): string => {
+        if (typeof document === 'undefined') {
+            return html;
+        }
+
+        const container = document.createElement('div');
+        container.innerHTML = html;
+
+        const highlightElements = Array.from(container.querySelectorAll('.tiptap-highlight'));
+        highlightElements.forEach(element => {
+            const parent = element.parentNode;
+            if (!parent) {
+                return;
+            }
+
+            while (element.firstChild) {
+                parent.insertBefore(element.firstChild, element);
+            }
+
+            parent.removeChild(element);
+        });
+
+        return container.innerHTML;
+    };
 
     const clearAiPreviewHighlights = () => {
         if (!editor) {
@@ -127,34 +203,35 @@ export default function ChatSidebar({
 
         if (aiWriter) {
             aiWriter.clearAllOverlays();
+        } else {
+            removeAiHighlightMarks();
         }
 
-        const docSize = editor.state.doc.content.size;
-        editor.chain()
-            .focus()
-            .setTextSelection({ from: 0, to: docSize })
-            .unsetMark('highlight')
-            .run();
-
+        editor.commands.focus();
         const boundedFrom = Math.min(from, editor.state.doc.content.size);
         const boundedTo = Math.min(to, editor.state.doc.content.size);
         editor.commands.setTextSelection({ from: boundedFrom, to: boundedTo });
 
         if (typeof document !== 'undefined') {
             const highlightClasses = [
+                'ai-preview-addition',
+                'ai-preview-deletion',
                 'ai-addition-highlight',
                 'ai-removal-highlight',
                 'ai-replacement-highlight',
                 'ai-editing-highlight',
-                'ai-highlight',
-                'addition-highlight',
-                'deletion-highlight'
+                'ai-highlight'
             ];
 
             highlightClasses.forEach(className => {
                 document.querySelectorAll(`.${className}`).forEach(node => {
                     node.classList.remove(className);
                 });
+            });
+
+            document.querySelectorAll('[data-ai-preview]').forEach(node => {
+                node.classList.remove('ai-preview-addition', 'ai-preview-deletion');
+                node.removeAttribute('data-ai-preview');
             });
         }
     };
@@ -198,7 +275,16 @@ export default function ChatSidebar({
                 {stages.map((stage, index) => {
 
 
-                    const config = stageConfig[stage.stage] || stageConfig.summary;
+                    // Choose icon and color dynamically for toolResult stage depending on success/failure
+                    let config = stageConfig[stage.stage] || stageConfig.summary;
+                    if (stage.stage === 'toolResult') {
+                        const isFailure = /failed|error|failed:/i.test(stage.message || '');
+                        config = {
+                            icon: isFailure ? <CircleX /> : <Check />,
+                            label: 'Tool Result',
+                            color: isFailure ? 'bg-red-50 border-red-200 text-red-800' : 'bg-gray-50 border-gray-200 text-gray-700'
+                        } as any;
+                    }
 
                     return (
                         <div key={index} className={`${config.color} border rounded-lg p-3`}>
@@ -341,6 +427,11 @@ export default function ChatSidebar({
     // Function to render markdown content as HTML with custom code block handling
     const renderMarkdown = (content: string): string => {
         try {
+            // If the AI returned fenced code blocks, strip the triple-backtick wrappers
+            // Replace all fenced blocks (``` or ```json) with their inner content so the UI shows just the payload
+            content = content.replace(/```(?:json)?\s*([\s\S]*?)\s*```/gi, (_m, inner) => {
+                return inner;
+            });
             // Check if content is already HTML (contains HTML tags)
             const hasHtmlTags = /<[a-z][\s\S]*>/i.test(content);
 
@@ -601,7 +692,7 @@ From structure improvements to real-time content updates, I ensure your work rem
         // Save the current editor content to Firebase
         if (editor && documentId) {
             try {
-                const currentContent = editor.getHTML();
+                let currentContent = editor.getHTML();
 
                 // Update Firebase with current editor content
                 await fetch(buildApiUrl(`api/documents/${documentId}`), {
@@ -790,8 +881,78 @@ From structure improvements to real-time content updates, I ensure your work rem
 
                 const timestamp = Date.now();
                 let toolsUsed = 0;
-                let currentProgressMessageId: string | null = null;
-                let messageStages: ChatMessageStage[] = []; // Store structured stages
+                const stageMessageIds: string[] = [];
+                let activeStageMessageId: string | null = null;
+                const structuredStages: ChatMessageStage[] = [];
+                let hasDisplayedPlanningStage = false;
+
+                const stageFallbackText: Record<ChatMessageStage['stage'], string> = {
+                    planning: 'I\'m mapping out the best approach for you.',
+                    reasoning: 'I\'m working through the details step by step.',
+                    toolUsed: 'I\'m applying the requested change now.',
+                    toolResult: 'The action just finished running.',
+                    summary: 'Here\'s what I accomplished.',
+                    error: 'Something went wrong during this step.'
+                };
+
+                const mapStageToProgressStage = (stageName: ChatMessageStage['stage']): ChatMessage['progressStage'] => {
+                    switch (stageName) {
+                        case 'planning':
+                            return 'planning';
+                        case 'reasoning':
+                            return 'reasoning';
+                        case 'toolUsed':
+                        case 'toolResult':
+                            return 'execution';
+                        default:
+                            return 'summary';
+                    }
+                };
+
+                const finalizeActiveStageMessage = () => {
+                    if (!activeStageMessageId) return;
+                    setInternalMessages(prev => prev.map(msg =>
+                        msg.id === activeStageMessageId
+                            ? { ...msg, isTemporary: false }
+                            : msg
+                    ));
+                    activeStageMessageId = null;
+                };
+
+                const addStageMessage = (
+                    stageName: ChatMessageStage['stage'],
+                    rawMessage?: unknown,
+                    options?: { temporary?: boolean; markActive?: boolean }
+                ) => {
+                    const text = typeof rawMessage === 'string' && rawMessage.trim().length
+                        ? rawMessage
+                        : stageFallbackText[stageName];
+
+                    const entry: ChatMessageStage = {
+                        stage: stageName,
+                        message: text
+                    };
+                    structuredStages.push(entry);
+
+                    const id = `stage-${stageName}-${crypto.randomUUID()}`;
+                    stageMessageIds.push(id);
+
+                    const message: ChatMessage = {
+                        id,
+                        role: 'assistant',
+                        content: [entry],
+                        timestamp: Date.now(),
+                        type: 'progress',
+                        progressStage: mapStageToProgressStage(stageName),
+                        isTemporary: options?.temporary ?? stageName !== 'summary'
+                    };
+
+                    setInternalMessages(prev => [...prev, message]);
+
+                    if (options?.markActive !== false) {
+                        activeStageMessageId = id;
+                    }
+                };
 
 
 
@@ -832,6 +993,12 @@ From structure improvements to real-time content updates, I ensure your work rem
                     abortControllerRef.current.signal
                 )) {
 
+                    if (!hasDisplayedPlanningStage && stage.stage !== 'planning') {
+                        finalizeActiveStageMessage();
+                        addStageMessage('planning');
+                        hasDisplayedPlanningStage = true;
+                    }
+
 
                     // Collect all stages for HTML generation
                     allStages.push({
@@ -854,8 +1021,11 @@ From structure improvements to real-time content updates, I ensure your work rem
                     }
 
                     if (stage.stage === 'error') {
-                        // Remove all progress messages and show clean error
-                        setInternalMessages(prev => prev.filter(msg => msg.id !== currentProgressMessageId));
+                        // Clear any in-progress stage cards and show a user-friendly error
+                        finalizeActiveStageMessage();
+                        if (stageMessageIds.length > 0) {
+                            setInternalMessages(prev => prev.filter(msg => !stageMessageIds.includes(msg.id)));
+                        }
 
                         // Friendly, non-technical error messaging
                         const raw = typeof stage.content === 'string' ? stage.content : '';
@@ -890,62 +1060,19 @@ From structure improvements to real-time content updates, I ensure your work rem
 
                     // Create or update the combined progress message
                     switch (stage.stage) {
-                        case 'planning':
-                            // Add planning stage
-                            messageStages.push({
-                                stage: 'planning',
-                                message: stage.content || 'Planning...'
-                            });
-
-                            // Create or update combined message
-                            if (!currentProgressMessageId) {
-                                currentProgressMessageId = `progress-${Date.now()}`;
-                                const newMsg: ChatMessage = {
-                                    id: currentProgressMessageId,
-                                    role: 'assistant',
-                                    content: [...messageStages],
-                                    timestamp,
-                                    type: 'progress',
-                                    progressStage: stage.stage as any,
-                                    isTemporary: true
-                                };
-                                setInternalMessages(prev => [...prev, newMsg]);
-                            } else {
-                                // Update existing message
-                                setInternalMessages(prev => prev.map(msg =>
-                                    msg.id === currentProgressMessageId
-                                        ? {
-                                            ...msg,
-                                            content: [...messageStages],
-                                            progressStage: stage.stage as any
-                                        }
-                                        : msg
-                                ));
-                            }
+                        case 'planning': {
+                            finalizeActiveStageMessage();
+                            addStageMessage('planning', stage.content);
+                            hasDisplayedPlanningStage = true;
                             break;
-
-                        case 'reasoning':
-                            // Add reasoning stage
-                            messageStages.push({
-                                stage: 'reasoning',
-                                message: stage.content || 'Analyzing...'
-                            });
-
-                            // Update existing message
-                            if (currentProgressMessageId) {
-                                setInternalMessages(prev => prev.map(msg =>
-                                    msg.id === currentProgressMessageId
-                                        ? {
-                                            ...msg,
-                                            content: [...messageStages],
-                                            progressStage: stage.stage as any
-                                        }
-                                        : msg
-                                ));
-                            }
+                        }
+                        case 'reasoning': {
+                            finalizeActiveStageMessage();
+                            addStageMessage('reasoning', stage.content);
                             break;
-
-                        case 'toolUsed':
+                        }
+                        case 'toolUsed': {
+                            finalizeActiveStageMessage();
                             toolsUsed++;
 
                             // Create snapshot before first tool execution
@@ -1001,72 +1128,39 @@ From structure improvements to real-time content updates, I ensure your work rem
                                 }
                             }
 
-                            const toolData = typeof stage.content === 'object' ? stage.content : { description: stage.content };
-                            const toolDescription = toolData.description || 'Processing...';
+                            const toolData = typeof stage.content === 'object' && stage.content !== null
+                                ? stage.content as { description?: string; tool?: string }
+                                : { description: stage.content as string | undefined };
 
-                            // Add tool execution stage
-                            messageStages.push({
-                                stage: 'toolUsed',
-                                message: toolDescription
-                            });
+                            const toolDescription = toolData.description
+                                || (toolData.tool ? `Running ${toolData.tool}...` : undefined);
 
-                            // Update message to show tool is being used
-                            if (currentProgressMessageId) {
-                                setInternalMessages(prev => prev.map(msg =>
-                                    msg.id === currentProgressMessageId
-                                        ? {
-                                            ...msg,
-                                            content: [...messageStages],
-                                            progressStage: 'execution'
-                                        }
-                                        : msg
-                                ));
-                            }
+                            addStageMessage('toolUsed', toolDescription);
                             break;
-
-                        case 'toolResult':
-                            // Skip tool results - don't show them in the chat
+                        }
+                        case 'toolResult': {
+                            finalizeActiveStageMessage();
+                            const toolResult = stage.content as { success?: boolean; tool?: string; error?: string } | undefined;
+                            const resultSummary = toolResult
+                                ? toolResult.success
+                                    ? `Finished ${toolResult.tool ?? 'the last action'} successfully.`
+                                    : `The ${toolResult.tool ?? 'last action'} failed: ${toolResult.error ?? 'unknown error'}.`
+                                : stageFallbackText.toolResult;
+                            addStageMessage('toolResult', resultSummary, { temporary: true, markActive: true });
                             break;
-
-                        case 'summary':
-                            // Add summary stage
-                            messageStages.push({
-                                stage: 'summary',
-                                message: stage.content || 'Completed'
-                            });
-
-                            // Finalize the progress message and make it permanent
-                            if (currentProgressMessageId) {
-                                setInternalMessages(prev => prev.map(msg =>
-                                    msg.id === currentProgressMessageId
-                                        ? {
-                                            ...msg,
-                                            content: [...messageStages],
-                                            progressStage: 'summary',
-                                            isTemporary: false
-                                        }
-                                        : msg
-                                ));
-                            } else {
-                                // Create new summary message
-                                const summaryMsg: ChatMessage = {
-                                    id: `summary-${Date.now()}`,
-                                    role: 'assistant',
-                                    content: [...messageStages],
-                                    timestamp,
-                                    type: 'progress',
-                                    progressStage: 'summary',
-                                    isTemporary: false
-                                };
-                                setInternalMessages(prev => [...prev, summaryMsg]);
-                            }
+                        }
+                        case 'summary': {
+                            finalizeActiveStageMessage();
+                            addStageMessage('summary', stage.content, { temporary: false, markActive: false });
                             break;
+                        }
                     }
                 }
 
 
 
                 // Prepare interaction session data
+                finalizeActiveStageMessage();
                 const sessionEndTime = Date.now();
 
                 // Save interaction as JSON to Firebase (not HTML)
@@ -1076,7 +1170,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                         const structuredMessage: ChatMessage = {
                             id: crypto.randomUUID(),
                             role: 'assistant' as const,
-                            content: messageStages, // Save structured stages instead of HTML
+                            content: structuredStages, // Save structured stages instead of HTML
                             timestamp,
                             type: 'progress',
                             progressStage: 'summary'
@@ -1197,23 +1291,28 @@ From structure improvements to real-time content updates, I ensure your work rem
 
 
                             // Use snapshot as base for preview with diff highlighting
-                            const { previewHtml: diffHtml, changes: changeStats } = generatePreviewWithHighlights(
+                            const { previewHtml: diffHtml, finalHtml: updatedHtml, removedHtml, changes: changeStats } = generatePreviewWithHighlights(
                                 documentSnapshot.content, // Use snapshot as baseline
                                 allToolExecutions
                             );
-
+                            console.log('Generated preview from snapshot:', 123);
                             setPreviewHtml(diffHtml); // Use the diff-highlighted HTML
-                            setPreviewChanges(changeStats as any);
+                            setPreviewFinalHtml(updatedHtml);
+                            setPreviewRemovedHtml(removedHtml);
+                            setPreviewChanges(changeStats);
                             hasChanges = (changeStats.additions || 0) > 0 || (changeStats.deletions || 0) > 0 || (changeStats.modifications || 0) > 0;
                         } else {
                             // Fallback to current approach if no snapshot
-                            const { previewHtml: diffHtml, changes: changeStats } = generatePreviewWithHighlights(
+                            const { previewHtml: diffHtml, finalHtml: updatedHtml, removedHtml, changes: changeStats } = generatePreviewWithHighlights(
                                 aiBeforeContent || '',
                                 allToolExecutions
                             );
+                            console.log('Generated preview from snapshot:', 456);
 
                             setPreviewHtml(diffHtml); // Use the diff-highlighted HTML
-                            setPreviewChanges(changeStats as any);
+                            setPreviewFinalHtml(updatedHtml);
+                            setPreviewRemovedHtml(removedHtml);
+                            setPreviewChanges(changeStats);
                             hasChanges = (changeStats.additions || 0) > 0 || (changeStats.deletions || 0) > 0 || (changeStats.modifications || 0) > 0;
                         }
 
@@ -1221,6 +1320,9 @@ From structure improvements to real-time content updates, I ensure your work rem
                         if (!wasAbortedRef.current && hasChanges) {
                             setShowPreviewModal(true);
                         } else if (!hasChanges) {
+                            setPreviewFinalHtml('');
+                            setPreviewRemovedHtml('');
+                            setPreviewChanges(null);
                         }
 
 
@@ -1459,10 +1561,9 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                     /* Progress message - use structured rendering */
                                                     <div className="w-full">
                                                         {/* Progress message content with stages */}
-                                                        <div className={`w-full bg-gray-50 bg-opacity-50 border border-gray-200 rounded-lg px-4 py-3 text-[0.95rem] leading-[1.6] break-words progress-message-content`}>
-                                                            {Array.isArray(m.content) ? renderStructuredMessage(m.content) : (
-                                                                <div
-                                                                    className="prose prose-sm max-w-none
+                                                        {Array.isArray(m.content) ? renderStructuredMessage(m.content) : (
+                                                            <div
+                                                                className="prose prose-sm max-w-none
                                                                     prose-headings:mt-3 prose-headings:mb-2 prose-headings:font-semibold
                                                                     prose-h1:text-xl prose-h2:text-lg prose-h3:text-base
                                                                     prose-p:my-2 prose-p:leading-relaxed prose-p:text-[0.95rem]
@@ -1470,20 +1571,19 @@ From structure improvements to real-time content updates, I ensure your work rem
                                                                     prose-li:my-1 prose-li:leading-relaxed
                                                                     prose-strong:font-semibold
                                                                     prose-a:text-blue-600 prose-a:underline"
-                                                                    dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content as string) }}
-                                                                />
-                                                            )}
+                                                                dangerouslySetInnerHTML={{ __html: renderMarkdown(m.content as string) }}
+                                                            />
+                                                        )}
+                                                        { }
+                                                        {m.isTemporary && (
+                                                            <div className="mt-3 pt-3 flex items-center gap-2">
+                                                                <div className="animate-spin h-4 w-4 border-2 border-purple-600 border-t-transparent rounded-full"></div>
+                                                                <span className="text-sm font-medium text-purple-800">
+                                                                    Thinking...
+                                                                </span>
 
-                                                            { }
-                                                            {m.isTemporary && (
-                                                                <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-2">
-                                                                    <div className="animate-spin h-4 w-4 border-2 border-purple-600 border-t-transparent rounded-full"></div>
-                                                                    <span className="text-sm font-medium text-purple-800">
-                                                                        Thinking...
-                                                                    </span>
-                                                                </div>
-                                                            )}
-                                                        </div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     /* User and regular assistant messages */
@@ -1851,7 +1951,9 @@ From structure improvements to real-time content updates, I ensure your work rem
                 onClose={() => setShowPreviewModal(false)}
                 originalHtml={documentSnapshot?.content || aiBeforeContent || ''}
                 previewHtml={previewHtml}
-                changes={previewChanges}
+                finalHtml={previewFinalHtml}
+                removedHtml={previewRemovedHtml}
+                changes={previewChanges ?? { additions: 0, deletions: 0, totalChanges: 0 }}
                 onAccept={handleAcceptChanges}
                 onReject={handleRejectChanges}
                 onRegenerate={handleRegenerateChanges}
@@ -1864,7 +1966,7 @@ From structure improvements to real-time content updates, I ensure your work rem
                 onCopyModified={async () => {
                     try {
                         // Get the modified content without highlights by applying all tool executions
-                        const modifiedContent = editor?.getHTML() || '';
+                        const modifiedContent = previewFinalHtml || editor?.getHTML() || '';
                         await navigator.clipboard.writeText(modifiedContent);
                         // Could add a toast notification here
                     } catch (err) {

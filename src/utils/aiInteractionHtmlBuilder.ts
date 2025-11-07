@@ -28,7 +28,10 @@ export function buildAIInteractionHTML(session: AIInteractionSession): string {
     
     const duration = endTime ? ((endTime - startTime) / 1000).toFixed(1) : '...';
     const statusClass = success ? 'status-success' : 'status-error';
-    const statusIcon = success ? '✅' : '❌';
+    // Use inline SVGs to represent status icons so they render correctly in injected HTML
+    const statusIcon = success
+        ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-circle-check"><circle cx="12" cy="12" r="10"></circle><path d="M9 12l2 2 4-4"></path></svg>`
+        : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-circle-x"><circle cx="12" cy="12" r="10"></circle><path d="M15 9l-6 6M9 9l6 6"></path></svg>`;
     
     let html = `
 <div class="ai-interaction-session">
@@ -116,18 +119,22 @@ function buildStageHTML(stage: AIInteractionStage): string {
 
         case 'toolResult':
             const resultData = content;
-            const success = resultData.success;
-            const tool = resultData.tool || 'Tool';
-            const resultText = resultData.html || resultData.message || JSON.stringify(resultData);
-            return `
-<div class="stage-block stage-tool-result ${success ? 'result-success' : 'result-error'}">
-    <div class="stage-header">
-        <span class="stage-icon">${success ? '✅' : '❌'}</span>
-        <span class="stage-label">Tool Result</span>
-        <span class="tool-badge">${escapeHtml(tool)}</span>
-    </div>
-    <div class="stage-content tool-result-content">${resultText}</div>
-</div>`;
+                const success = resultData.success;
+                const tool = resultData.tool || 'Tool';
+                const resultText = resultData.html || resultData.message || JSON.stringify(resultData);
+                const resultIcon = success
+                    ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-circle-check"><circle cx="12" cy="12" r="10"></circle><path d="M9 12l2 2 4-4"></path></svg>`
+                    : `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-circle-x"><circle cx="12" cy="12" r="10"></circle><path d="M15 9l-6 6M9 9l6 6"></path></svg>`;
+
+                return `
+    <div class="stage-block stage-tool-result ${success ? 'result-success' : 'result-error'}">
+        <div class="stage-header">
+            <span class="stage-icon">${resultIcon}</span>
+            <span class="stage-label">Tool Result</span>
+            <span class="tool-badge">${escapeHtml(tool)}</span>
+        </div>
+        <div class="stage-content tool-result-content">${resultText}</div>
+    </div>`;
 
         case 'summary':
             return `
@@ -186,7 +193,7 @@ function buildToolExecutionSummaryHTML(toolExecutions: any[]): string {
                 <tr class="${exec.success ? 'exec-success' : 'exec-error'}">
                     <td>${index + 1}</td>
                     <td><code>${escapeHtml(exec.tool)}</code></td>
-                    <td><span class="status-badge ${exec.success ? 'badge-success' : 'badge-error'}">${exec.success ? '✅ Success' : '❌ Failed'}</span></td>
+                    <td><span class="status-badge ${exec.success ? 'badge-success' : 'badge-error'}">${exec.success ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-circle-check"><circle cx="12" cy="12" r="10"></circle><path d="M9 12l2 2 4-4"></path></svg> Success` : `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-circle-x"><circle cx="12" cy="12" r="10"></circle><path d="M15 9l-6 6M9 9l6 6"></path></svg> Failed`}</span></td>
                     <td class="tool-details">
                         ${buildToolDetailsHTML(exec)}
                     </td>
@@ -531,6 +538,21 @@ export function getAIInteractionStyles(): string {
 
 .exec-error {
     background: #fef2f2;
+}
+
+/* Inline icon styling for status SVGs */
+.icon {
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 0.4rem;
+}
+
+.icon-circle-x {
+    color: #991b1b; /* red */
+}
+
+.icon-circle-check {
+    color: #065f46; /* green */
 }
 </style>`;
 }

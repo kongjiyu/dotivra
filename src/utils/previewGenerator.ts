@@ -19,6 +19,20 @@ export interface HighlightedChange {
     originalContent?: string;
 }
 
+type SegmentType = 'unchanged' | 'addition' | 'deletion';
+
+interface PreviewSegment {
+    content: string;
+    type: SegmentType;
+    visible: boolean;
+}
+
+interface ChangeDetail {
+    type: 'addition' | 'deletion';
+    tool: string;
+    description: string;
+}
+
 /**
  * Generate preview HTML with highlighted changes
  * @param originalContent - The original document content
@@ -28,98 +42,146 @@ export interface HighlightedChange {
 export function generatePreviewWithHighlights(
     originalContent: string,
     toolExecutions: ToolExecution[]
-): { 
-    previewHtml: string; 
+): {
+    previewHtml: string;
+    finalHtml: string;
+    removedHtml: string;
     changes: {
         additions: number;
         deletions: number;
         modifications: number;
         replacements?: number;
         totalChanges?: number;
+        details?: ChangeDetail[];
     }
 } {
-    const additions: Array<{ from: number; to: number }> = [];
-    const deletions: Array<{ position: number; content: string }> = [];
-
     const sortedExecutions = [...toolExecutions]
         .filter(exec => exec.success && isContentModifyingTool(exec.tool))
         .sort((a, b) => a.timestamp - b.timestamp);
 
-    let simulatedContent = originalContent || '';
+    let workingContent = originalContent || '';
+
+    const segments: PreviewSegment[] = workingContent
+        ? [{ content: workingContent, type: 'unchanged', visible: true }]
+        : [];
 
     const clamp = (value: number, min: number, max: number): number => {
         return Math.min(Math.max(value, min), max);
     };
 
-    const shiftAdditionsForInsertion = (position: number, length: number) => {
-        if (length <= 0) return;
-        additions.forEach(range => {
-            if (range.from >= position) {
-                range.from += length;
-            }
-            if (range.to >= position) {
-                range.to += length;
-            }
-        });
-        deletions.forEach(marker => {
-            if (marker.position >= position) {
-                marker.position += length;
-            }
-        });
-    };
+    const getVisibleLength = (): number => workingContent.length;
 
-    const shiftAdditionsForRemoval = (from: number, to: number) => {
-        const length = to - from;
-        if (length <= 0) return;
-        additions.forEach(range => {
-            if (range.to <= from) {
-                return;
-            }
-            if (range.from >= to) {
-                range.from -= length;
-                range.to -= length;
-                return;
-            }
-            // Overlap - clamp to the remaining visible portion
-            range.from = Math.min(range.from, from);
-            range.to = Math.max(range.from, Math.max(from, range.to - length));
-        });
-        // Drop zero-length ranges
-        for (let i = additions.length - 1; i >= 0; i--) {
-            if (additions[i].to <= additions[i].from) {
-                additions.splice(i, 1);
-            }
+    const splitAt = (offset: number): number => {
+        if (segments.length === 0) {
+            return 0;
         }
-        deletions.forEach(marker => {
-            if (marker.position >= to) {
-                marker.position -= length;
-            } else if (marker.position > from) {
-                marker.position = from;
+
+        const safeOffset = clamp(offset, 0, getVisibleLength());
+
+        let accumulated = 0;
+
+        for (let index = 0; index < segments.length; index++) {
+            const segment = segments[index];
+
+            if (!segment.visible) {
+                continue;
             }
-        });
+
+            const segmentLength = segment.content.length;
+
+            if (safeOffset === accumulated) {
+                return index;
+            }
+
+            if (safeOffset > accumulated + segmentLength) {
+                accumulated += segmentLength;
+                continue;
+            }
+
+            if (safeOffset === accumulated + segmentLength) {
+                return index + 1;
+            }
+
+            const splitPoint = safeOffset - accumulated;
+            const beforeContent = segment.content.slice(0, splitPoint);
+            const afterContent = segment.content.slice(splitPoint);
+
+            const beforeSegment: PreviewSegment = {
+                content: beforeContent,
+                type: segment.type,
+                visible: segment.visible
+            };
+
+            const afterSegment: PreviewSegment = {
+                content: afterContent,
+                type: segment.type,
+                visible: segment.visible
+            };
+
+            segments.splice(index, 1, beforeSegment, afterSegment);
+            return index + 1;
+        }
+
+        return segments.length;
     };
 
-    const applyInsertion = (position: number, content: string) => {
-        if (!content) return;
-        const safePosition = clamp(position, 0, simulatedContent.length);
-        shiftAdditionsForInsertion(safePosition, content.length);
-        simulatedContent = simulatedContent.slice(0, safePosition) + content + simulatedContent.slice(safePosition);
-        additions.push({ from: safePosition, to: safePosition + content.length });
+    const insertSegmentAt = (position: number, content: string): number | null => {
+        if (!content) {
+            return null;
+        }
+
+        const safePosition = clamp(position, 0, workingContent.length);
+        const insertIndex = splitAt(safePosition);
+        const additionSegment: PreviewSegment = {
+            content,
+            type: 'addition',
+            visible: true
+        };
+
+        segments.splice(insertIndex, 0, additionSegment);
+
+        const before = workingContent.slice(0, safePosition);
+        const after = workingContent.slice(safePosition);
+        workingContent = `${before}${content}${after}`;
+
+        return safePosition;
     };
 
-    const applyRemoval = (from: number, to: number, removedContent?: string) => {
-        const safeFrom = clamp(from, 0, simulatedContent.length);
-        const safeTo = clamp(to, safeFrom, simulatedContent.length);
+    const removeRange = (from: number, to: number, removedContent?: string): { content: string; from: number; to: number } | null => {
+        const totalLength = workingContent.length;
+        if (totalLength === 0) {
+            return null;
+        }
+
+        const safeFrom = clamp(from, 0, totalLength);
+        const safeTo = clamp(to, safeFrom, totalLength);
+
         if (safeTo <= safeFrom) {
-            return;
+            return null;
         }
-        const removedSegment = removedContent ?? simulatedContent.slice(safeFrom, safeTo);
-        shiftAdditionsForRemoval(safeFrom, safeTo);
-        simulatedContent = simulatedContent.slice(0, safeFrom) + simulatedContent.slice(safeTo);
-        if (removedSegment && removedSegment.length > 0) {
-            deletions.push({ position: safeFrom, content: removedSegment });
-        }
+
+        const fallbackContent = workingContent.slice(safeFrom, safeTo);
+        const contentToMark = removedContent ?? fallbackContent;
+
+        const startIndex = splitAt(safeFrom);
+        const endIndex = splitAt(safeTo);
+
+        const deletionSegment: PreviewSegment = {
+            content: contentToMark,
+            type: 'deletion',
+            visible: false
+        };
+
+        segments.splice(startIndex, endIndex - startIndex, deletionSegment);
+
+        workingContent = `${workingContent.slice(0, safeFrom)}${workingContent.slice(safeTo)}`;
+
+        return { content: contentToMark, from: safeFrom, to: safeTo };
     };
+
+    let additionsCount = 0;
+    let deletionsCount = 0;
+    const changeDetails: ChangeDetail[] = [];
 
     for (const execution of sortedExecutions) {
         const { tool, args, result } = execution;
@@ -133,84 +195,113 @@ export function generatePreviewWithHighlights(
                 if (!insertedContent) {
                     break;
                 }
-                const insertPosition = metadata.range?.before?.from ?? metadata.position?.from ?? args?.position ?? simulatedContent.length;
-                applyInsertion(insertPosition, insertedContent);
+
+                const insertPosition = metadata.range?.before?.from ?? metadata.position?.from ?? args?.position ?? workingContent.length;
+                const actualPosition = insertSegmentAt(insertPosition, insertedContent);
+                const { preview, textLength, rawLength } = buildContentPreview(insertedContent);
+                const changeLength = textLength > 0 ? textLength : rawLength;
+
+                if (actualPosition !== null && changeLength > 0) {
+                    additionsCount += 1;
+                    const previewLabel = preview || '[non-text content]';
+                    changeDetails.push({
+                        type: 'addition',
+                        tool,
+                        description: `Added ${changeLength} characters at position ${actualPosition}${previewLabel ? `: "${previewLabel}"` : ''}`
+                    });
+                }
                 break;
             }
             case 'replace_document_content': {
                 const removeFrom = metadata.range?.before?.from ?? args?.position?.from ?? 0;
                 const removeTo = metadata.range?.before?.to ?? args?.position?.to ?? removeFrom;
-                const removedContent = metadata.removedContent ?? simulatedContent.slice(clamp(removeFrom, 0, simulatedContent.length), clamp(removeTo, 0, simulatedContent.length));
-                applyRemoval(removeFrom, removeTo, removedContent);
+                const removedContent = metadata.removedContent ?? workingContent.slice(clamp(removeFrom, 0, workingContent.length), clamp(removeTo, 0, workingContent.length));
+                const removalMarked = removeRange(removeFrom, removeTo, removedContent);
+                if (removalMarked) {
+                    const { preview, textLength, rawLength } = buildContentPreview(removalMarked.content);
+                    const changeLength = textLength > 0 ? textLength : rawLength;
+                    if (changeLength > 0) {
+                        deletionsCount += 1;
+                        const previewLabel = preview || '[non-text content]';
+                        changeDetails.push({
+                            type: 'deletion',
+                            tool,
+                            description: `Removed ${changeLength} characters from ${removalMarked.from}-${removalMarked.to}${previewLabel ? `: "${previewLabel}"` : ''}`
+                        });
+                    }
+                }
 
                 const replacement = metadata.insertedContent ?? args?.content ?? '';
                 if (replacement) {
-                    applyInsertion(removeFrom, replacement);
+                    const actualPosition = insertSegmentAt(removeFrom, replacement);
+                    const { preview, textLength, rawLength } = buildContentPreview(replacement);
+                    const changeLength = textLength > 0 ? textLength : rawLength;
+                    if (actualPosition !== null && changeLength > 0) {
+                        additionsCount += 1;
+                        const previewLabel = preview || '[non-text content]';
+                        changeDetails.push({
+                            type: 'addition',
+                            tool,
+                            description: `Added ${changeLength} replacement characters at position ${actualPosition}${previewLabel ? `: "${previewLabel}"` : ''}`
+                        });
+                    }
                 }
                 break;
             }
             case 'remove_document_content': {
                 const removeFrom = metadata.range?.before?.from ?? args?.position?.from ?? 0;
                 const removeTo = metadata.range?.before?.to ?? args?.position?.to ?? removeFrom;
-                const removedContent = metadata.removedContent ?? simulatedContent.slice(clamp(removeFrom, 0, simulatedContent.length), clamp(removeTo, 0, simulatedContent.length));
-                applyRemoval(removeFrom, removeTo, removedContent);
+                const removedContent = metadata.removedContent ?? workingContent.slice(clamp(removeFrom, 0, workingContent.length), clamp(removeTo, 0, workingContent.length));
+                const removalMarked = removeRange(removeFrom, removeTo, removedContent);
+                if (removalMarked) {
+                    const { preview, textLength, rawLength } = buildContentPreview(removalMarked.content);
+                    const changeLength = textLength > 0 ? textLength : rawLength;
+                    if (changeLength > 0) {
+                        deletionsCount += 1;
+                        const previewLabel = preview || '[non-text content]';
+                        changeDetails.push({
+                            type: 'deletion',
+                            tool,
+                            description: `Removed ${changeLength} characters from ${removalMarked.from}-${removalMarked.to}${previewLabel ? `: "${previewLabel}"` : ''}`
+                        });
+                    }
+                }
                 break;
             }
         }
     }
 
-    const filteredAdditions = additions.filter(range => range.to > range.from);
-    const filteredDeletions = deletions.filter(marker => marker.content && marker.content.length > 0);
-
-    const events = [
-        ...filteredDeletions.map((marker, index) => ({ type: 'deletion' as const, start: marker.position, content: marker.content, order: index })),
-        ...filteredAdditions.map((range, index) => ({ type: 'addition' as const, start: range.from, end: range.to, order: index }))
-    ].sort((a, b) => {
-        if (a.start !== b.start) {
-            return a.start - b.start;
+    const previewHtml = segments.map(segment => {
+        switch (segment.type) {
+            case 'addition':
+                return renderAdditionHighlight(segment.content);
+            case 'deletion':
+                return renderDeletionHighlight(segment.content);
+            default:
+                return segment.content;
         }
-        // Show deletions before additions at the same point
-        if (a.type !== b.type) {
-            return a.type === 'deletion' ? -1 : 1;
-        }
-        return a.order - b.order;
-    });
+    }).join('');
 
-    let cursor = 0;
-    let previewHtml = '';
+    const finalHtml = segments
+        .filter(segment => segment.visible)
+        .map(segment => segment.content)
+        .join('');
 
-    for (const event of events) {
-        const start = clamp(event.start, 0, simulatedContent.length);
-
-        if (cursor < start) {
-            previewHtml += simulatedContent.slice(cursor, start);
-            cursor = start;
-        }
-
-        if (event.type === 'deletion') {
-            previewHtml += renderDeletionHighlight(event.content);
-        } else {
-            const end = clamp(event.end ?? start, start, simulatedContent.length);
-            const additionSegment = simulatedContent.slice(start, end);
-            previewHtml += renderAdditionHighlight(additionSegment);
-            cursor = end;
-        }
-    }
-
-    if (cursor < simulatedContent.length) {
-        previewHtml += simulatedContent.slice(cursor);
-    }
-
-    const additionsCount = filteredAdditions.length;
-    const deletionsCount = filteredDeletions.length;
+    const removedHtml = segments
+        .filter(segment => segment.type === 'deletion' && segment.content)
+        .map(segment => renderDeletionHighlight(segment.content))
+        .join('<br /><br />');
 
     return {
         previewHtml,
+        finalHtml,
+        removedHtml,
         changes: {
             additions: additionsCount,
             deletions: deletionsCount,
             modifications: 0,
-            totalChanges: additionsCount + deletionsCount
+            totalChanges: additionsCount + deletionsCount,
+            details: changeDetails
         }
     };
 }
@@ -235,6 +326,10 @@ function isContentModifyingTool(tool: string): boolean {
  * Preserves HTML structure including Mermaid diagrams
  */
 const HTML_TAG_REGEX = /<[a-z][\s\S]*>/i;
+const ADDITION_HIGHLIGHT_CLASS = 'ai-preview-addition';
+const DELETION_HIGHLIGHT_CLASS = 'ai-preview-deletion';
+
+const PREVIEW_SNIPPET_LIMIT = 80;
 
 function renderAdditionHighlight(content: string): string {
     if (!content) {
@@ -242,10 +337,10 @@ function renderAdditionHighlight(content: string): string {
     }
 
     if (HTML_TAG_REGEX.test(content)) {
-        return `<div class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px;">${content}</div>`;
+        return `<div class="${ADDITION_HIGHLIGHT_CLASS}" data-ai-preview="addition">${content}</div>`;
     }
 
-    return `<span class="addition-highlight" style="background-color: #ccffcc; padding: 2px 4px; border-radius: 2px;">${escapeHtml(content)}</span>`;
+    return `<span class="${ADDITION_HIGHLIGHT_CLASS}" data-ai-preview="addition">${escapeHtml(content)}</span>`;
 }
 
 function renderDeletionHighlight(content: string): string {
@@ -254,10 +349,29 @@ function renderDeletionHighlight(content: string): string {
     }
 
     if (HTML_TAG_REGEX.test(content)) {
-        return `<div class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px; opacity: 0.7;">${content}</div>`;
+        return `<div class="${DELETION_HIGHLIGHT_CLASS}" data-ai-preview="deletion">${content}</div>`;
     }
 
-    return `<span class="deletion-highlight" style="background-color: #ffcccc; text-decoration: line-through; padding: 2px 4px; border-radius: 2px;">${escapeHtml(content)}</span>`;
+    return `<span class="${DELETION_HIGHLIGHT_CLASS}" data-ai-preview="deletion">${escapeHtml(content)}</span>`;
+}
+
+function buildContentPreview(content: string): { preview: string; textLength: number; rawLength: number } {
+    const textOnly = content
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const rawLength = content.length;
+
+    if (!textOnly) {
+        return { preview: '', textLength: 0, rawLength };
+    }
+
+    const preview = textOnly.length > PREVIEW_SNIPPET_LIMIT
+        ? `${textOnly.slice(0, PREVIEW_SNIPPET_LIMIT)}...`
+        : textOnly;
+
+    return { preview, textLength: textOnly.length, rawLength };
 }
 
 /**

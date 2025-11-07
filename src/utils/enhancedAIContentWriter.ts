@@ -1,6 +1,11 @@
 import type { Editor } from '@tiptap/react';
 import { enhancedContentProcessor } from './contentProcessor';
 
+export const AI_HIGHLIGHT_COLORS = [
+  'rgba(239, 68, 68, 0.3)',
+  'rgba(34, 197, 94, 0.3)'
+];
+
 /**
  * Enhanced AI Content Position Interface for precise targeting
  */
@@ -240,21 +245,37 @@ export class EnhancedAIContentWriter {
    * Clear all active changes
    */
   public clearAllOverlays(): void {
-    // Remove all highlights from the document
-    const doc = this.editor.state.doc;
+    const { state, commands } = this.editor;
+    const { doc } = state;
+    const previousSelection = state.selection;
+
     doc.descendants((node, pos) => {
-      if (node.marks) {
-        const hasHighlight = node.marks.some(mark => mark.type.name === 'highlight');
-        if (hasHighlight) {
-          this.editor.commands.setTextSelection({ 
-            from: pos, 
-            to: pos + (node.textContent?.length || 0) 
-          });
-          this.editor.commands.unsetMark('highlight');
-        }
+      if (!node.isText) {
+        return true;
       }
+
+      const textLength = node.text?.length ?? node.textContent?.length ?? 0;
+      if (textLength === 0) {
+        return true;
+      }
+
+      const hasAiHighlight = node.marks?.some(mark => {
+        if (mark.type.name !== 'highlight') {
+          return false;
+        }
+        const color = (mark.attrs?.color ?? '').toString();
+        return AI_HIGHLIGHT_COLORS.includes(color);
+      });
+
+      if (hasAiHighlight) {
+        commands.setTextSelection({ from: pos, to: pos + textLength });
+        commands.unsetMark('highlight');
+      }
+
+      return true;
     });
 
+    commands.setTextSelection({ from: previousSelection.from, to: previousSelection.to });
     this.activeChanges.clear();
   }
 }

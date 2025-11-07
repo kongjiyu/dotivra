@@ -1,0 +1,1511 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "title": "Dotivra Tool Service Schema",
+    "description": "Formal definitions for Firebase Cloud Function tools exposed through functions/src/services/toolService.ts.",
+    "version": "2025-11-07",
+    "tools": [
+        {
+            "name": "get_document_content",
+            "description": "Loads the active document content into the agent cache or directly returns the current cache contents.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "documentId": {
+                        "type": "string",
+                        "description": "Document identifier to load before returning content."
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "Trace message explaining why the tool was called."
+                    }
+                }
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "const": "get_content"
+                    },
+                    "documentId": {
+                        "type": [
+                            "string",
+                            "null"
+                        ]
+                    },
+                    "content": {
+                        "type": "string"
+                    },
+                    "length": {
+                        "type": "number"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "success"
+                ]
+            }
+        },
+        {
+            "name": "scan_document_content",
+            "description": "Analyzes the cached document and returns aggregate metrics without mutating content.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "reason": {
+                        "type": "string",
+                        "description": "Trace message explaining why the tool was called."
+                    }
+                }
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "analysis": {
+                        "type": "object",
+                        "properties": {
+                            "total_lines": {
+                                "type": "number"
+                            },
+                            "total_words": {
+                                "type": "number"
+                            },
+                            "total_characters": {
+                                "type": "number"
+                            },
+                            "headings_count": {
+                                "type": "number"
+                            },
+                            "headings": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "level": {
+                                            "type": "number"
+                                        },
+                                        "text": {
+                                            "type": "string"
+                                        }
+                                    },
+                                    "required": [
+                                        "level",
+                                        "text"
+                                    ]
+                                }
+                            },
+                            "has_content": {
+                                "type": "boolean"
+                            }
+                        },
+                        "required": [
+                            "total_lines",
+                            "total_words",
+                            "total_characters",
+                            "headings_count",
+                            "headings",
+                            "has_content"
+                        ]
+                    },
+                    "preview": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "success",
+                    "analysis",
+                    "preview"
+                ]
+            }
+        },
+        {
+            "name": "search_document_content",
+            "description": "Finds literal matches within the cached document and returns positional context.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "query"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "query": {
+                        "type": "string"
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "matches_count": {
+                        "type": "number"
+                    },
+                    "matches": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "element_index": {
+                                    "type": "number"
+                                },
+                                "character_position": {
+                                    "type": "number"
+                                },
+                                "match_length": {
+                                    "type": "number"
+                                },
+                                "context": {
+                                    "type": "string"
+                                },
+                                "context_start": {
+                                    "type": "number"
+                                },
+                                "context_end": {
+                                    "type": "number"
+                                }
+                            },
+                            "required": [
+                                "element_index",
+                                "character_position",
+                                "match_length",
+                                "context",
+                                "context_start",
+                                "context_end"
+                            ]
+                        }
+                    },
+                    "total_matches": {
+                        "type": "number"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "success",
+                    "matches_count",
+                    "matches",
+                    "total_matches"
+                ]
+            }
+        },
+        {
+            "name": "append_document_content",
+            "description": "Normalizes markup and appends content to the end of the cached document with block padding safeguards.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "content"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "appended_length": {
+                        "type": "number"
+                    },
+                    "html": {
+                        "type": "string"
+                    },
+                    "position": {
+                        "type": "object",
+                        "properties": {
+                            "from": {
+                                "type": "number"
+                            },
+                            "to": {
+                                "type": "number"
+                            }
+                        },
+                        "required": [
+                            "from",
+                            "to"
+                        ]
+                    },
+                    "range": {
+                        "type": "object",
+                        "properties": {
+                            "before": {
+                                "type": "object",
+                                "properties": {
+                                    "from": {
+                                        "type": "number"
+                                    },
+                                    "to": {
+                                        "type": "number"
+                                    }
+                                },
+                                "required": [
+                                    "from",
+                                    "to"
+                                ]
+                            },
+                            "after": {
+                                "type": "object",
+                                "properties": {
+                                    "from": {
+                                        "type": "number"
+                                    },
+                                    "to": {
+                                        "type": "number"
+                                    }
+                                },
+                                "required": [
+                                    "from",
+                                    "to"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "before",
+                            "after"
+                        ]
+                    },
+                    "insertedContent": {
+                        "type": "string"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "const": "append_document_content"
+                    }
+                },
+                "required": [
+                    "success",
+                    "html"
+                ],
+                "allOf": [
+                    {
+                        "if": {
+                            "properties": {
+                                "success": {
+                                    "const": true
+                                }
+                            }
+                        },
+                        "then": {
+                            "required": [
+                                "appended_length",
+                                "position",
+                                "range",
+                                "insertedContent",
+                                "operation"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "insert_document_content",
+            "description": "Inserts normalized content at a specific character offset within the cached document.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "position": {
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "content": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "position",
+                    "content"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "inserted_length": {
+                        "type": "number"
+                    },
+                    "html": {
+                        "type": "string"
+                    },
+                    "position": {
+                        "type": "object",
+                        "properties": {
+                            "from": {
+                                "type": "number"
+                            },
+                            "to": {
+                                "type": "number"
+                            }
+                        },
+                        "required": [
+                            "from",
+                            "to"
+                        ]
+                    },
+                    "range": {
+                        "type": "object",
+                        "properties": {
+                            "before": {
+                                "type": "object",
+                                "properties": {
+                                    "from": {
+                                        "type": "number"
+                                    },
+                                    "to": {
+                                        "type": "number"
+                                    }
+                                },
+                                "required": [
+                                    "from",
+                                    "to"
+                                ]
+                            },
+                            "after": {
+                                "type": "object",
+                                "properties": {
+                                    "from": {
+                                        "type": "number"
+                                    },
+                                    "to": {
+                                        "type": "number"
+                                    }
+                                },
+                                "required": [
+                                    "from",
+                                    "to"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "before",
+                            "after"
+                        ]
+                    },
+                    "insertedAt": {
+                        "type": "number"
+                    },
+                    "insertedContent": {
+                        "type": "string"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "const": "insert_document_content"
+                    }
+                },
+                "required": [
+                    "success",
+                    "html"
+                ],
+                "allOf": [
+                    {
+                        "if": {
+                            "properties": {
+                                "success": {
+                                    "const": true
+                                }
+                            }
+                        },
+                        "then": {
+                            "required": [
+                                "inserted_length",
+                                "position",
+                                "range",
+                                "insertedAt",
+                                "insertedContent",
+                                "operation"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "insert_document_content_at_location",
+            "description": "Finds a string target and injects normalized content before or after that target, respecting heading boundaries and padding rules.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "target": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "position": {
+                        "type": "string",
+                        "enum": [
+                            "before",
+                            "after"
+                        ]
+                    },
+                    "content": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "target",
+                    "position",
+                    "content"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "inserted_length": {
+                        "type": "number"
+                    },
+                    "html": {
+                        "type": "string"
+                    },
+                    "position": {
+                        "type": "object",
+                        "properties": {
+                            "from": {
+                                "type": "number"
+                            },
+                            "to": {
+                                "type": "number"
+                            }
+                        },
+                        "required": [
+                            "from",
+                            "to"
+                        ]
+                    },
+                    "range": {
+                        "type": "object",
+                        "properties": {
+                            "before": {
+                                "type": "object",
+                                "properties": {
+                                    "from": {
+                                        "type": "number"
+                                    },
+                                    "to": {
+                                        "type": "number"
+                                    }
+                                },
+                                "required": [
+                                    "from",
+                                    "to"
+                                ]
+                            },
+                            "after": {
+                                "type": "object",
+                                "properties": {
+                                    "from": {
+                                        "type": "number"
+                                    },
+                                    "to": {
+                                        "type": "number"
+                                    }
+                                },
+                                "required": [
+                                    "from",
+                                    "to"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "before",
+                            "after"
+                        ]
+                    },
+                    "targetFound": {
+                        "type": "string"
+                    },
+                    "insertedAt": {
+                        "type": "number"
+                    },
+                    "insertedContent": {
+                        "type": "string"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "const": "insert_document_content_at_location"
+                    }
+                },
+                "required": [
+                    "success",
+                    "html"
+                ],
+                "allOf": [
+                    {
+                        "if": {
+                            "properties": {
+                                "success": {
+                                    "const": true
+                                }
+                            }
+                        },
+                        "then": {
+                            "required": [
+                                "inserted_length",
+                                "position",
+                                "range",
+                                "targetFound",
+                                "insertedAt",
+                                "insertedContent",
+                                "operation"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "replace_document_content",
+            "description": "Replaces a character span with normalized content while returning both removed and inserted segments.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "position": {
+                        "type": "object",
+                        "properties": {
+                            "from": {
+                                "type": "number"
+                            },
+                            "to": {
+                                "type": "number"
+                            }
+                        },
+                        "required": [
+                            "from",
+                            "to"
+                        ]
+                    },
+                    "content": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "position",
+                    "content"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "removed_length": {
+                        "type": "number"
+                    },
+                    "inserted_length": {
+                        "type": "number"
+                    },
+                    "html": {
+                        "type": "string"
+                    },
+                    "position": {
+                        "type": "object",
+                        "properties": {
+                            "from": {
+                                "type": "number"
+                            },
+                            "to": {
+                                "type": "number"
+                            }
+                        },
+                        "required": [
+                            "from",
+                            "to"
+                        ]
+                    },
+                    "range": {
+                        "type": "object",
+                        "properties": {
+                            "before": {
+                                "type": "object",
+                                "properties": {
+                                    "from": {
+                                        "type": "number"
+                                    },
+                                    "to": {
+                                        "type": "number"
+                                    }
+                                },
+                                "required": [
+                                    "from",
+                                    "to"
+                                ]
+                            },
+                            "after": {
+                                "type": "object",
+                                "properties": {
+                                    "from": {
+                                        "type": "number"
+                                    },
+                                    "to": {
+                                        "type": "number"
+                                    }
+                                },
+                                "required": [
+                                    "from",
+                                    "to"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "before",
+                            "after"
+                        ]
+                    },
+                    "insertedContent": {
+                        "type": "string"
+                    },
+                    "removedContent": {
+                        "type": "string"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "const": "replace_document_content"
+                    }
+                },
+                "required": [
+                    "success",
+                    "html"
+                ],
+                "allOf": [
+                    {
+                        "if": {
+                            "properties": {
+                                "success": {
+                                    "const": true
+                                }
+                            }
+                        },
+                        "then": {
+                            "required": [
+                                "removed_length",
+                                "inserted_length",
+                                "position",
+                                "range",
+                                "insertedContent",
+                                "removedContent",
+                                "operation"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "remove_document_content",
+            "description": "Deletes a character span from the cached document and returns the removed segment for auditing.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "position": {
+                        "type": "object",
+                        "properties": {
+                            "from": {
+                                "type": "number"
+                            },
+                            "to": {
+                                "type": "number"
+                            }
+                        },
+                        "required": [
+                            "from",
+                            "to"
+                        ]
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "position"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "html": {
+                        "type": "string"
+                    },
+                    "position": {
+                        "type": "object",
+                        "properties": {
+                            "from": {
+                                "type": "number"
+                            },
+                            "to": {
+                                "type": "number"
+                            }
+                        },
+                        "required": [
+                            "from",
+                            "to"
+                        ]
+                    },
+                    "range": {
+                        "type": "object",
+                        "properties": {
+                            "before": {
+                                "type": "object",
+                                "properties": {
+                                    "from": {
+                                        "type": "number"
+                                    },
+                                    "to": {
+                                        "type": "number"
+                                    }
+                                },
+                                "required": [
+                                    "from",
+                                    "to"
+                                ]
+                            },
+                            "after": {
+                                "type": "object",
+                                "properties": {
+                                    "from": {
+                                        "type": "number"
+                                    },
+                                    "to": {
+                                        "type": "number"
+                                    }
+                                },
+                                "required": [
+                                    "from",
+                                    "to"
+                                ]
+                            }
+                        },
+                        "required": [
+                            "before",
+                            "after"
+                        ]
+                    },
+                    "removedContent": {
+                        "type": "string"
+                    },
+                    "removed_length": {
+                        "type": "number"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "const": "remove_document_content"
+                    }
+                },
+                "required": [
+                    "success",
+                    "html"
+                ],
+                "allOf": [
+                    {
+                        "if": {
+                            "properties": {
+                                "success": {
+                                    "const": true
+                                }
+                            }
+                        },
+                        "then": {
+                            "required": [
+                                "position",
+                                "range",
+                                "removedContent",
+                                "removed_length",
+                                "operation"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "append_document_summary",
+            "description": "Appends plain text to the Firestore Summary field for the active document.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "content": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "content"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "html": {
+                        "type": "string"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "success",
+                    "html"
+                ]
+            }
+        },
+        {
+            "name": "insert_document_summary",
+            "description": "Inserts plain text into the Summary field at a specified character offset.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "position": {
+                        "type": "number",
+                        "minimum": 0
+                    },
+                    "content": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "position",
+                    "content"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "html": {
+                        "type": "string"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "success",
+                    "html"
+                ]
+            }
+        },
+        {
+            "name": "replace_doument_summary",
+            "description": "Replaces a Summary field span with provided text. Note the legacy spelling of 'doument' in the tool key.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "position": {
+                        "type": "object",
+                        "properties": {
+                            "from": {
+                                "type": "number"
+                            },
+                            "to": {
+                                "type": "number"
+                            }
+                        },
+                        "required": [
+                            "from",
+                            "to"
+                        ]
+                    },
+                    "content": {
+                        "type": "string"
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "position",
+                    "content"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "html": {
+                        "type": "string"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "success",
+                    "html"
+                ]
+            }
+        },
+        {
+            "name": "remove_document_summary",
+            "description": "Deletes a span from the Summary field for the active document.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "position": {
+                        "type": "object",
+                        "properties": {
+                            "from": {
+                                "type": "number"
+                            },
+                            "to": {
+                                "type": "number"
+                            }
+                        },
+                        "required": [
+                            "from",
+                            "to"
+                        ]
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "position"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "html": {
+                        "type": "string"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "success",
+                    "html"
+                ]
+            }
+        },
+        {
+            "name": "search_document_summary",
+            "description": "Performs literal search against the Firestore Summary field and returns positional context.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "query"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "query": {
+                        "type": "string"
+                    },
+                    "matches_count": {
+                        "type": "number"
+                    },
+                    "matches": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "element_index": {
+                                    "type": "number"
+                                },
+                                "character_position": {
+                                    "type": "number"
+                                },
+                                "match_length": {
+                                    "type": "number"
+                                },
+                                "context": {
+                                    "type": "string"
+                                },
+                                "context_start": {
+                                    "type": "number"
+                                },
+                                "context_end": {
+                                    "type": "number"
+                                }
+                            },
+                            "required": [
+                                "element_index",
+                                "character_position",
+                                "match_length",
+                                "context",
+                                "context_start",
+                                "context_end"
+                            ]
+                        }
+                    },
+                    "total_matches": {
+                        "type": "number"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "success",
+                    "query",
+                    "matches_count",
+                    "matches",
+                    "total_matches"
+                ]
+            }
+        },
+        {
+            "name": "get_all_documents_metadata_within_project",
+            "description": "Retrieves metadata for every document linked to the same project as the active document or supplied document ID.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "documentId": {
+                        "type": "string"
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                }
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "const": "get_project_metadata"
+                    },
+                    "projectId": {
+                        "type": "string"
+                    },
+                    "documentsCount": {
+                        "type": "number"
+                    },
+                    "documents": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "documentId": {
+                                    "type": "string"
+                                },
+                                "documentName": {
+                                    "type": "string"
+                                },
+                                "description": {
+                                    "type": "string"
+                                },
+                                "createdAt": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "ISO timestamp when available."
+                                },
+                                "updatedAt": {
+                                    "type": [
+                                        "string",
+                                        "null"
+                                    ],
+                                    "description": "ISO timestamp when available."
+                                }
+                            },
+                            "required": [
+                                "documentId",
+                                "documentName",
+                                "description",
+                                "createdAt",
+                                "updatedAt"
+                            ]
+                        }
+                    },
+                    "error": {
+                        "type": "string"
+                    },
+                    "debugInfo": {
+                        "type": "object",
+                        "properties": {
+                            "documentId": {
+                                "type": "string"
+                            },
+                            "availableFields": {
+                                "type": "array",
+                                "items": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                },
+                "required": [
+                    "success",
+                    "documents"
+                ],
+                "allOf": [
+                    {
+                        "if": {
+                            "properties": {
+                                "success": {
+                                    "const": true
+                                }
+                            }
+                        },
+                        "then": {
+                            "required": [
+                                "operation",
+                                "documentsCount"
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "get_document_summary",
+            "description": "Returns the Summary field content for the active or specified document.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "documentId": {
+                        "type": "string"
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                }
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "const": "get_summary"
+                    },
+                    "documentId": {
+                        "type": "string"
+                    },
+                    "documentName": {
+                        "type": "string"
+                    },
+                    "summary": {
+                        "type": "string"
+                    },
+                    "summaryLength": {
+                        "type": "number"
+                    },
+                    "message": {
+                        "type": "string"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "success",
+                    "summary"
+                ]
+            }
+        },
+        {
+            "name": "get_repo_structure",
+            "description": "Fetches the recursive Git tree for a repository branch using the GitHub API.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "repoLink": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "branch": {
+                        "type": "string"
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "repoLink"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "const": "get_repo_structure"
+                    },
+                    "owner": {
+                        "type": "string"
+                    },
+                    "repo": {
+                        "type": "string"
+                    },
+                    "branch": {
+                        "type": "string"
+                    },
+                    "branchResolution": {
+                        "type": "string",
+                        "description": "Which branch hint resolved the request."
+                    },
+                    "totalItems": {
+                        "type": "number"
+                    },
+                    "tree": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "path": {
+                                    "type": "string"
+                                },
+                                "type": {
+                                    "type": "string",
+                                    "enum": [
+                                        "blob",
+                                        "tree"
+                                    ]
+                                },
+                                "size": {
+                                    "type": "number"
+                                }
+                            },
+                            "required": [
+                                "path",
+                                "type",
+                                "size"
+                            ]
+                        }
+                    },
+                    "truncated": {
+                        "type": "boolean"
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "success",
+                    "tree"
+                ]
+            }
+        },
+        {
+            "name": "get_repo_commits",
+            "description": "Retrieves commit metadata for a repository branch using the GitHub API with pagination support.",
+            "input": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                    "repoLink": {
+                        "type": "string",
+                        "minLength": 1
+                    },
+                    "branch": {
+                        "type": "string"
+                    },
+                    "page": {
+                        "type": "number",
+                        "minimum": 1
+                    },
+                    "per_page": {
+                        "type": "number",
+                        "minimum": 1,
+                        "maximum": 100
+                    },
+                    "reason": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "repoLink"
+                ]
+            },
+            "output": {
+                "type": "object",
+                "properties": {
+                    "success": {
+                        "type": "boolean"
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "operation": {
+                        "type": "string",
+                        "const": "get_repo_commits"
+                    },
+                    "owner": {
+                        "type": "string"
+                    },
+                    "repo": {
+                        "type": "string"
+                    },
+                    "branch": {
+                        "type": "string"
+                    },
+                    "branchResolution": {
+                        "type": "string"
+                    },
+                    "page": {
+                        "type": "number"
+                    },
+                    "per_page": {
+                        "type": "number"
+                    },
+                    "commitsCount": {
+                        "type": "number"
+                    },
+                    "commits": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "sha": {
+                                    "type": "string"
+                                },
+                                "message": {
+                                    "type": "string"
+                                },
+                                "author": {
+                                    "type": "string"
+                                },
+                                "email": {
+                                    "type": "string"
+                                },
+                                "date": {
+                                    "type": "string"
+                                },
+                                "url": {
+                                    "type": "string",
+                                    "format": "uri"
+                                }
+                            },
+                            "required": [
+                                "sha",
+                                "message",
+                                "author",
+                                "email",
+                                "date",
+                                "url"
+                            ]
+                        }
+                    },
+                    "error": {
+                        "type": "string"
+                    }
+                },
+                "required": [
+                    "success",
+                    "commits"
+                ]
+            }
+        }
+    ]
+}
