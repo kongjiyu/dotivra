@@ -586,14 +586,58 @@ export const replace_document_content = async ({ position, content, reason }: an
   const safeFrom = Math.max(0, Math.min(position.from, currentDocumentContent.length));
   const safeTo = Math.max(safeFrom, Math.min(position.to, currentDocumentContent.length));
   const removedSegment = currentDocumentContent.slice(safeFrom, safeTo);
-  // Preserve surrounding block context when inserting replacement content
-  const beforeSnippet = currentDocumentContent.slice(Math.max(0, safeFrom - 1), safeFrom);
-  const afterSnippet = currentDocumentContent.slice(safeTo, Math.min(currentDocumentContent.length, safeTo + 1));
-  const paddedContent = applyBlockPadding(normalizedContent, beforeSnippet, afterSnippet);
 
-  currentDocumentContent = currentDocumentContent.slice(0, safeFrom) + paddedContent + currentDocumentContent.slice(safeTo);
-  const removedLength = safeTo - safeFrom;
-  const insertedLength = paddedContent.length;
+  // Try element-aware replacement: if the range is fully inside a single block-level element,
+  // replace the inner HTML of that element (preserving the outer tag and attributes) to avoid creating
+  // a new paragraph or sibling block.
+  const tryElementAwareReplace = (): { applied: boolean; newInnerLength?: number } => {
+    // Find opening tag start before safeFrom
+    const openTagStart = currentDocumentContent.lastIndexOf('<', safeFrom);
+    if (openTagStart === -1) return { applied: false };
+    const openTagEnd = currentDocumentContent.indexOf('>', openTagStart);
+    if (openTagEnd === -1 || openTagEnd >= safeFrom) return { applied: false };
+    const openTagContent = currentDocumentContent.slice(openTagStart + 1, openTagEnd).trim();
+    if (!openTagContent || openTagContent.startsWith('/')) return { applied: false };
+    const tagNameMatch = openTagContent.match(/^([a-z0-9]+)/i);
+    if (!tagNameMatch) return { applied: false };
+    const tagName = tagNameMatch[1].toLowerCase();
+
+    // Only proceed for block-level tags
+    const blockTags = ['h1','h2','h3','h4','h5','h6','p','div','section','article','li','ul','ol','blockquote','pre','figure'];
+    if (!blockTags.includes(tagName)) return { applied: false };
+
+  // Find corresponding closing tag after the open tag, handling nested same-name tags
+  const innerStart = openTagEnd + 1;
+  const closeTagIndex = findMatchingClosingTag(tagName, innerStart);
+  if (closeTagIndex === -1) return { applied: false };
+  const innerEnd = closeTagIndex;
+    if (!(innerStart <= safeFrom && innerEnd >= safeTo)) return { applied: false };
+
+    // Build replacement by replacing inner HTML only
+    const beforeOuter = currentDocumentContent.slice(0, innerStart);
+    const afterOuter = currentDocumentContent.slice(innerEnd);
+    const newInner = normalizedContent;
+    const newContent = beforeOuter + newInner + afterOuter;
+    currentDocumentContent = newContent;
+    return { applied: true, newInnerLength: newInner.length };
+  };
+
+  const elementReplace = tryElementAwareReplace();
+  let insertedLength: number;
+  let removedLength = safeTo - safeFrom;
+  if (elementReplace.applied) {
+    insertedLength = elementReplace.newInnerLength || normalizedContent.length;
+    var finalInsertedContent = normalizedContent;
+  } else {
+    // Fallback: preserve surrounding block context when inserting replacement content
+    const beforeSnippet = currentDocumentContent.slice(Math.max(0, safeFrom - 1), safeFrom);
+    const afterSnippet = currentDocumentContent.slice(safeTo, Math.min(currentDocumentContent.length, safeTo + 1));
+    const paddedContent = applyBlockPadding(normalizedContent, beforeSnippet, afterSnippet);
+
+    currentDocumentContent = currentDocumentContent.slice(0, safeFrom) + paddedContent + currentDocumentContent.slice(safeTo);
+    insertedLength = paddedContent.length;
+    var finalInsertedContent = paddedContent;
+  }
   const result = {
     success: true,
     removed_length: removedLength,
@@ -604,11 +648,127 @@ export const replace_document_content = async ({ position, content, reason }: an
       before: { from: safeFrom, to: safeTo },
       after: { from: safeFrom, to: safeFrom + insertedLength }
     },
-  insertedContent: paddedContent,
+  insertedContent: finalInsertedContent,
     removedContent: removedSegment,
     operation: 'replace_document_content'
   };
   logToolUsage('replace_document_content', { position, content, reason }, result, currentDocumentId);
+  await syncToFirebase();
+  return result;
+};
+
+// Replace all occurrences of a target string with normalized content.
+export const replace_all_document_content = async ({ target, content, confirm, reason }: any): Promise<any> => {
+  if (typeof target !== 'string' || !target.length) {
+    return { success: false, html: `<div class="error-message">Missing target to replace.</div>` };
+  }
+  if (typeof content !== 'string' || !content.length) {
+    return { success: false, html: `<div class="error-message">Missing replacement content.</div>` };
+  }
+
+  await refreshCurrentDocument();
+
+  // Count occurrences
+  const occurrences = currentDocumentContent.split(target).length - 1;
+  if (occurrences === 0) {
+    return { success: true, reason, operation: 'replace_all_document_content', replaced: 0, html: `<div class="tool-success">No matches for target found.</div>` };
+  }
+
+  const normalizedReplacement = normalizeContentToHtml(content) || content;
+
+  if (!confirm) {
+    return {
+      success: true,
+      preview: currentDocumentContent.indexOf(target),
+      matches: occurrences,
+      message: `Found ${occurrences} matches for the target. Re-run with { confirm: true } to apply.`
+    };
+  }
+
+  const beforeLength = currentDocumentContent.length;
+  currentDocumentContent = currentDocumentContent.split(target).join(normalizedReplacement);
+  const afterLength = currentDocumentContent.length;
+  const replacedCount = occurrences;
+  const result = {
+    success: true,
+    replaced: replacedCount,
+    removed_length: (beforeLength - afterLength) < 0 ? 0 : beforeLength - afterLength,
+    inserted_length: Math.abs(afterLength - beforeLength),
+    html: `<div class="tool-success">Replaced ${replacedCount} occurrences of target.</div>`,
+    operation: 'replace_all_document_content'
+  };
+
+  logToolUsage('replace_all_document_content', { target, content, confirm, reason }, result, currentDocumentId);
+  await syncToFirebase();
+  return result;
+};
+
+// Replace the entire block/section containing a position with normalized content
+export const replace_document_section = async ({ position, content, confirm, reason }: any): Promise<any> => {
+  if (!position || typeof position !== 'object' || typeof position.from !== 'number') {
+    return { success: false, html: `<div class="error-message">Missing or invalid position.</div>` };
+  }
+  if (typeof content !== 'string' || !content.length) {
+    return { success: false, html: `<div class="error-message">Missing replacement content.</div>` };
+  }
+
+  await refreshCurrentDocument();
+
+  const safeFrom = Math.max(0, Math.min(position.from, currentDocumentContent.length));
+
+  // Find nearest opening tag before safeFrom
+  const openTagStart = currentDocumentContent.lastIndexOf('<', safeFrom);
+  if (openTagStart === -1) {
+    return { success: false, html: `<div class="error-message">Could not locate enclosing section.</div>` };
+  }
+  const openTagEnd = currentDocumentContent.indexOf('>', openTagStart);
+  if (openTagEnd === -1) {
+    return { success: false, html: `<div class="error-message">Malformed document near position.</div>` };
+  }
+  const openTagContent = currentDocumentContent.slice(openTagStart + 1, openTagEnd).trim();
+  if (!openTagContent || openTagContent.startsWith('/')) {
+    return { success: false, html: `<div class="error-message">Could not determine outer tag.</div>` };
+  }
+  const tagNameMatch = openTagContent.match(/^([a-z0-9]+)/i);
+  if (!tagNameMatch) return { success: false, html: `<div class="error-message">Unknown tag.</div>` };
+  const tagName = tagNameMatch[1].toLowerCase();
+
+  const innerStart = openTagEnd + 1;
+  const closeTagIndex = findMatchingClosingTag(tagName, innerStart);
+  if (closeTagIndex === -1) {
+    return { success: false, html: `<div class="error-message">Could not find matching closing tag for &lt;${tagName}&gt;.</div>` };
+  }
+  const outerStart = openTagStart;
+  const outerEnd = currentDocumentContent.indexOf('>', closeTagIndex) + 1;
+  if (outerEnd <= outerStart) {
+    return { success: false, html: `<div class="error-message">Malformed closing tag.</div>` };
+  }
+
+  const normalizedReplacement = normalizeContentToHtml(content);
+
+  const preview = {
+    outerStart,
+    outerEnd,
+    originalLength: outerEnd - outerStart,
+    replacementPreview: normalizedReplacement
+  };
+
+  if (!confirm) {
+    return { success: true, preview, message: 'Found section; re-run with { confirm: true } to apply.' };
+  }
+
+  const before = currentDocumentContent.slice(0, outerStart);
+  const after = currentDocumentContent.slice(outerEnd);
+  currentDocumentContent = before + normalizedReplacement + after;
+
+  const result = {
+    success: true,
+    replaced_section: { from: outerStart, to: outerStart + normalizedReplacement.length },
+    html: `<div class="tool-success">Replaced section &lt;${tagName}&gt; with new content.</div>`,
+    operation: 'replace_document_section'
+  };
+
+  logToolUsage('replace_document_section', { position, content, confirm, reason }, result, currentDocumentId);
   await syncToFirebase();
   return result;
 };
@@ -1190,6 +1350,8 @@ toolMap = {
   'insert_document_content': insert_document_content,
   'insert_document_content_at_location': insert_document_content_at_location,
   'replace_document_content': replace_document_content,
+  'replace_all_document_content': replace_all_document_content,
+  'replace_document_section': replace_document_section,
   'remove_document_content': remove_document_content,
   'append_document_summary': append_document_summary,
   'insert_document_summary': insert_document_summary,
@@ -1200,4 +1362,30 @@ toolMap = {
   'get_document_summary': get_document_summary,
   'get_repo_structure': get_repo_structure,
   'get_repo_commits': get_repo_commits,
+};
+
+// Helper to find matching closing tag index for a given tag name starting after a given index.
+// Returns the index of the '<' for the matching closing tag, or -1 if not found.
+const findMatchingClosingTag = (tagName: string, startIndex: number): number => {
+  const regex = new RegExp(`<(/?)${tagName}\\b[^>]*>`, 'ig');
+  regex.lastIndex = startIndex;
+  let depth = 0;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(currentDocumentContent)) !== null) {
+    const isClosing = match[1] === '/';
+    if (!isClosing) {
+      // Opening same tag
+      depth += 1;
+    } else {
+      if (depth === 0) {
+        // This is the first closing tag after the original opening; return its index
+        return match.index;
+      }
+      // Closing a nested tag
+      depth -= 1;
+    }
+    // guard against runaway loops
+    if (regex.lastIndex > currentDocumentContent.length) break;
+  }
+  return -1;
 };
